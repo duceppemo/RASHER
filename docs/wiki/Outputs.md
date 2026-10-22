@@ -11,12 +11,14 @@ OUTPUT/
 ├── reference.fasta             the reference used: upper case, ambiguity codes as N
 ├── annotation.gb / .gff3       the annotation of the reference (--annotation, or the GenBank reference), as given
 ├── metadata.tsv                the sample metadata (--metadata, and the sample sheet's extra columns), one row per sample and added genome
-├── 1_extracted/<sample>.fastq.gz          baited reads (.fasta.gz for fasta input; <sample>.bam and .bam.bai
-│                                          with --keep-bam)
-├── 2_filtered/<sample>.fastq.gz           filtered reads (.fasta.gz for fasta input)
+├── 1_extracted/<sample>_R1.fastq.gz       baited reads: <sample>_R1 and _R2 for a paired sample, <sample>.fastq.gz
+│              <sample>_R2.fastq.gz       for a single-end one (.fasta.gz for fasta input); <sample>.bam and
+│                                          .bam.bai with --keep-bam
+├── 2_filtered/<sample>_R1.fastq.gz        filtered reads, named the same way
+│              <sample>_R2.fastq.gz
 ├── 3_assembled/
 │   ├── all_assemblies/<sample>.fasta      the assembly of each sample
-│   ├── assembly_graphs/<sample>.gfa/.png  assembly graphs (de novo assemblers; .png with Bandage)
+│   ├── assembly_graphs/<sample>.gfa/.png  assembly graphs (SPAdes; .png with Bandage)
 │   └── <sample>/                          the assembler's own folder
 ├── 4_compared/
 │   ├── added_genomes/<name>.fasta          genomes given with --add-genomes, as compared
@@ -27,7 +29,8 @@ OUTPUT/
 │       ├── snps.vcf                        SNPs of each genome relative to the reference (VCF)
 │       ├── ska_reference.fasta             SKA2: the reference as used, extended when circular
 │       └── ...                             the method's own files (alignments)
-└── logs/<step>/<sample>.log              the commands run and the programs' messages
+└── logs/<step>/<sample>.log              the commands run and the programs' messages; logs/2_filter/ also
+                                          holds fastp's reports, <sample>.fastp.json and .fastp.html
 ```
 
 ## report.html
@@ -38,7 +41,7 @@ colours of the heatmap and of the highlighted cells are kept when printing):
 - **Overview**: samples assembled, samples with a note, reference length, SNP sites and distinct genomes; with
   metadata, a line naming its source, its columns and the column that colours the figures.
 - **Samples**: the main columns of `summary.tsv` (all but the base counts, largest contig, assembly N50 and
-  Flye's depth), sortable by clicking a header; failed samples, depth below 20x, length outside 0.8–1.2 times
+  assembly depth), sortable by clicking a header; failed samples, depth below 20x, length outside 0.8–1.2 times
   the reference, and `N` bases are highlighted. The metadata columns, when there are any, come right after
   `Sample`: a column whose values are all numbers sorts as numbers, long values wrap, the values of the
   colour column carry their marker (its colour and shape; a hollow circle alone when the sample has no value),
@@ -127,19 +130,7 @@ colours of the heatmap and of the highlighted cells are kept when printing):
   can no longer colour the figures; a note says why), and the version and path of every program.
 
 It is written at the end of every run, from the files of the output folder; `python -m rasher.report OUTPUT`
-rebuilds it, also after the folder was moved. Examples: the
-[bundled example](https://duceppemo.github.io/RASHER/reports/example_report.html) and the
-[tutorial](https://duceppemo.github.io/RASHER/reports/tutorial_potato_report.html).
-
-![The samples section of the report of the tutorial](https://raw.githubusercontent.com/duceppemo/RASHER/main/docs/images/report_samples.png)
-
-![The depth and N bases of the samples of the tutorial](https://raw.githubusercontent.com/duceppemo/RASHER/main/docs/images/report_bars.png)
-
-![The tree of the tutorial in the report, with the lineages as metadata](https://raw.githubusercontent.com/duceppemo/RASHER/main/docs/images/report_tree.png)
-
-![The SNP distances of the tutorial in the report, with the lineages as metadata](https://raw.githubusercontent.com/duceppemo/RASHER/main/docs/images/report_distances.png)
-
-![The genome map of the tutorial](https://raw.githubusercontent.com/duceppemo/RASHER/main/docs/images/report_map.png)
+rebuilds it, also after the folder was moved. The [Example](Example) makes one (`bash example/run_example.sh`).
 
 ## MultiQC
 
@@ -153,21 +144,24 @@ Three [MultiQC custom-content](https://docs.seqera.io/multiqc/custom_content) fi
 | `rasher_distances_mqc.json` | heatmap of the SNP distances in tree order (recent MultiQC versions also offer a clustered view); absent when the samples were not compared |
 
 ```bash
-multiqc OUTPUT/ --ignore "*/logs/*"
+multiqc OUTPUT/
 ```
+
+MultiQC's fastp module also finds fastp's reports in `logs/2_filter/` (`<sample>.fastp.json`) and adds its own
+sections (read quality, adapters, duplication, insert sizes), under the sample names (the `_R1` of the input is
+dropped).
 
 - The sections are named after the output folder ("RASHER *folder*: samples"), so the files of several RASHER runs
   in one MultiQC search path give separate sections, as long as the output folders have different names. The
   section ids keep a name of letters, digits and underscores as it is; any other name gets a short hash of
   itself, so that names differing only in punctuation (`run-1`, `run_1`, `run 1`) do not merge.
-- `--ignore "*/logs/*"` keeps MultiQC away from the programs' logs in `logs/`: MultiQC 1.19 mistakes RASHER's
-  Filtlong logs for its own module's input and shows an error box (harmless; 1.35 does not).
 - MultiQC shortens sample names ending with usual file suffixes (such as `.trimmed`) in the table and bar graph,
   but not in the heatmap.
 - The heatmap's distances are whole numbers in recent MultiQC versions (1.35); older versions such as 1.19 ignore
   the setting and show them with two decimals (`10.00`).
 
-Tested with MultiQC 1.19 and 1.35.
+The custom-content files are BACoN's, tested there with MultiQC 1.19 and 1.35; a RASHER output folder, with
+fastp's reports, was tested with MultiQC 1.19.
 
 ## summary.tsv
 
@@ -175,30 +169,33 @@ Tested with MultiQC 1.19 and 1.35.
 |---|---|
 | `Sample` | Sample name |
 | `Status` | `ok`, or `failed (step)` with the reason in `Note` |
-| `Raw_reads`, `Raw_bases` | Input reads and bases (`NA` with `-b bbduk` when BBDuk does not report them) |
-| `Baited_reads`, `Baited_bases`, `Baited_pct` | Reads matching the reference, and their share of the input bases (%) |
-| `Filtered_reads`, `Filtered_bases`, `Filtered_N50` | Reads kept by Filtlong (fasta reads: by RASHER's length filter, `--min-read-length`) |
+| `Raw_reads`, `Raw_bases` | Input reads and bases, both mates counted for a paired sample (`NA` with `-b bbduk` when BBDuk does not report them) |
+| `Baited_reads`, `Baited_bases`, `Baited_pct` | Reads matching the reference (both mates of each pair kept), and their share of the input bases (%) |
+| `Filtered_reads`, `Filtered_bases`, `Filtered_N50` | Reads kept by fastp and the subsampling to `--target-depth` (fasta reads: by RASHER's length filter, `--min-read-length`); both mates counted |
 | `Est_depth` | Filtered bases / genome size (`-s`, or the reference length) |
 | `Contigs` | Number of contigs |
-| `Circular_contigs` | Contigs the assembler reports as circular (Flye, myloasm; `NA` for the templated assembly) |
+| `Circular_contigs` | Contigs the assembler reports as circular: SPAdes and SKESA flag none (0); `NA` for the templated assembly |
 | `Assembly_length`, `Largest_contig`, `Assembly_N50` | Assembly statistics |
 | `Length_vs_reference` | Assembly length / reference length |
 | `Off_reference_pct` | De novo assemblies: share of the assembly's bases that align nowhere on the reference (`minimap2 -x asm20`); above 10%, a note. Contigs of another origin (nuclear DNA, the other organelle) or sequence the reference lacks (`NA` for the templated assembly) |
-| `Assembly_depth` | Mean depth reported by Flye |
+| `Assembly_depth` | `NA`: the coverage in SPAdes' and SKESA's contig names is k-mer coverage, not read depth (the column is kept from BACoN) |
 | `N_bases` | Templated assembly: bases called `N`, where fewer than three reads cover the reference or the reads disagree (often inside insertions) |
 | `Note` | Warnings: low depth (below 20x), more than 10% of a de novo assembly off the reference, assembly length outside 0.8–1.2 times the reference, `N` bases, or why the sample failed |
 
 ## Assemblies
 
 `3_assembled/all_assemblies/<sample>.fasta` holds one sequence per contig, named `<sample>_<contig>`. Contigs
-that the assembler reports as circular have ` circular=true` in their header.
+that the assembler reports as circular would have ` circular=true` in their header; none of RASHER's assemblers
+flags any.
 
-- **Templated** (`samtools`): one sequence per reference sequence, in reference coordinates plus the
-  sample's insertions and minus its deletions. Positions covered by fewer than three reads, and bases the reads do not agree
-  on (often inside an insertion), are `N`.
-- **De novo** (`flye`, `myloasm`): contigs as assembled. A circular genome can start anywhere and on either
-  strand. Chloroplasts often come out as three contigs (large single copy, inverted repeat, small single copy)
-  when the reads are shorter than the inverted repeat.
+- **Templated** (`samtools`): one sequence per reference sequence (`<sample>_<reference sequence name>`), in
+  reference coordinates plus the sample's insertions and minus its deletions. Positions covered by fewer than
+  three reads, and bases the reads do not agree on (often inside an insertion), are `N`.
+- **De novo** (`spades`, `skesa`): contigs as assembled, under the assembler's names
+  (`<sample>_NODE_1_length_..._cov_...` for SPAdes, `<sample>_Contig_1_...` for SKESA). A circular genome can
+  start anywhere and on either strand. Chloroplasts come out in several contigs: short reads do not span the
+  inverted repeat, so the large single copy, the repeat (once) and the small single copy are separate, and SKESA
+  breaks at other repeats too. SPAdes' graph (`assembly_graphs/<sample>.gfa`) shows how they connect.
 
 ## Comparison
 
@@ -219,10 +216,7 @@ nucleotides (A, C, G, T; gaps and N are ignored), with the reference as `Referen
 `snps.vcf` lists, for each position of the reference where a genome has a SNP, the genotype of every genome:
 `1` (or `2`, `3` at a position with several alternate alleles) for an alternate allele, `0` for the reference
 allele, `.` when the genome lacks the position or its base there is ambiguous. There is one column per genome,
-sorted by name; the reference itself has no column. Contig names and lengths are those of the reference. On the
-simulated plastid of the validation (both methods, templated and de novo assemblies), the files load in bcftools
-without warnings, their reference alleles match the reference (`bcftools norm --check-ref`), and SKA2's hold
-exactly the SNPs of the truth.
+sorted by name; the reference itself has no column. Contig names and lengths are those of the reference.
 
 - **SKA2**: from `ska map`, which maps the split k-mers of every genome to the reference as SKA2 used it
   (extended by the start of each sequence when more than half of the samples' assemblies have a circular contig, so that

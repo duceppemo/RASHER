@@ -2,12 +2,33 @@
 
 **A sample failed. Where do I look?**
 `summary.tsv` gives the step (`failed (assemble)`) and the reason in `Note`; `logs/<step>/<sample>.log` has
-the commands and the programs' messages. A failed sample does not stop the others, and is retried when RASHER
-runs again in the same output folder.
+the commands and the programs' messages (fastp's own report is in `logs/2_filter/<sample>.fastp.html`). A failed
+sample does not stop the others, and is retried when RASHER runs again in the same output folder.
 
 **"no reads matched the reference"**
-The sample has no read aligning to the reference: wrong reference, a failed library, or a barcode with no
-reads. With a distant reference, try `-b bbduk`.
+The sample has no read aligning to the reference: wrong reference, a failed library, or an empty sample. With a
+distant reference, try `-b bbduk`.
+
+**My R1 and R2 files became two samples.**
+They are paired only when they sit in the same folder and their names differ only by the mate marker before the
+extension: `X_R1`/`X_R2`, `X_1`/`X_2` or `X.R1`/`X.R2` (an `_001` tail allowed), with the same marker on both
+(`X_1` does not pair with `X_R2`). Names such as `X-R1.fastq.gz` or `X_read1.fastq.gz` are not recognized, in a
+folder or in a sample sheet (which pairs a sample's files by the same rules): rename them, or make symbolic links
+named `X_R1.fastq.gz` and `X_R2.fastq.gz`. See [Usage](Usage#inputs).
+
+**"desynchronise at read ..." or "do not hold the same number of reads"**
+The R1 and R2 files of a pair must list the mates in the same order. Files that were filtered or sorted
+separately, or truncated by an interrupted download, break that. Take the files as the sequencer or the SRA wrote
+them (`fasterq-dump` keeps the order).
+
+**A warning says a file was skipped next to the pairs of a sample.**
+A sample (a subfolder, or a sample's rows of a sheet) made of pairs cannot also take single reads: the file
+without a mate is left out. Give it as a sample of its own to use it.
+
+**How do I merge the lanes of a sample?**
+In a flat folder, each lane of a bcl2fastq run (`X_S1_L001_R1_001`, `X_S1_L002_R1_001`) is a sample of its own.
+Put a sample's files in a subfolder named after it, or list them in a sample sheet: each lane's pair stays a pair
+within the sample.
 
 **"No SNP site is shared by all the genomes: no tree"**
 With `--snp-method ska`, core SNPs must have their context in every genome. One fragmented or incomplete
@@ -16,28 +37,17 @@ the poor samples, or use `--ska-min-freq 0.9` to keep SNPs missing from a few ge
 
 **"No tree: no genome differs from the others at any position compared"**
 The VCF of the SNPs (all of them, whatever `--ska-min-freq`) is empty: the genomes are identical at every
-position SKA2 compared, so there is nothing to build a tree on, and `--ska-min-freq` would not change that. The
+position compared, so there is nothing to build a tree on, and `--ska-min-freq` would not change that. The
 distances are all 0.
 
 **Which `--snp-method`?**
-The default, `auto`, compares templated assemblies with minimap2 and de novo assemblies (Flye, myloasm) with SKA2.
-SKA2 needs the same 15 bases on either side of a SNP in every genome. It loses SNPs in two cases:
-- **Older R9.4.1 reads:** their consensus keeps an indel every few hundred bases. On 24 *Arabidopsis* plastomes,
-  SKA2 found distances 46 SNPs too low on average.
-- **Genomes that differ at many nearby positions**, even with current reads. On 32 human mitogenomes (R10.4.1),
-  most variable positions have another variant within 15 bases in some sample, and SKA2's distances were 31 SNPs
-  too low.
-
-`--snp-method minimap2` reads each assembly position by position along the reference:
-- *Arabidopsis* plastomes: 12 SNPs too low with templated assemblies, and 0.6 with Flye;
-- human mitogenomes: within 1 SNP for most pairs (templated), like Clair3.
-
-It counts every difference an assembly carries, including the errors of a poorly polished de novo assembly, which
-SKA2 skips: hence SKA2 for de novo assemblies. SKA2 was exact on genomes with few, scattered SNPs (the Col-0
-lines, the simulations). With the templated assembly, minimap2 was as good or better on every dataset tested.
-Before 0.4.0, SKA2 was the default for every assembly: an earlier run's `4_compared/ska/` is kept, and the
-default now adds `4_compared/minimap2/` next to it.
-See [Methods](Methods#4-comparison) and [Validation](Validation#snp-methods-ska2-and-minimap2).
+The default, `auto`, compares templated assemblies with minimap2 and de novo assemblies (SPAdes, SKESA) with SKA2.
+SKA2 needs the same 15 bases on either side of a SNP in every genome: it loses the SNPs that lie next to an indel
+or another variant, and those near the ends of contigs and runs of `N`. `--snp-method minimap2` reads each assembly
+position by position along the reference and needs no such context, but it counts every difference an assembly
+carries, including the errors of a de novo assembly, which SKA2 skips: hence SKA2 for de novo assemblies. These
+defaults come from BACoN; how the methods compare on short-read assemblies is to be established by the
+short-read [validation](Validation). See [Methods](Methods#4-comparison).
 
 **What does `--ska-min-freq` below 1 do?**
 SKA2 then keeps the SNP sites that some genomes lack (they get a gap in the alignment), as long as at least that
@@ -47,43 +57,50 @@ structure. The cost is missing data: each pair of genomes is compared on the sit
 missing many sites looks closer to the others than it is. `snps.vcf` is the same whatever the value. Details in
 [Methods](Methods#4-comparison).
 
-**The de novo assembly is 1.3–2 times the reference length.**
+**Which assembler?**
+The templated assembly (the default) to compare samples of one species against a close reference; SPAdes to see
+the structure, or with a distant reference. SKESA is conservative and breaks at repeats (an organelle's inverted
+repeat splits it); it is offered as a candidate under evaluation, and must be installed first
+(`conda install -c bioconda skesa`). See [Methods](Methods#3-assembly).
+
+**The de novo assembly is much longer than the reference.**
 Reads from other genomes were baited with the target: mitochondrial and nuclear sequences similar to the
 plastome (for example plastid DNA inserted in the mitochondrion), or contamination. The extra contigs are
-usually at low depth, and `Off_reference_pct` gives the share of the assembly that aligns nowhere on the
-reference (a note above 10%). The templated assembly is not affected; for de novo assemblies, check the assembly
+usually at low coverage, and `Off_reference_pct` gives the share of the assembly that aligns nowhere on the
+reference (a note above 10%). The templated assembly is not affected; for SPAdes assemblies, check the assembly
 graph in `3_assembled/assembly_graphs/`.
 
 **I am baiting a mitogenome.**
-Use `--filter-by-reference`. Among the baited reads are long reads of which only a stretch matches the
-mitogenome (nuclear copies of mitochondrial DNA; plastid reads, as plant mitogenomes contain plastid-derived
-stretches). By default Filtlong prefers them for their length, they fill the target depth, and the templated
-mitogenome fills with `N` while Flye assembles the plastome. See [Methods](Methods#2-filtering). With
-whole-genome reads of a large nuclear genome, check the real depth: the mitogenome may be covered only a few
-times.
+Plant mitogenomes contain plastid-derived stretches, and nuclear genomes copies of mitochondrial DNA: reads of
+both are baited with the mitogenome's, and count towards `--target-depth` (see [Methods](Methods#2-filtering)).
+With whole-genome reads of a large nuclear genome, check the real depth: the mitogenome may be covered only a few
+times. Look at the `N` bases of templated assemblies, and at the off-reference notes of de novo ones.
 
-**My chloroplast assembly is in three contigs, not one circle.**
-With reads shorter than the inverted repeat (about 25 kb), the assembler cannot tell how the single-copy regions
-connect through the repeat: the large single copy, the repeat (once) and the small single copy come out
-separately. It does not affect SNP calling with SKA2. Longer reads give a circular assembly.
-
-**Flye made a small circular contig of my linear target.**
-Flye collapses tandem repeats (such as rDNA arrays) into one circular unit, dropping the flanks
-([Validation](Validation)). Use the templated assembly, or `-a myloasm`, which keeps them linear.
+**My chloroplast assembly is in several contigs, not one circle.**
+Short reads, and their inserts, are much shorter than the inverted repeat (about 25 kb): no assembler can tell
+from them how the single-copy regions connect through the repeat, so the large single copy, the repeat (once)
+and the small single copy come out separately (SKESA breaks at other repeats too). SPAdes' assembly graph shows
+the connections. This does not affect SNP calling with SKA2; the templated assembly follows the reference's
+structure.
 
 **Why are there `N` in the templated assembly?**
-Where fewer than three reads cover the reference, or the reads disagree on a base (often inside an insertion), samtools
-writes `N`. `N_bases` in `summary.tsv` counts them. A de novo assembly resolves insertions.
+Where fewer than three reads cover the reference, or no base reaches a call quality of 20 (the reads disagree,
+often inside an insertion), samtools writes `N`. `N_bases` in `summary.tsv` counts them. A de novo assembly
+resolves insertions.
 
 **Which reads can I use?**
-Any Nanopore reads, fastq or fasta. Dorado or Guppy 5+ SUP/HAC reads work best. Flye's default `nano-hq` mode
-is meant for R10/Q20 reads (<5% error); for R9 reads basecalled with Guppy < 5 (10–20% error), add
-`--read-type nano-raw`. The templated assembly works with either. The tutorial's older MinION reads (mean
-Q14–16) worked with the defaults, including `-a flye`.
+Illumina short reads (or other short reads of similar accuracy), paired or single-end, fastq or fasta. fastp
+trims the adapters and filters by quality and length; fasta reads have no qualities and are filtered by length
+only. Long reads belong to [BACoN](https://github.com/duceppemo/BACoN).
 
-**Can I compare samples sequenced with different chemistries?**
-Yes, but systematic consensus errors differ between chemistries and add to the distances between samples
-from different runs. The templated assembly is the least affected.
+**Do I need to trim the reads first?**
+No: fastp trims adapters (and polyG tails of NextSeq and NovaSeq data) with its defaults. Reads already trimmed
+work too; reads shorter than `--min-read-length` (50 bp) are dropped.
+
+**Can I compare samples sequenced on different instruments or with different read lengths?**
+Yes. Systematic errors differ between runs and can add to the distances between samples from different runs.
+The templated assembly guards against them by needing three reads and a call quality of 20 at every base (`N`
+otherwise); compare `N_bases` between the runs.
 
 **How do I compare with a public genome?**
 Give its fasta file with `--add-genomes`: finished genomes (published plastomes, earlier assemblies) join
@@ -96,7 +113,5 @@ rasher -r ref.fasta -i reads/ -o out/ --add-genomes published/*.fasta
 **How do I resume, or change one parameter?**
 Run the same command again; see [Usage](Usage#resuming-and-changing-parameters).
 
-**Where did Porechop, Shasta, Rebaler, Snippy and PhaME go?**
-They were removed in 0.3, with the evidence in [Methods](Methods#choices-that-changed-in-03) and
-[Validation](Validation). RASHER 0.2 is still available from the
-[releases](https://github.com/duceppemo/RASHER/releases).
+**Can RASHER resume a BACoN output folder?**
+No: every step runs again (the reads, filters and assemblers differ). Use a new output folder.

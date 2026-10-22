@@ -2,197 +2,189 @@
 
 ## 1. Baiting
 
-The reads of each sample are compared with the reference and those that match are kept
-(`1_extracted/`).
+The reads of each sample are compared with the reference and those that match are kept (`1_extracted/`). Of
+paired reads, a pair is kept whole when either mate matches: the mate that does not (it lies past the end of the
+target, or in sequence the reference lacks) still gives the assembly its insert.
 
-- **minimap2** (default): `minimap2 -x map-ont --secondary=no`; a read is kept when it has any alignment to
-  the reference. The read is copied unchanged (not trimmed to the aligned part), with its qualities.
-- **BBDuk** (`-b bbduk`): a read is kept when it shares one k-mer (k = 31 by default, one mismatch allowed: `--hdist`) with
-  the reference. Useful when the reference is only distantly related to the samples.
+- **minimap2** (default): `minimap2 -x sr --secondary=no`, run once on each input file, every read aligned on its
+  own; a read is kept when it has any alignment to the reference. The reads are then copied unchanged (not
+  trimmed to the aligned part), with their qualities. The two files of a pair are read in step and their mates
+  matched by name, a trailing `/1` or `/2` removed (aligners report the names without it), so a pair is kept when
+  either name was reported; mates out of step are an error.
+- **BBDuk** (`-b bbduk`): a read is kept when it shares one k-mer (k = 31 by default, at most 31; one mismatch
+  allowed: `--hdist`) with the reference; pairs are given to BBDuk as pairs (`in=`/`in2=`, `outm=`/`outm2=`),
+  which keeps a pair when either mate matches. Several files of a sample (lanes) are merged first, mate by mate.
+  Each mismatch allowed multiplies BBDuk's memory: with `--hdist 2`, a 155 kb plastome needs about 14 GB per
+  sample (`-m` is shared between the samples run at the same time). Useful when the reference is only distantly
+  related to the samples.
 
 Baiting reads every input read once; everything after works on the baited reads only. The share of bases
 baited (`Baited_pct`) is a measure of enrichment: a few percent in total DNA of plants, much more after
-targeted sequencing.
+targeted sequencing. With `--keep-bam`, the baited reads (not all the reads) are aligned again with
+`minimap2 -ax sr`, as pairs when paired, into `1_extracted/<sample>.bam`.
 
 ### Nuclear copies
 
-Nuclear genomes carry copies of organelle DNA (NUPTs, NUMTs). Their reads are baited with the organelle's: in
-simulations, nearly every read covering a nuclear copy was kept. What they do depends on their depth relative to
-the organelle's (validation scenario `numt`: organelle at 50x):
+Nuclear genomes carry copies of organelle DNA (NUPTs, NUMTs). Their reads are baited with the organelle's: a
+short read from inside a copy is indistinguishable from an organelle read, and only the pairs that reach past
+the copy's ends carry nuclear sequence. What they do depends on their depth relative to the organelle's:
 
-- Up to 2x of nuclear DNA, the templated assembly was unaffected; at 10x it had one `N` in 45 kb of copied
-  segments, which cost one SNP of a distance (4 for a truth of 5).
-- At 25x, the templated assembly had `N` at the sites where the nuclear copies differ (721 of 1,703), never the
-  nuclear base; the comparison drops these sites, so distances err low (2 SNPs for a truth of 5).
-- Flye assembled the nuclear copies as extra contigs (assemblies 1.5 times the reference at 10x, 3.1–3.3 at
-  25x), which the off-reference share flagged; at the sites where the copies differ, some came out with both
-  bases in different contigs. With `--filter-by-reference` the extra contigs were smaller (1.2–2.8 times the
-  reference) and all 21 Flye distances were exact (16 without); the templated assemblies did not change.
+- At a low depth relative to the organelle, the templated consensus follows the organelle reads.
+- Where the copies are deep enough to compete with the organelle's reads, the templated consensus gets `N` at the
+  sites where they differ (no call reaches quality 20), and the comparison drops those sites, so distances err
+  low.
+- De novo assemblers may assemble the copies, or their junctions with nuclear DNA, as extra contigs:
+  `Off_reference_pct` flags assemblies with much sequence that aligns nowhere on the reference.
 
-Use enriched DNA when possible; with whole-genome reads, compare `Est_depth` with the depth of the nuclear
-genome, look at the off-reference notes of de novo assemblies, and consider `--filter-by-reference`.
+How much this matters for short reads is to be established by the short-read validation. Use enriched DNA when
+possible; with whole-genome reads, compare `Est_depth` with the depth of the nuclear genome, and look at the
+`N` bases of templated assemblies and the off-reference notes of de novo ones.
 
 ## 2. Filtering
 
-Filtlong discards reads shorter than `--min-read-length` (500 bp), keeps the best `--keep-percent` (95%) of
-the bases by length and quality, and caps the depth at `--target-depth` (100x the reference length). Capping
-keeps assemblies fast on highly enriched samples without losing accuracy.
+The baited reads go through **fastp** with its defaults and RASHER's length limit:
 
-Filtlong needs base qualities: reads given as fasta are filtered by RASHER instead, keeping the longest reads of
-at least `--min-read-length` up to the target depth.
+- adapters are trimmed (detected automatically in single reads, and found from the overlap of the mates in
+  pairs), and polyG tails are trimmed in NextSeq and NovaSeq data (fastp recognizes them from the read names);
+- reads with more than 40% of their bases below Q15, or more than 5 `N`, are dropped;
+- reads shorter than `--min-read-length` (50 bp) after trimming are dropped.
 
-### Ranking the reads by the reference (`--filter-by-reference`)
+Of a pair, both mates go when either fails. Reads are neither deduplicated nor trimmed by a sliding window of
+quality (fastp's defaults). fastp's JSON and HTML reports go to `logs/2_filter/`, where MultiQC finds them.
 
-Filtlong prefers long reads, and the target depth counts bases wherever they align. Among the baited reads of a
-mitogenome there are long reads of which only a stretch matches the reference: nuclear reads holding a copy of
-mitochondrial DNA, plastid reads covering the plastid-derived stretches of a plant mitogenome. With
-`--filter-by-reference`, Filtlong ranks the reads by their k-mers found in the reference (`--assembly`) instead of
-by base qualities, and these reads rank low.
+The reads are then **subsampled** to at most `--target-depth` (100x) of the genome size (`-s`, or the reference
+length): if the trimmed reads hold more bases than that, a fixed fraction of the reads (pairs kept whole) is kept,
+evenly spread through the files (systematic sampling, without a random seed). The subsample is the same on every
+run, and keeps every part of the run (tiles, lanes, time) represented. Capping keeps the assemblies fast on
+highly enriched samples. The depth counts every baited base, wherever it aligns: with whole-genome reads, baited
+reads of nuclear copies count too.
 
-On six *Arabidopsis* Col-0 lines (R10.4.1, whole-genome reads; [Validation](Validation)), the baited reads of one
-line covered the mitogenome 819x, but the default filter kept 391 reads of median length 90 kb of which 5.7% of
-the bases aligned to the mitogenome: the estimated depth read 100x, while the kept reads covered the mitogenome
-3x (median). The templated
-mitogenomes had 19,000–278,000 `N` and 189–289 substitutions against assemblies of each line's HiFi reads, 29–34
-SNPs to the Col-0 reference and up to 8 between the lines; Flye assembled the plastome instead. With
-`--filter-by-reference` the kept reads were 99.7% aligned (100x), and the templated mitogenomes had 105–162 `N`, no
-substitution, and no SNP to the reference or between the lines; Flye assembled the mitogenome (0–6 substitutions).
-
-It has a cost where the samples differ from the reference in structure: reads spanning sequence the reference
-lacks rank low too. On the 28 potato plastomes ([Tutorial](Tutorial)), the templated assembly of one cultivar
-gained a block of about 1 kb of `N`, pairs of the same lineage at a non-zero distance went from 59 to 69 of 166
-(no distance moved by more than 2 SNPs), and 11 Flye plastomes were circular instead of 17 (with
-the same distances). On the simulated scenarios, the templated assemblies were unchanged.
-
-When to use it: for mitogenomes, and for any target baited from whole-genome reads where the estimated depth looks
-high but the templated assembly has many `N`. Fastq reads only (fasta reads are filtered by length).
-
-Adapters are not trimmed: Dorado and Guppy already trim them, and Porechop, used by RASHER 0.2, is no longer
-maintained.
+fastp needs fastq: reads given as fasta skip it. RASHER drops the fasta reads (or pairs) shorter than
+`--min-read-length`, without trimming, and subsamples them the same way.
 
 ## 3. Assembly
 
-| | Templated: `samtools` (default) | De novo: `flye` | De novo: `myloasm` |
+| | Templated: `samtools` (default) | De novo: `spades` | De novo: `skesa` |
 |---|---|---|---|
-| How | reads aligned to the reference (minimap2), consensus with `samtools consensus -X r10.4_sup` | Flye 2.9 | myloasm |
-| Output | one sequence per reference sequence with reads (one without any read is left out, with a note); positions covered by fewer than three reads are `N` | contigs; circular ones flagged | contigs; circular ones flagged |
-| Accuracy of the consensus | highest | high; some systematic errors on real data | high |
-| Structure (circularity, rearrangements, inverted repeats) | not shown: follows the reference | shown | shown |
-| Insertions absent from the reference | small ones (up to a few hundred bp) | all | all |
-| Tandem repeats (e.g. rDNA arrays) | follows the reference | may collapse into one circular unit | kept linear |
-| Needs | a reference close to the samples (same species) | nothing but depth (about 20x or more) | depth |
-| Assembly time, 28 potato plastomes (`-t 48 -p 12`) | 13 s | 10 min | 35 s |
+| How | reads aligned to the reference (`minimap2 -ax sr`, as pairs when paired), consensus with `samtools consensus -X hiseq` | SPAdes `--isolate` | SKESA |
+| Output | one sequence per reference sequence with reads (one without any read is left out, with a note); positions covered by fewer than three reads are `N` | contigs, and the assembly graph | contigs |
+| Structure (rearrangements, inverted repeats) | not shown: follows the reference | in the graph, as far as the inserts span the repeats | contigs end at repeats |
+| Insertions absent from the reference | short ones, which the reads span | all | all |
+| Circular contigs | none flagged | none flagged | none flagged |
+| Needs | a reference close to the samples (same species) | depth | depth |
 
 **Which one?** For comparing samples of one species against a good reference, which is the usual aim of
-RASHER, use the templated assembly (the default): in every test it gave SNP distances as good as or better than
-the de novo assemblies, and it is the fastest ([Validation](Validation)). Use a de novo assembler to look at
-the structure of the genomes, when the reference is distant, or to check the templated results
-independently: on the tutorial data, Flye and the templated assembly gave identical SNP distances for all
-406 pairs of genomes (the 28 cultivars and the reference). Between the two de novo assemblers, Flye gave more complete plastomes on real data;
-myloasm is faster and does not circularize linear tandem arrays.
+RASHER, use the templated assembly (the default): it is the fastest, and it keeps the reference's coordinates;
+how its SNP distances compare with those of SPAdes and SKESA on short reads is to be established by the
+short-read [validation](Validation). Use a de novo assembler to
+look at the structure of the genomes, when the reference is distant, or to check the templated results
+independently. SKESA is conservative: it ends a contig at a repeat rather than guess through it, so an
+organelle's inverted repeats split its assembly into several contigs. It is offered as a candidate under
+evaluation ([Validation](Validation)), and is not installed with RASHER's environment
+(`conda install -c bioconda skesa`).
 
-Limits of the templated assembly:
+**Templated assembly.** The reads are aligned to the reference with `minimap2 -ax sr --secondary=no` and sorted;
+`samtools consensus -a -X hiseq --show-ins yes --show-del no -d 3 -C 20` writes the consensus: every position of
+each reference sequence that has reads, with the Illumina error profile (`-X hiseq`), the sample's insertions
+shown and its deletions removed (so the consensus follows the sample, not the reference), `N` where fewer than
+three reads cover the position (`-d 3`) or where no base reaches a call quality of 20 (`-C 20`; BACoN 0.4.1
+raised it from samtools' default of 10, so that a base called from a few mixed reads is `N` rather than a SNP).
+Ambiguity codes become `N`. Its limits:
 
 - It shows the sample only where its reads align to the reference; a region absent from the reference
-  cannot appear, and large insertions are left out. Insertions and deletions of up to a few hundred bases
-  are kept, such as the 241 bp that distinguishes potato cytoplasm types ([Tutorial](Tutorial)), but the
-  bases of an insertion the reads do not agree on are `N`: Flye resolved that insertion fully.
+  cannot appear, and insertions longer than the reads can span are left out. The bases of an insertion the reads
+  do not agree on are `N`.
 - Where fewer than three reads align, or the reads disagree, the consensus has `N` (`N_bases`, and a note in
-  `summary.tsv`). A call needs a quality of at least 20 (`samtools consensus -C 20`; samtools' default, 10,
-  before 0.4.1): with few reads, a base called from a mixture of bases is `N` rather than a SNP
-  ([validation](https://github.com/duceppemo/RASHER/blob/main/validation/results/2026-10-16_v0.4.0/SUMMARY.md)).
-  This is `--template-gaps n`, the default; with `--template-gaps reference`, uncovered positions at the ends of
-  each sequence get the reference's bases instead (inner gaps stay `N`).
-- Long runs of one base come out one or two bases short in places, a bias of Nanopore reads: 15–23 indels per
-  *Arabidopsis* Col-0 plastome (R10.4.1) against an assembly of HiFi reads, nearly all deletions in runs of 11–16
-  A or T, and no substitution. SKA2 and Parsnp compare substitutions only, so the distances are not affected; do not read
-  homopolymer lengths from the assembly.
-- In an inverted repeat both copies receive the same reads; a difference between the two copies of one
-  sample cannot be seen (the two copies are usually identical in chloroplasts).
+  `summary.tsv`). This is `--template-gaps n`, the default; with `--template-gaps reference`, uncovered positions
+  at the ends of each sequence get the reference's bases instead (inner gaps stay `N`).
+- In an inverted repeat both copies receive the same reads (minimap2 places a read that fits both copies on one
+  of them); a difference between the two copies of one sample cannot be seen (the two copies are usually
+  identical in chloroplasts).
+
+**De novo assemblies.** SPAdes runs with `--isolate` (no read error correction, for high-coverage isolate data;
+fasta reads assemble as well), on the pairs (`-1`/`-2`) or the single reads (`-s`), with its share of `-m`. Its
+contigs are published under their own names (`<sample>_NODE_1_length_..._cov_...`), and its assembly graph
+(`assembly_graph_with_scaffolds.gfa`) goes to `3_assembled/assembly_graphs/`, with a picture when Bandage is
+installed. SKESA runs on the reads (`--reads R1,R2` for pairs) with its share of `-m`; its contigs keep their
+names (`<sample>_Contig_1_42.5`), and it writes no graph. Neither flags circular contigs, and the coverage in
+their contig names is k-mer coverage, not read depth: `Assembly_depth` is `NA`.
 
 Each de novo assembly is aligned to the reference (`minimap2 -x asm20`): `Off_reference_pct` is the share of
-its bases that align nowhere. Assemblies of the target alone stay below 1% (0–0.3% on every simulated assembly
-and on the 28 potato plastomes with Flye); above 10%, a note says so. Off-reference contigs come from another
-genome (the plastome assembled from mitogenome baits, nuclear copies, low-depth mitochondrial contigs among
-plastome baits) or from sequence the reference lacks. The templated assembly cannot have any.
+its bases that align nowhere; above 10%, a note says so. Off-reference contigs come from another genome (the
+plastome assembled from mitogenome baits, nuclear copies, mitochondrial contigs among plastome baits) or from
+sequence the reference lacks. The templated assembly cannot have any.
 
 Limits of the de novo assemblies:
 
-- Below about 15–20x, assemblies break into pieces and may duplicate regions (Validation, sample at 10x).
-- When reads are shorter than the inverted repeat of a chloroplast (about 25 kb), the assembly is usually three
-  contigs, with the repeat once.
-- With ONT reads, all samples share some systematic consensus errors (homopolymers). They cancel between samples
-  but add to the distance to the reference.
+- At low depth, assemblies break into pieces.
+- Short reads, and their inserts, are much shorter than the inverted repeat of a chloroplast (about 25 kb): the
+  repeat is assembled once, and the large single-copy region, the repeat and the small single-copy region come
+  out as separate contigs. SPAdes' graph shows how they connect; SKESA breaks there and at other repeats.
+- A circular genome is not closed into one circular contig: its contigs can start anywhere, and on either strand.
 
 ### Heteroplasmy
 
-A sample with two organelle haplotypes gives one consensus. In the validation scenario `heteroplasmy` (80x), the
-templated assembly reported the major allele at every site up to a minor fraction of 0.2; from 0.3 the sites
-became `N` (17% at 0.3, 73% at an even mixture), and it never reported the minor allele. Flye reported the major
-allele up to 0.3; from 0.4 some sites came out with the minor allele or with both alleles in different contigs,
-which added false SNPs (5 at an even mixture). RASHER does not detect heteroplasmy: `N` bases in a templated
-assembly with good depth are a hint of a mixture.
+A sample with two organelle haplotypes gives one consensus. The templated assembly calls the major allele where
+it dominates, and `N` where the mixture leaves no base with a call quality of 20; it never reports the minor
+allele. A de novo assembler may give both alleles, in a bubble of the graph or in separate contigs, which can add
+false SNPs. The minor fractions at which this happens with short reads are to be established by the short-read
+validation. RASHER does not detect heteroplasmy: `N` bases in a templated assembly with good depth are a hint of
+a mixture.
 
 ## 4. Comparison
 
 **SNPs.**
 
-- **SKA2** (`--snp-method ska`; the default for de novo assemblies) splits every genome into split k-mers (two 15-mers around a middle
-  base) and aligns the middle bases of the split k-mers found in the genomes; it needs no reference and no
-  alignment. `--ska-min-freq 1` (default) keeps SNPs whose context is in every genome: core SNPs.
-  Lower values keep SNPs missing from some genomes (a pan-genome SNP alignment with gaps, like kSNP, which
-  RASHER 0.1 used). A SNP in an inverted repeat is counted once. Before SKA2, circular contigs are extended by
-  their first 30 bases so that SNPs next to the start of the sequence are not lost, and so is the reference
-  and the genomes of `--add-genomes`
-  when more than half of the assemblies of the samples have a circular contig (Flye and myloasm report them; templated
-  assemblies follow the reference and are never flagged circular, so with them the SNPs within 15 bases of the
-  ends of the reference are not compared: a split k-mer needs 15 bases on either side of its middle base).
-- **minimap2** (`--snp-method minimap2`; the default for templated assemblies) aligns each genome to the reference (`minimap2 -x asm20 -c --cs=long`)
-  and reads its base at every position of the reference. No context is needed around a site, so the
-  indels of a consensus do not hide the SNPs next to them. Those are the homopolymer errors of R9.4.1 reads,
-  400–490 per plastome on the *Arabidopsis* accessions of the [validation](Validation), where SKA2 lost a third
-  of the SNPs. A genome's base at a position is a gap (`-`) where the genome has a deletion; it is `N` where:
+- **SKA2** (`--snp-method ska`; the default for de novo assemblies) splits every genome into split k-mers (two
+  15-mers around a middle base) and aligns the middle bases of the split k-mers found in the genomes; it needs no
+  reference and no alignment. `--ska-min-freq 1` (default) keeps SNPs whose context is in every genome: core
+  SNPs. Lower values keep SNPs missing from some genomes (a pan-genome SNP alignment with gaps, like kSNP). A SNP
+  in an inverted repeat is counted once. Circular contigs, and then the reference and the genomes of
+  `--add-genomes`, are extended by their first 30 bases before SKA2 when more than half of the samples'
+  assemblies have a circular contig, so that SNPs next to the start of the sequence are not lost; no assembler
+  RASHER runs flags circular contigs, so the SNPs within 15 bases of the ends of the reference are not compared
+  (a split k-mer needs 15 bases on either side of its middle base).
+- **minimap2** (`--snp-method minimap2`; the default for templated assemblies) aligns each genome to the
+  reference (`minimap2 -x asm20 -c --cs=long`) and reads its base at every position of the reference. No context
+  is needed around a site, so the indels of a consensus, and other variants nearby, do not hide a SNP, as they do
+  from SKA2. A genome's base at a position is a gap (`-`) where the genome has a deletion; it is `N` where:
   - no alignment covers the position;
   - two alignments cover it with different bases: two copies of a repeat that differ, or a contig of another
     origin, such as a nuclear copy of the organelle genome, over the organelle's own;
   - at least 3 `N` lie within 50 positions of it, in a stretch where the consensus could not decide most
-    positions. On the Col-0 mitogenomes, the reads over one 500 bp stretch were about half each from two
-    diverged sequences, and the few bases the consensus did call made 19 false SNPs in one line.
+    positions (the few bases called there are not trusted).
 
   Insertions in the genomes are left out. `--ska-min-freq` is the share of the genomes (and the reference) that
   must have a nucleotide at a position for it to be kept: 1 (default) keeps the positions every genome covers.
   A SNP in an inverted repeat is counted at both of its positions (twice), as a read-mapping pipeline counts it;
-  SKA2 counts it once. Every difference an assembly carries counts, including errors of a de novo assembly that
-  SKA2's k-mers skip. On the potato plastomes, unpolished stretches of some Flye assemblies (about 1.7
-  indels and 1.7 substitutions per 100 bases) added up to 195 SNPs to a pair. Since 0.4.0 it is the default for templated assemblies
-  (`--snp-method auto`): with them it was as good as SKA2 or better on every dataset of the validation. On 32
-  human mitogenomes (R10.4.1), SKA2's core kept 174 of 452 variable positions and its distances were 31 SNPs too
-  low; minimap2 kept 447 and was within 1 SNP for most pairs. De novo assemblies are compared with SKA2 by
-  default, so that their uncorrected errors are skipped. Results in [Validation](Validation#snp-methods-ska2-and-minimap2).
+  SKA2 counts it once. Every difference an assembly carries counts, including the errors of a de novo assembly
+  that SKA2's k-mers skip: hence minimap2 for templated assemblies and SKA2 for de novo ones by default
+  (`--snp-method auto`, as in BACoN 0.4). How the methods compare on short-read assemblies is to be established by
+  the short-read [validation](Validation).
 - **Parsnp** (`--snp-method parsnp`) aligns the core genome of the assemblies to the reference. RASHER runs it
   with `-c`, which turns off Parsnp's divergence (MUMi) filter: by default Parsnp drops genomes it finds too
-  divergent, which in the validation removed a low-depth sample. A genome much shorter than the reference can
-  still make Parsnp fail, or be kept and reduce the core genome of every genome to what it covers: RASHER warns
-  when the core genome is less than half of the reference. SNPs inside inverted repeats are missed, and SNPs
-  next to large deletions may be. SNPs within about 30 bases of the ends of the reference are not compared
-  either: Parsnp's locally collinear blocks end at their last maximal unique match. HarvestTools writes to
-  `snps.vcf` the SNPs Parsnp filtered out of its alignment too, with a `FILTER` other than `PASS` (`ALN`: more
-  than 20 indels in the 100 bp window around the SNP; `CID`: that window less than 50% identical; `LCB`: a block
-  shorter than 200 bp; `IND`, `N`: a column with an indel or an N; several joined by `:`, `CID:ALN`). Those
-  SNPs are not in the SNP alignment, so not in the distances or the tree; the report shows the `PASS` records
-  only and says how many others `snps.vcf` has. SKA2's VCF has no filter (`.`): every record is shown.
+  divergent, such as a low-depth sample. A genome much shorter than the reference can still make Parsnp fail, or
+  be kept and reduce the core genome of every genome to what it covers: RASHER warns when the core genome is
+  less than half of the reference. SNPs inside inverted repeats are missed, and SNPs next to large deletions may
+  be. SNPs within about 30 bases of the ends of the reference are not compared either: Parsnp's locally
+  collinear blocks end at their last maximal unique match. HarvestTools writes to `snps.vcf` the SNPs Parsnp
+  filtered out of its alignment too, with a `FILTER` other than `PASS` (`ALN`: more than 20 indels in the 100 bp
+  window around the SNP; `CID`: that window less than 50% identical; `LCB`: a block shorter than 200 bp; `IND`,
+  `N`: a column with an indel or an N; several joined by `:`, `CID:ALN`). Those SNPs are not in the SNP
+  alignment, so not in the distances or the tree; the report shows the `PASS` records only and says how many
+  others `snps.vcf` has. SKA2's VCF has no filter (`.`): every record is shown.
 
-**Core or pan-genome SNPs (`--ska-min-freq`, SKA2 only).** SKA2 keeps a SNP site when at least this fraction of
-the genomes (the reference and the genomes of `--add-genomes` included) has its split k-mer: the same 15 bases on
-either side of it. At 1 (default), every genome must have it: a core-SNP alignment, with a nucleotide for every
-genome in every column. Below 1 (0.5: at least half of the genomes), the sites missing from some genomes are kept,
-with a gap (`-`) for those genomes: a pan-genome SNP alignment, the role kSNP3 had in RASHER 0.1. The results go
-to `4_compared/ska_<value>/` instead of `4_compared/ska/`.
+**Core or pan-genome SNPs (`--ska-min-freq`).** SKA2 keeps a SNP site when at least this fraction of the genomes
+(the reference and the genomes of `--add-genomes` included) has its split k-mer: the same 15 bases on either side
+of it. At 1 (default), every genome must have it: a core-SNP alignment, with a nucleotide for every genome in
+every column. Below 1 (0.5: at least half of the genomes), the sites missing from some genomes are kept, with a
+gap (`-`) for those genomes: a pan-genome SNP alignment. The results go to `4_compared/ska_<value>/` instead of
+`4_compared/ska/`.
 
 A genome lacks the split k-mer of a site when:
 
-- the site is within 15 bases of the end of a contig or of a run of `N`: fragmented de novo assemblies (Flye or
-  myloasm at low depth), gaps of a templated assembly;
+- the site is within 15 bases of the end of a contig or of a run of `N`: fragmented de novo assemblies (low
+  depth, SKESA at repeats), gaps of a templated assembly;
 - another SNP or an indel lies within 15 bases of it in that genome (its flanks differ, so its split k-mer is
   another one);
 - the region is missing or rearranged in that genome (a deletion, a published genome with another structure).
@@ -202,8 +194,7 @@ With core SNPs, one such genome removes the site for all; when that happens to e
 alignment has missing data, and as the distances count only the positions where both genomes have a nucleotide,
 each pair is compared on its own set of sites. A genome missing many sites then looks closer to the others than
 it is, and distances between different pairs are less directly comparable. FastTree and IQ-TREE treat the gaps
-as missing data. In the [validation](Validation), `--ska-min-freq 0.5` gave the same exact distances as core SNPs
-on the simulated plastid set.
+as missing data.
 
 `--ska-min-freq` does not change `snps.vcf`, which lists every SNP relative to the reference (from `ska map`),
 nor genomes that do not differ at any position compared (an empty VCF): those give no tree whatever the value.
@@ -213,10 +204,11 @@ that must have a nucleotide at a position (results in `4_compared/minimap2_<valu
 **Distances.** `snp_distances.tsv` counts, for each pair of genomes, the positions of the SNP alignment where
 both have a nucleotide and they differ.
 
-**Tree.** FastTree (GTR, SH-like local supports from 100 resamples; default) or IQ-TREE (`--tree iqtree`: ModelFinder and 1000
-ultrafast bootstraps; IQ-TREE keeps two of each set of identical sequences, and when it keeps fewer than four, RASHER asks
-for no bootstrap and its maximum-likelihood tree is shown without supports), built on the SKA2 or minimap2 SNP alignment or the Parsnp core-genome alignment. The tree is rooted
-at the midpoint of its longest path, ladderized, and drawn as SVG. With SKA2 and minimap2, branch lengths are in
+**Tree.** FastTree (GTR, SH-like local supports from 100 resamples; default) or IQ-TREE (`--tree iqtree`:
+ModelFinder and 1000 ultrafast bootstraps; IQ-TREE keeps two of each set of identical sequences, and when it
+keeps fewer than four, RASHER asks for no bootstrap and its maximum-likelihood tree is shown without supports),
+built on the SKA2 or minimap2 SNP alignment or the Parsnp core-genome alignment. The tree is rooted at the
+midpoint of its longest path, ladderized, and drawn as SVG. With SKA2 and minimap2, branch lengths are in
 substitutions per variable site.
 
 At least three assemblies are needed for a comparison. When no SNP site is shared by all the genomes (for
@@ -338,7 +330,7 @@ repeat, 100% identical, inside flanks far less so), and extended base by base at
 when the 12 bases after it match, so the copies' coordinates are those of the maximal match (they can differ
 by one to eight bases from a published junction where the flanking bases happen to match; a copy may end across
 the origin, as the tomato NC_007898.3 IRa does by one base). A repeat is accepted when each copy is at least
-5,000 bp (plastid IRs are 10–30 kb; a lineage that lost one copy, or the 3 kb repeat of the bundled example,
+5,000 bp (plastid IRs are 10–30 kb; a lineage that lost one copy, or a 3 kb repeat such as that of a small test reference,
 gets no band from the sequence), the copies are at least 99% identical and do not overlap; copies that abut (the
 two halves of a palindrome; the *Toxoplasma* apicoplast NC_001799.1 has its copies abutting across the origin)
 are a repeat without a region between them, so without a band. A repeat across the origin of the circular
@@ -371,30 +363,42 @@ NC_008096.2 (potato) the detected copies are exactly the annotated IRb 85,738–
 on NC_000932.1 (*Arabidopsis*) 26,264 bp, the published size; on NC_007144.1 (cucumber) 25,193 and 25,189 bp,
 the copies minimap2 aligns.
 
-## Choices that changed in 0.3
+## Changes from BACoN
 
-| 0.2 | 0.3 | Why |
-|---|---|---|
-| Porechop | removed | unmaintained, slow; reads are trimmed by the basecaller |
-| Shasta | removed | on real data, some assemblies collapsed to a fraction of the genome; on simulations it left overlapping ends and lost part of an inverted repeat |
-| Rebaler | samtools consensus | Rebaler is unmaintained (2019); samtools consensus was far more accurate in every test |
-| Snippy | SKA2 | Snippy (2020) can no longer be installed with current assemblers; it misses SNPs in inverted repeats and was the noisiest on real data |
-| PhaME | removed | its dependency check compares versions as decimals and rejects samtools 1.10 to 1.29 (1.21 reads as older than 1.3; observed with 1.16 and 1.21) |
-| Parsnp without `-c` | Parsnp with `-c` | no longer drops divergent genomes (a genome much shorter than the reference can still make Parsnp fail, or shrink the core genome; RASHER warns) |
-| RAxML 8 | IQ-TREE | maintained; model selection |
-| ete3 PDF | SVG, drawn by RASHER | ete3 needs Qt and a display |
+RASHER 0.1.0 is a fork of BACoN 0.4.0 (with BACoN's `samtools consensus -C 20`), adapted to Illumina short reads.
 
-The evidence is in [Validation](Validation).
+| BACoN (Nanopore) | RASHER (Illumina) |
+|---|---|
+| one reads file, or a folder of them, per sample | the same, plus paired files (`_R1`/`_R2`, `_1`/`_2`, `.R1`/`.R2`), each pair kept whole through every step |
+| minimap2 `-x map-ont` | minimap2 `-x sr`, one call per file; a pair is baited when either mate aligns |
+| BBDuk, single reads | BBDuk with `in2=`/`outm2=` for pairs |
+| `--keep-bam`: all the reads aligned | `--keep-bam`: the baited reads aligned (as pairs when paired) |
+| Filtlong: best reads by length and quality, `--keep-percent`, `--filter-by-reference`; `--min-read-length` 500 | fastp (adapters, qualities, length) and even subsampling to `--target-depth`; `--min-read-length` 50 |
+| `samtools consensus -X r10.4_sup` | `samtools consensus -X hiseq` |
+| de novo: Flye (`--read-type`, `--min-size`), myloasm | de novo: SPAdes (`--isolate`), SKESA |
+| `--snp-method auto`: minimap2 for templated, SKA2 for Flye and myloasm | minimap2 for templated, SKA2 for SPAdes and SKESA |
+
+The comparison, the report, the SNP effects, the MultiQC files and the checkpoints are BACoN's. An output folder
+of BACoN does not resume under RASHER: every step runs again. The long-read validation of BACoN, which chose its
+defaults, does not carry over to short reads; RASHER's own is on the [Validation](Validation) page.
 
 ## References
 
 - minimap2: Li H. (2018) Minimap2: pairwise alignment for nucleotide sequences. *Bioinformatics* 34:3094–3100.
+- fastp: Chen S. (2023) Ultrafast one-pass FASTQ data preprocessing, quality control, and deduplication using
+  fastp. *iMeta* 2:e107. https://doi.org/10.1002/imt2.107; Chen S., Zhou Y., Chen Y., Gu J. (2018) fastp: an
+  ultra-fast all-in-one FASTQ preprocessor. *Bioinformatics* 34:i884–i890.
 - samtools consensus: Danecek P. et al. (2021) Twelve years of SAMtools and BCFtools. *GigaScience* 10:giab008.
-- Filtlong: Wick R. https://github.com/rrwick/Filtlong
-- Flye: Kolmogorov M. et al. (2019) Assembly of long, error-prone reads using repeat graphs. *Nature Biotechnology* 37:540–546.
-- myloasm: Shaw J., Marin M.G., Li H. (2026) High-resolution metagenome assembly for modern long reads with myloasm. *Nature Biotechnology*. https://doi.org/10.1038/s41587-026-03053-z
+- SPAdes: Prjibelski A., Antipov D., Meleshko D., Lapidus A., Korobeynikov A. (2020) Using SPAdes de novo
+  assembler. *Current Protocols in Bioinformatics* 70:e102. https://doi.org/10.1002/cpbi.102
+- SKESA: Souvorov A., Agarwala R., Lipman D.J. (2018) SKESA: strategic k-mer extension for scrupulous assemblies.
+  *Genome Biology* 19:153. https://doi.org/10.1186/s13059-018-1540-z
 - SKA2: Derelle R., von Wachsmann J., Mäklin T., Hellewell J., Russell T., Lalvani A., Chindelevitch L., Croucher N.J., Harris S.R., Lees J.A. (2024) Seamless, rapid, and accurate analyses of outbreak genomic data using split k-mer analysis. *Genome Research* 34:1661–1673. https://doi.org/10.1101/gr.279449.124
 - Parsnp: Treangen T.J. et al. (2014) The Harvest suite for rapid core-genome alignment and visualization of thousands of intraspecific microbial genomes. *Genome Biology* 15:524; Kille B. et al. (2024) Parsnp 2.0: scalable core-genome alignment for massive microbial datasets. *Bioinformatics* 40(5):btae311. https://doi.org/10.1093/bioinformatics/btae311
 - FastTree: Price M.N. et al. (2010) FastTree 2. *PLoS ONE* 5:e9490.
 - IQ-TREE: Wong T.K.F. et al. (2026) IQ-TREE 3: phylogenomic inference software using complex evolutionary models. *Molecular Biology and Evolution* 43(5):msag117. https://doi.org/10.1093/molbev/msag117
 - BBDuk: Bushnell B. BBTools. https://sourceforge.net/projects/bbmap/
+- Bandage (optional): Wick R.R., Schultz M.B., Zobel J., Holt K.E. (2015) Bandage: interactive visualization of
+  de novo genome assemblies. *Bioinformatics* 31:3350–3352.
+- BACoN, which RASHER forks: Duceppe M.-O. (2026) BACoN: Bait, Assemble and Compare Nanopore reads.
+  https://doi.org/10.5281/zenodo.22970412

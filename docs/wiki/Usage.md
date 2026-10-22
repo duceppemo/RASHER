@@ -92,17 +92,42 @@ tree and in the tables tell them apart. Consecutive values differ in both colour
 the sorted values, so adding or removing a value (a new sample, an edited sheet) can change the colour and shape
 of the values after it. A genome without a value gets a hollow circle.
 
-**Reads**, as fastq or fasta, gzipped or not (`.fastq`, `.fq`, `.fasta`, `.fa`, `.fna`, `.fas`, with or
-without `.gz`). Three ways to give them:
+**Reads**: Illumina short reads, paired or single-end, as fastq or fasta, gzipped or not (`.fastq`, `.fq`,
+`.fasta`, `.fa`, `.fna`, `.fas`, with or without `.gz`). Three ways to give them:
 
 | Input | Samples |
 |---|---|
-| `-i sample.fastq.gz` | one sample, named after the file (`sample`) |
-| `-i folder/` | each sequence file directly in the folder is a sample named after the file; each subfolder is a sample named after the subfolder, made of all the sequence files it contains, in any depth (linked subfolders included; a subfolder without any is skipped, with a message). MinKNOW's `fastq_pass/` works as is (`barcode01/`, `barcode02/`, ...); `unclassified/` and `mixed/` are skipped |
-| `--sample-sheet samples.tsv` | a TSV or CSV file with the columns `sample` and `file`; several files per sample separated by `;` or on several rows; relative paths start from the sheet's folder; blank lines and lines starting with `#` are ignored; any other column is sample metadata (above) |
+| `-i sample.fastq.gz` | one single-end sample, named after the file (`sample`) |
+| `-i folder/` | two files of the folder that differ only by a mate marker are one paired sample, named by what comes before the marker (below); every other sequence file directly in the folder is a single-end sample named after the file; each subfolder is a sample named after the subfolder, made of all the sequence files it contains, in any depth (linked subfolders included; a subfolder without any is skipped, with a message), its pairs found the same way. Subfolders named `unclassified` and `mixed` (reads without a barcode, as demultiplexers name them) are skipped |
+| `--sample-sheet samples.tsv` | a TSV or CSV file with the columns `sample` and `file`; several files per sample separated by `;` or on several rows (the R1 and R2 files of a sample, several lanes); relative paths start from the sheet's folder; blank lines and lines starting with `#` are ignored; any other column is sample metadata (above) |
 
-Sample names may contain letters, digits and `.` `_` `+` `-`. Two inputs giving the same sample name, or a
-sample mixing fasta and fastq files, are errors. Symbolic links are a quick way to rename samples.
+**Read pairing.** Two files make a pair when they sit in the same folder and their names differ only by the mate
+marker just before the extension:
+
+| Mates | Sample |
+|---|---|
+| `X_R1.fastq.gz`, `X_R2.fastq.gz` (or `_r1`/`_r2`) | `X` |
+| `X_1.fastq.gz`, `X_2.fastq.gz` | `X` |
+| `X.R1.fastq.gz`, `X.R2.fastq.gz` | `X` |
+| `X_S1_L001_R1_001.fastq.gz`, `X_S1_L001_R2_001.fastq.gz` (bcl2fastq) | `X_S1_L001` |
+
+The `R` may be either case, the `_001` tail of bcl2fastq and BCL Convert is allowed, and the two mates must use
+the same marker (`X_1` does not pair with `X_R2`). A file whose mate is missing, or a marker claimed by two files,
+is not paired: in a folder, each such file is a single-end sample named after its whole stem (`X_R1`). Within one
+sample (a subfolder, or a sample's files in a sheet), pairs and unpaired files do not mix: the files without a
+mate next to the sample's pairs are skipped, with a warning naming them (list them as a sample of their own to
+use them). A sample with several pairs (lanes, runs) keeps each pair as a pair. In a flat folder, each lane of a
+bcl2fastq run is its own sample (`X_S1_L001`, `X_S1_L002`): put a sample's lanes in a subfolder, or list them in
+a sample sheet, to make one sample of them.
+
+The R1 and R2 files of a pair must list the mates in the same order, as sequencers and the SRA write them: the
+mates may have identical names or end in `/1` and `/2`; a pair whose files desynchronise (different names at the
+same rank, or a different number of reads) is an error. Each pair travels whole through the pipeline
+(`<sample>_R1` and `<sample>_R2` files in `1_extracted/` and `2_filtered/`).
+
+Sample names may contain letters, digits and `.` `_` `+` `-`. Two inputs giving the same sample name, a sample
+mixing fasta and fastq files, and a paired sample `X` next to a sample named `X_R1` or `X_R2` (whose files would
+have the same names) are errors. Symbolic links are a quick way to rename samples.
 
 ## Options
 
@@ -118,24 +143,20 @@ sample mixing fasta and fastq files, are errors. Symbolic links are a quick way 
 | `-b`, `--baiting-method` | `minimap2` | `minimap2`: reads with an alignment to the reference; `bbduk`: reads sharing a k-mer (with `--hdist` mismatches) |
 | `-k`, `--kmer-size` | 31 | BBDuk k-mer size (at most 31) |
 | `--hdist` | 1 | BBDuk: mismatches allowed in a k-mer (0, 1 or 2). Each one multiplies BBDuk's memory: with 2, a 155 kb plastome needs about 14 GB per sample (ignored, with a warning, with `-b minimap2`) |
-| `--keep-bam` | off | Keep the sorted BAM of the baited reads (minimap2) |
-| `--min-read-length` | 500 | Shorter reads are discarded |
-| `--keep-percent` | 95 | Filtlong keeps the best reads, up to this percentage of the bases (fastq only: fasta reads have no qualities and are selected by length) |
-| `--target-depth` | 100 | Filtlong keeps at most this depth of the best reads (depth = bases / genome size, `-s` or the reference length) |
-| `--filter-by-reference` | off | Filtlong ranks the reads by their k-mers found in the reference instead of by base qualities, so that long reads of which only a stretch matches the reference (nuclear reads with a copy of organelle DNA, plastid reads among mitogenome baits) do not fill the target depth. Recommended for mitogenomes and whole-genome reads; fastq only. See [Methods](Methods#2-filtering) |
-| `-a`, `--assembly-method` | `samtools` | `samtools` (templated), `flye` or `myloasm` (de novo); see [Methods](Methods) |
+| `--keep-bam` | off | Keep the sorted BAM of the baited reads aligned to the reference (`1_extracted/<sample>.bam`; for paired samples, the baited pairs aligned as pairs). minimap2 baiting only: an error with `-b bbduk` |
+| `--min-read-length` | 50 | Reads shorter than this after fastp's trimming are discarded; of a pair, both mates go when either is shorter |
+| `--target-depth` | 100 | After fastp, the reads (pairs kept whole) are subsampled evenly to at most this depth (depth = bases / genome size, `-s` or the reference length); see [Methods](Methods#2-filtering) |
+| `-a`, `--assembly-method` | `samtools` | `samtools` (templated), `spades` (de novo, SPAdes `--isolate`) or `skesa` (de novo, SKESA; not in the conda environment: `conda install -c bioconda skesa`); see [Methods](Methods#3-assembly) |
 | `--template-gaps` | `n` | Templated assembly: what to put where fewer than three reads cover the reference. `n`: an `N` (no base is guessed); `reference`: the reference's bases, at the ends of each sequence only (gaps inside stay `N`) |
-| `--read-type` | `nano-hq` | Flye: `nano-hq` for R10/Q20 reads (<5% error; Flye's advice for R9 Guppy 5+ reads is also `nano-hq`), `nano-raw` for R9 reads basecalled with Guppy < 5, `nano-corr` for corrected reads |
-| `--min-size` | automatic | Flye minimum read overlap |
-| `-s`, `--size` | reference length | Expected genome size, for Flye and for `--target-depth` |
-| `--snp-method`, `-snp` | `auto` | `auto`: `minimap2` for templated assemblies, `ska` for Flye and myloasm. `minimap2` (each assembly aligned to the reference, read position by position), `ska` (SKA2 split k-mers), `parsnp` (core-genome alignment), `none` (stop after the assembly); see [Methods](Methods#4-comparison) |
+| `-s`, `--size` | reference length | Expected genome size, for the estimated depth and `--target-depth` |
+| `--snp-method`, `-snp` | `auto` | `auto`: `minimap2` for templated assemblies, `ska` for SPAdes and SKESA. `minimap2` (each assembly aligned to the reference, read position by position), `ska` (SKA2 split k-mers), `parsnp` (core-genome alignment), `none` (stop after the assembly); see [Methods](Methods#4-comparison) |
 | `--ska-min-freq` | 1.0 | SKA2: fraction of the genomes that must contain a variant's context; minimap2: fraction that must have a base at its position; 1 = core SNPs, lower = pan-genome SNPs (like kSNP); see [Methods](Methods#4-comparison) |
 | `--add-genomes` | | Finished genomes (fasta) to include in the comparison, such as published plastomes; named after their file |
 | `--tree` | `fasttree` | `fasttree` (GTR, SH-like supports from 100 resamples) or `iqtree` (model selection, 1000 ultrafast bootstraps) |
 | `--redo` | | Rerun this step and the following ones: `bait`, `filter`, `assemble`, `compare` |
 | `-t`, `--threads` | all | Total threads, shared between the samples processed in parallel |
 | `-p`, `--parallel` | 2 | Samples processed at the same time |
-| `-m`, `--memory` | 85% of RAM | Total memory for BBDuk, in GB, divided between the samples processed in parallel (`-p`) |
+| `-m`, `--memory` | 85% of RAM | Total memory for BBDuk, SPAdes and SKESA, in GB, divided between the samples processed in parallel (`-p`) |
 | `--debug` | | Verbose log |
 | `-v`, `--version` | | Print RASHER's version and exit |
 | `-h`, `--help` | | Print the options and exit |
@@ -143,13 +164,13 @@ sample mixing fasta and fastq files, are errors. Symbolic links are a quick way 
 ## Resuming and changing parameters
 
 Each step records the parameters it ran with in `OUTPUT/.checkpoints/`. Running the same command again skips
-every finished step; changing a parameter reruns that step and the ones after it, and only them (Flye's options
-with another assembler rerun nothing, and `--keep-bam` only adds BAMs: it reruns only the samples without one).
-For example, after a first run with the defaults:
+every finished step; changing a parameter reruns that step and the ones after it, and only them
+(`--template-gaps` with a de novo assembler reruns nothing, and `--keep-bam` only adds BAMs: it reruns only the
+samples without one). For example, after a first run with the defaults:
 
 ```bash
-rasher -r ref.fasta -i reads/ -o out/ -a flye              # reuses baiting and filtering, assembles with Flye
-rasher -r ref.fasta -i reads/ -o out/ -a flye --snp-method parsnp   # reuses the Flye assemblies
+rasher -r ref.fasta -i reads/ -o out/ -a spades                        # reuses baiting and filtering, assembles with SPAdes
+rasher -r ref.fasta -i reads/ -o out/ -a spades --snp-method parsnp    # reuses the SPAdes assemblies
 ```
 
 Each comparison is written to its own folder (`4_compared/minimap2/`, `4_compared/ska/`, `4_compared/parsnp/`,
@@ -179,12 +200,14 @@ error, unless it is already exactly the copy RASHER would write (`-r out/referen
 
 An output folder can be moved or copied and resumed from its new place, whether or not the copy kept the files'
 times (`cp -r`, `scp`, `rsync` without `-t`, an archive): RASHER recognizes each step's input by its size and
-time in the folder where it was made, and by its size alone in a moved or copied folder.
+time in the folder where it was made, and by its size alone in a moved or copied folder. An output folder of
+BACoN does not resume under RASHER: every step runs again.
 
 ## Performance
 
-The 28 potato samples of the [tutorial](Tutorial) (7 GB of whole-genome reads) take 3 minutes with the default
-templated assembly (`-t 32 -p 8`): 1.5 minutes to bait, 1.2 minutes to filter, 17 seconds to assemble, and about
-a second to compare. With Flye (`-t 48 -p 12`), the assembly takes 10 minutes: 2–4 minutes per sample, and 8
-minutes for the slowest. Baiting reads every input read once; the other steps work on the baited reads only.
-The largest single process used 0.7 GB with the templated assembly or Flye, and 2 GB with myloasm.
+Baiting reads every input read once (minimap2 aligns each file once); the other steps work on the baited reads
+only, capped at `--target-depth`. With whole-genome reads, baiting therefore takes most of the time of a
+templated run; a de novo assembly adds SPAdes' or SKESA's time per sample. `-t` threads are shared between the
+`-p` samples run at the same time, and `-m` memory between the samples that BBDuk, SPAdes or SKESA process at the
+same time. Timings and memory on real data will be given with the short-read [validation](Validation) and
+[tutorial](Tutorial).

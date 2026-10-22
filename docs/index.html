@@ -11,7 +11,6 @@
 }
 body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.6 system-ui, -apple-system, "Segoe UI", sans-serif; }
 main { max-width: 760px; margin: 0 auto; padding: 32px 16px 64px; }
-img { max-width: 100%; height: auto; border-radius: 12px; }
 a { color: var(--accent); }
 .card { background: var(--card); border-radius: 8px; padding: 12px 16px; margin: 12px 0; }
 .card p { margin: 4px 0 0; color: var(--muted); font-size: 14px; }
@@ -19,16 +18,15 @@ a { color: var(--accent); }
 </head>
 <body>
 <main>
-<img src="images/rasher_logo.png" alt="RASHER: Bait, Assemble and Compare Nanopore">
-<p>RASHER extracts the Nanopore reads matching a reference sequence (typically an organelle genome) from many
-samples, assembles them, and compares the samples: SNP distances and a tree.
+<h1>RASHER</h1>
+<p>RASHER extracts the Illumina reads matching a reference sequence (typically an organelle genome) from many
+samples, assembles them, and compares the samples: SNP distances and a tree. It is the short-read fork of
+<a href="https://github.com/duceppemo/BACoN">BACoN</a>, which does the same for Nanopore reads.
 <a href="https://github.com/duceppemo/RASHER">Source code</a> ·
 <a href="https://github.com/duceppemo/RASHER/wiki">Documentation</a></p>
 <h2>Example reports</h2>
-<div class="card"><a href="reports/example_report.html">Bundled example</a>
-<p>Four simulated samples with known SNPs (<a href="https://github.com/duceppemo/RASHER/wiki/Example">walkthrough</a>).</p></div>
-<div class="card"><a href="reports/tutorial_potato_report.html">Tutorial: 28 potato cultivars</a>
-<p>Public data, BioProject PRJNA807056 (<a href="https://github.com/duceppemo/RASHER/wiki/Tutorial">walkthrough</a>).</p></div>
+<div class="card"><a href="https://github.com/duceppemo/RASHER/wiki/Example">Bundled example</a>
+<p>Four simulated samples with known SNPs; its published report will appear here with the first release.</p></div>
 </main>
 </body>
 </html>

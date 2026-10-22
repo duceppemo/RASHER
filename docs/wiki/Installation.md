@@ -3,20 +3,7 @@
 RASHER is a Python package (standard library only) that runs command-line programs, which are installed with
 conda.
 
-## bioconda (recommended)
-
-```bash
-conda create -n rasher -c conda-forge -c bioconda rasher
-conda activate rasher
-rasher --version
-```
-
-The package is named `rasher` because conda-forge already has an unrelated package called `rasher`; the
-command is `rasher`. It installs RASHER with every program below except Bandage.
-
-## From the source code
-
-For development, or the latest code:
+## From the source code (recommended for now)
 
 ```bash
 git clone https://github.com/duceppemo/RASHER
@@ -32,36 +19,57 @@ minimum versions:
 
 | Program | Used for | Minimum |
 |---|---|---|
-| minimap2 | baiting; templated assembly; off-reference share of de novo assemblies; SNPs (`--snp-method minimap2`, the default for templated assemblies) | 2.24 |
-| samtools | templated assembly (`samtools consensus -X r10.4_sup`) | 1.21 |
-| Filtlong | read filtering | 0.2.1 |
-| Flye | de novo assembly (`-a flye`) | 2.9.5 |
-| myloasm | de novo assembly (`-a myloasm`) | 0.7 |
+| minimap2 | baiting (`-x sr`); templated assembly; off-reference share of de novo assemblies; SNPs (`--snp-method minimap2`, the default for templated assemblies) | 2.24 |
+| samtools | templated assembly (`samtools consensus -X hiseq`); `--keep-bam` | 1.21 |
+| fastp | read filtering and adapter trimming | 1.0 |
+| SPAdes | de novo assembly (`-a spades`) | 4.0 |
 | SKA2 | SNPs (`--snp-method ska`; the default for de novo assemblies) | 0.5 |
 | Parsnp, HarvestTools | SNPs (`--snp-method parsnp`) | 2.1.2 (with 2.1.1, every SNP is one base off) |
 | FastTree | tree (default) | 2.1.11 |
 | IQ-TREE | tree (`--tree iqtree`) | 2.2 |
 | BBMap (BBDuk) | baiting (`-b bbduk`) | 39 |
-| Bandage | optional: pictures of the assembly graphs | |
+| Bandage | optional: pictures of the SPAdes assembly graphs | |
 | python-isal | optional: faster reading of gzipped reads | |
+
+SKESA (`-a skesa`) is not in the environment: it is an optional assembler, still being evaluated
+([Validation](Validation)). Install it into the environment to use it:
+
+```bash
+conda install -c conda-forge -c bioconda skesa
+```
 
 RASHER checks at start-up that the programs needed by the chosen options are on the `PATH`, and lists the
 missing ones with the command to install them.
 
+## bioconda (planned)
+
+There is no bioconda package yet: it will be submitted with the first release
+([`recipe/meta.yaml`](https://github.com/duceppemo/RASHER/blob/main/recipe/meta.yaml)). Once it is published,
+this section will give the command, which is expected to be:
+
+```bash
+conda create -n rasher -c conda-forge -c bioconda rasher
+conda activate rasher
+rasher --version
+```
+
+It will install RASHER with every program above except Bandage and SKESA. Until then, install from the source
+code.
+
 ## Checking the installation
 
-The example is in the repository (`example/`), not in the conda package. From a clone, or after downloading the
-example folder of the release:
+The example is in the repository (`example/`). From a clone, or after downloading the example folder of the
+release:
 
 ```bash
 curl -sL https://github.com/duceppemo/RASHER/archive/refs/tags/v0.1.0.tar.gz | tar -xz --strip-components=1 RASHER-0.1.0/example
 bash example/run_example.sh
 ```
 
-generates a small simulated dataset (an annotated 30 kb circular reference, four samples with known SNPs and
+generates a small simulated dataset (an annotated reference, a few samples of short reads with known SNPs, and
 their metadata), runs RASHER with the default settings and checks the results against the truth: every pairwise
 SNP distance, the region, gene, context and effect of every SNP, and the report's annotation and metadata
-([Example](Example)); it prints one `OK` line per check. It takes a few seconds.
+([Example](Example)); it prints one `OK` line per check.
 
 ## pip only
 
@@ -75,5 +83,6 @@ If the programs are already installed (for example in an HPC module system), RAS
   some mamba 2.x versions misreport conflicts; `conda env create` (with the libmamba solver) solves it.
 - **`samtools consensus: unrecognised option -X`**: samtools is older than 1.17 (which added `-X`); update
   it. RASHER is tested with samtools 1.21 and later.
-- **Upgrading from RASHER 0.2**: create a new environment; the old `requirements.txt` environment pinned
-  programs that are no longer used (Porechop, Shasta, Rebaler, Snippy, PhaME, RAxML, ete3).
+- **Next to BACoN**: install RASHER in its own environment (BACoN's has Filtlong, Flye and myloasm, not fastp or
+  SPAdes). The two commands do not share output folders: a BACoN output folder does not resume under RASHER
+  (every step runs again).

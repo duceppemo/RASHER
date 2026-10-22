@@ -1,7 +1,9 @@
-"""RASHER logo and the RASHER/BACoN pipeline diagrams, light and dark variants (run from docs/images/)."""
+"""The RASHER logo (a circular genome with paired reads) and both pipeline diagrams (run from docs/images/)."""
 
-LIGHT = {"text": "#1d2433", "muted": "#5d6678", "box": "#f6f7f9", "edge": "#d7dbe2", "arrow": "#8a93a3"}
-DARK = {"text": "#e6e8ec", "muted": "#9aa3b2", "box": "#1d2129", "edge": "#363c47", "arrow": "#737d8e"}
+LIGHT = {"text": "#1d2433", "muted": "#5d6678", "box": "#f6f7f9", "edge": "#d7dbe2", "arrow": "#8a93a3",
+         "reads": "#8a93a3", "ref": "#5d6678"}
+DARK = {"text": "#e6e8ec", "muted": "#9aa3b2", "box": "#1d2129", "edge": "#363c47", "arrow": "#737d8e",
+        "reads": "#737d8e", "ref": "#9aa3b2"}
 THEMES = {
     "light": LIGHT,
     "dark": DARK,
@@ -22,44 +24,41 @@ MEAT, MEAT_EDGE, FAT = "#d94f3d", "#9c2f21", "#faeedd"
 FONT = "system-ui, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif"
 
 
-def wave_points(y, x0, x1, amp, periods=2.5, step_px=6):
-    """Points along a sine from x0 to x1 at baseline y."""
+def arc(cx, cy, r, a0, a1):
+    """An SVG arc from angle a0 to a1 (degrees)."""
     import math
-    n = max(2, int((x1 - x0) / step_px))
-    return [(x0 + (x1 - x0) * i / n, y + amp * math.sin(2 * math.pi * periods * i / n)) for i in range(n + 1)]
+    x0, y0 = cx + r * math.cos(math.radians(a0)), cy + r * math.sin(math.radians(a0))
+    x1, y1 = cx + r * math.cos(math.radians(a1)), cy + r * math.sin(math.radians(a1))
+    return f"M{x0:.1f},{y0:.1f} A{r},{r} 0 0 1 {x1:.1f},{y1:.1f}"
 
 
-def polyline(points):
-    return " ".join(f"L{x:.1f},{y:.1f}" for x, y in points)
-
-
-def ribbon(x0=110, x1=490, top=40, thickness=52, amp=15):
-    """A closed wavy strip of constant vertical thickness: a rasher seen flat, with cut ends."""
-    upper = wave_points(top, x0, x1, amp)
-    lower = wave_points(top + thickness, x1, x0, amp)[::1]
-    lower = [(x, y) for x, y in reversed(wave_points(top + thickness, x0, x1, amp))]
-    d = f"M{upper[0][0]:.1f},{upper[0][1]:.1f} " + polyline(upper[1:])
-    d += f" L{lower[0][0]:.1f},{lower[0][1]:.1f} " + polyline(lower[1:]) + " Z"
-    return d
-
-
-def streak(y, x0=124, x1=476, amp=15):
-    pts = wave_points(y, x0, x1, amp)
-    return f"M{pts[0][0]:.1f},{pts[0][1]:.1f} " + polyline(pts[1:])
+# The icon: a circular reference genome with paired short-read arcs aligned on two tracks; SNPs as dots
+READ_PAIRS = [(52, (-80, -58), (-52, -30)), (52, (-5, 17), (23, 45)), (52, (95, 117), (123, 145)),
+              (64, (-130, -108), (-102, -80)), (64, (-40, -18), (-12, 10)), (64, (60, 82), (88, 110)),
+              (64, (150, 172), (178, 200))]
+SNPS = [(52, 34), (64, -91), (52, 106)]
 
 
 def logo(theme):
+    import math
     t = THEMES[theme]
-    return f"""<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 220" width="600" height="220"
+    cx, cy = 85, 82
+    parts = [f'<circle cx="{cx}" cy="{cy}" r="40" fill="none" stroke="{t["ref"]}" stroke-width="5"/>']
+    for r, mate1, mate2 in READ_PAIRS:
+        for a0, a1 in (mate1, mate2):
+            parts.append(f'<path d="{arc(cx, cy, r, a0, a1)}" fill="none" stroke="{t["reads"]}" '
+                         f'stroke-width="8" stroke-linecap="round"/>')
+    for r, a in SNPS:
+        x, y = cx + r * math.cos(math.radians(a)), cy + r * math.sin(math.radians(a))
+        parts.append(f'<circle cx="{x:.1f}" cy="{y:.1f}" r="5.5" fill="{MEAT}"/>')
+    icon = "\n  ".join(parts)
+    return f"""<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 620 168" width="620" height="168"
   font-family="{FONT}">
   <title>RASHER: Bait, Assemble and Compare Illumina short reads</title>{style(theme)}
-  <path d="{ribbon()}" fill="{MEAT}" stroke="{MEAT_EDGE}" stroke-width="3" stroke-linejoin="round"/>
-  <path d="{streak(56)}" fill="none" stroke="{FAT}" stroke-width="10" stroke-linecap="butt"/>
-  <path d="{streak(76)}" fill="none" stroke="{FAT}" stroke-width="10" stroke-linecap="butt"/>
-  <text x="300" y="165" text-anchor="middle" font-size="54" font-weight="800" letter-spacing="10"
-    fill="{t['text']}">RASHER</text>
-  <text x="300" y="196" text-anchor="middle" font-size="15" letter-spacing="1"
-    fill="{t['muted']}">Bait, Assemble and Compare Illumina short reads</text>
+  {icon}
+  <text x="185" y="92" font-size="56" font-weight="800" letter-spacing="7" fill="{t['text']}">RASHER</text>
+  <text x="185" y="122" font-size="14.5" letter-spacing="0.8" fill="{t['muted']}">Bait, Assemble and Compare \
+Illumina short reads</text>
 </svg>
 """
 

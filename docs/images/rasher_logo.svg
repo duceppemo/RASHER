@@ -1,12 +1,25 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 220" width="600" height="220"
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 620 168" width="620" height="168"
   font-family="system-ui, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif">
   <title>RASHER: Bait, Assemble and Compare Illumina short reads</title>
-  <style>:root { --text: #1d2433; --muted: #5d6678; --box: #f6f7f9; --edge: #d7dbe2; --arrow: #8a93a3 } @media (prefers-color-scheme: dark) { :root { --text: #e6e8ec; --muted: #9aa3b2; --box: #1d2129; --edge: #363c47; --arrow: #737d8e } }</style>
-  <path d="M110.0,40.0 L116.0,43.7 L122.1,47.2 L128.1,50.2 L134.1,52.6 L140.2,54.2 L146.2,55.0 L152.2,54.8 L158.3,53.7 L164.3,51.7 L170.3,49.1 L176.3,45.8 L182.4,42.2 L188.4,38.5 L194.4,34.9 L200.5,31.6 L206.5,28.8 L212.5,26.7 L218.6,25.4 L224.6,25.0 L230.6,25.6 L236.7,27.0 L242.7,29.3 L248.7,32.2 L254.8,35.6 L260.8,39.3 L266.8,43.0 L272.9,46.5 L278.9,49.6 L284.9,52.2 L291.0,54.0 L297.0,54.9 L303.0,54.9 L309.0,54.0 L315.1,52.2 L321.1,49.6 L327.1,46.5 L333.2,43.0 L339.2,39.3 L345.2,35.6 L351.3,32.2 L357.3,29.3 L363.3,27.0 L369.4,25.6 L375.4,25.0 L381.4,25.4 L387.5,26.7 L393.5,28.8 L399.5,31.6 L405.6,34.9 L411.6,38.5 L417.6,42.2 L423.7,45.8 L429.7,49.1 L435.7,51.7 L441.7,53.7 L447.8,54.8 L453.8,55.0 L459.8,54.2 L465.9,52.6 L471.9,50.2 L477.9,47.2 L484.0,43.7 L490.0,40.0 L490.0,92.0 L484.0,95.7 L477.9,99.2 L471.9,102.2 L465.9,104.6 L459.8,106.2 L453.8,107.0 L447.8,106.8 L441.7,105.7 L435.7,103.7 L429.7,101.1 L423.7,97.8 L417.6,94.2 L411.6,90.5 L405.6,86.9 L399.5,83.6 L393.5,80.8 L387.5,78.7 L381.4,77.4 L375.4,77.0 L369.4,77.6 L363.3,79.0 L357.3,81.3 L351.3,84.2 L345.2,87.6 L339.2,91.3 L333.2,95.0 L327.1,98.5 L321.1,101.6 L315.1,104.2 L309.0,106.0 L303.0,106.9 L297.0,106.9 L291.0,106.0 L284.9,104.2 L278.9,101.6 L272.9,98.5 L266.8,95.0 L260.8,91.3 L254.8,87.6 L248.7,84.2 L242.7,81.3 L236.7,79.0 L230.6,77.6 L224.6,77.0 L218.6,77.4 L212.5,78.7 L206.5,80.8 L200.5,83.6 L194.4,86.9 L188.4,90.5 L182.4,94.2 L176.3,97.8 L170.3,101.1 L164.3,103.7 L158.3,105.7 L152.2,106.8 L146.2,107.0 L140.2,106.2 L134.1,104.6 L128.1,102.2 L122.1,99.2 L116.0,95.7 L110.0,92.0 Z" fill="#d94f3d" stroke="#9c2f21" stroke-width="3" stroke-linejoin="round"/>
-  <path d="M124.0,56.0 L130.1,60.0 L136.1,63.7 L142.2,66.9 L148.3,69.3 L154.3,70.6 L160.4,71.0 L166.5,70.2 L172.6,68.4 L178.6,65.7 L184.7,62.3 L190.8,58.4 L196.8,54.4 L202.9,50.4 L209.0,46.9 L215.0,44.1 L221.1,42.1 L227.2,41.1 L233.2,41.2 L239.3,42.4 L245.4,44.6 L251.4,47.6 L257.5,51.2 L263.6,55.2 L269.7,59.2 L275.7,63.0 L281.8,66.3 L287.9,68.9 L293.9,70.5 L300.0,71.0 L306.1,70.5 L312.1,68.9 L318.2,66.3 L324.3,63.0 L330.3,59.2 L336.4,55.2 L342.5,51.2 L348.6,47.6 L354.6,44.6 L360.7,42.4 L366.8,41.2 L372.8,41.1 L378.9,42.1 L385.0,44.1 L391.0,46.9 L397.1,50.4 L403.2,54.4 L409.2,58.4 L415.3,62.3 L421.4,65.7 L427.4,68.4 L433.5,70.2 L439.6,71.0 L445.7,70.6 L451.7,69.3 L457.8,66.9 L463.9,63.7 L469.9,60.0 L476.0,56.0" fill="none" stroke="#faeedd" stroke-width="10" stroke-linecap="butt"/>
-  <path d="M124.0,76.0 L130.1,80.0 L136.1,83.7 L142.2,86.9 L148.3,89.3 L154.3,90.6 L160.4,91.0 L166.5,90.2 L172.6,88.4 L178.6,85.7 L184.7,82.3 L190.8,78.4 L196.8,74.4 L202.9,70.4 L209.0,66.9 L215.0,64.1 L221.1,62.1 L227.2,61.1 L233.2,61.2 L239.3,62.4 L245.4,64.6 L251.4,67.6 L257.5,71.2 L263.6,75.2 L269.7,79.2 L275.7,83.0 L281.8,86.3 L287.9,88.9 L293.9,90.5 L300.0,91.0 L306.1,90.5 L312.1,88.9 L318.2,86.3 L324.3,83.0 L330.3,79.2 L336.4,75.2 L342.5,71.2 L348.6,67.6 L354.6,64.6 L360.7,62.4 L366.8,61.2 L372.8,61.1 L378.9,62.1 L385.0,64.1 L391.0,66.9 L397.1,70.4 L403.2,74.4 L409.2,78.4 L415.3,82.3 L421.4,85.7 L427.4,88.4 L433.5,90.2 L439.6,91.0 L445.7,90.6 L451.7,89.3 L457.8,86.9 L463.9,83.7 L469.9,80.0 L476.0,76.0" fill="none" stroke="#faeedd" stroke-width="10" stroke-linecap="butt"/>
-  <text x="300" y="165" text-anchor="middle" font-size="54" font-weight="800" letter-spacing="10"
-    fill="var(--text)">RASHER</text>
-  <text x="300" y="196" text-anchor="middle" font-size="15" letter-spacing="1"
-    fill="var(--muted)">Bait, Assemble and Compare Illumina short reads</text>
+  <style>:root { --text: #1d2433; --muted: #5d6678; --box: #f6f7f9; --edge: #d7dbe2; --arrow: #8a93a3; --reads: #8a93a3; --ref: #5d6678 } @media (prefers-color-scheme: dark) { :root { --text: #e6e8ec; --muted: #9aa3b2; --box: #1d2129; --edge: #363c47; --arrow: #737d8e; --reads: #737d8e; --ref: #9aa3b2 } }</style>
+  <circle cx="85" cy="82" r="40" fill="none" stroke="var(--ref)" stroke-width="5"/>
+  <path d="M94.0,30.8 A52,52 0 0 1 112.6,37.9" fill="none" stroke="var(--reads)" stroke-width="8" stroke-linecap="round"/>
+  <path d="M117.0,41.0 A52,52 0 0 1 130.0,56.0" fill="none" stroke="var(--reads)" stroke-width="8" stroke-linecap="round"/>
+  <path d="M136.8,77.5 A52,52 0 0 1 134.7,97.2" fill="none" stroke="var(--reads)" stroke-width="8" stroke-linecap="round"/>
+  <path d="M132.9,102.3 A52,52 0 0 1 121.8,118.8" fill="none" stroke="var(--reads)" stroke-width="8" stroke-linecap="round"/>
+  <path d="M80.5,133.8 A52,52 0 0 1 61.4,128.3" fill="none" stroke="var(--reads)" stroke-width="8" stroke-linecap="round"/>
+  <path d="M56.7,125.6 A52,52 0 0 1 42.4,111.8" fill="none" stroke="var(--reads)" stroke-width="8" stroke-linecap="round"/>
+  <path d="M43.9,33.0 A64,64 0 0 1 65.2,21.1" fill="none" stroke="var(--reads)" stroke-width="8" stroke-linecap="round"/>
+  <path d="M71.7,19.4 A64,64 0 0 1 96.1,19.0" fill="none" stroke="var(--reads)" stroke-width="8" stroke-linecap="round"/>
+  <path d="M134.0,40.9 A64,64 0 0 1 145.9,62.2" fill="none" stroke="var(--reads)" stroke-width="8" stroke-linecap="round"/>
+  <path d="M147.6,68.7 A64,64 0 0 1 148.0,93.1" fill="none" stroke="var(--reads)" stroke-width="8" stroke-linecap="round"/>
+  <path d="M117.0,137.4 A64,64 0 0 1 93.9,145.4" fill="none" stroke="var(--reads)" stroke-width="8" stroke-linecap="round"/>
+  <path d="M87.2,146.0 A64,64 0 0 1 63.1,142.1" fill="none" stroke="var(--reads)" stroke-width="8" stroke-linecap="round"/>
+  <path d="M29.6,114.0 A64,64 0 0 1 21.6,90.9" fill="none" stroke="var(--reads)" stroke-width="8" stroke-linecap="round"/>
+  <path d="M21.0,84.2 A64,64 0 0 1 24.9,60.1" fill="none" stroke="var(--reads)" stroke-width="8" stroke-linecap="round"/>
+  <circle cx="128.1" cy="111.1" r="5.5" fill="#d94f3d"/>
+  <circle cx="83.9" cy="18.0" r="5.5" fill="#d94f3d"/>
+  <circle cx="70.7" cy="132.0" r="5.5" fill="#d94f3d"/>
+  <text x="185" y="92" font-size="56" font-weight="800" letter-spacing="7" fill="var(--text)">RASHER</text>
+  <text x="185" y="122" font-size="14.5" letter-spacing="0.8" fill="var(--muted)">Bait, Assemble and Compare Illumina short reads</text>
 </svg>

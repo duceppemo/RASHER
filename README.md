@@ -2,6 +2,7 @@
 
 <p align="center">
   <a href="https://github.com/duceppemo/RASHER/actions/workflows/ci.yml"><img src="https://github.com/duceppemo/RASHER/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://codecov.io/gh/duceppemo/RASHER"><img src="https://codecov.io/gh/duceppemo/RASHER/graph/badge.svg" alt="Coverage"></a>
   <img src="https://img.shields.io/badge/python-3.10%2B-blue" alt="Python 3.10+">
   <a href="LICENSE"><img src="https://img.shields.io/github/license/duceppemo/RASHER" alt="License: MIT"></a>
   <a href="https://github.com/duceppemo/RASHER/wiki"><img src="https://img.shields.io/badge/docs-wiki-informational" alt="Documentation"></a>

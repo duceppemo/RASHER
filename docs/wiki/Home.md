@@ -1,4 +1,7 @@
-# RASHER
+<p align="center">
+  <img src="https://raw.githubusercontent.com/duceppemo/RASHER/main/docs/images/rasher_logo_light.svg#gh-light-mode-only" alt="RASHER: Bait, Assemble and Compare Illumina short reads" width="520">
+  <img src="https://raw.githubusercontent.com/duceppemo/RASHER/main/docs/images/rasher_logo_dark.svg#gh-dark-mode-only" alt="RASHER: Bait, Assemble and Compare Illumina short reads" width="520">
+</p>
 
 RASHER takes Illumina short reads, paired or single-end, from many samples and a reference sequence, typically an
 organelle genome (chloroplast, mitochondrion) or another region of interest, and for each sample:

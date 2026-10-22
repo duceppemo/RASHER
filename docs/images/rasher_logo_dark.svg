@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 210" width="600" height="210"
+  font-family="system-ui, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif">
+  <title>RASHER: Bait, Assemble and Compare Illumina short reads</title>
+  <path d="M90,62 C119,49 145,49 174,62 C203,75 229,75 258,62 C287,49 313,49 342,62 C371,75 397,75 426,62 C455,49 481,49 510,62 " fill="none" stroke="#8c2b1f" stroke-width="54" stroke-linecap="round"/>
+  <path d="M90,62 C119,49 145,49 174,62 C203,75 229,75 258,62 C287,49 313,49 342,62 C371,75 397,75 426,62 C455,49 481,49 510,62 " fill="none" stroke="#c2402f" stroke-width="46" stroke-linecap="round"/>
+  <path d="M110,50 C137,40 159,40 186,50 C213,60 235,60 262,50 C289,40 311,40 338,50 C365,60 387,60 414,50 C441,40 463,40 490,50 " fill="none" stroke="#f4dfc8" stroke-width="7" stroke-linecap="round" opacity="0.95"/>
+  <path d="M110,74 C137,64 159,64 186,74 C213,84 235,84 262,74 C289,64 311,64 338,74 C365,84 387,84 414,74 C441,64 463,64 490,74 " fill="none" stroke="#f4dfc8" stroke-width="7" stroke-linecap="round" opacity="0.95"/>
+  <g fill="#f4dfc8">
+    <circle cx="216" cy="62" r="5"/>
+    <circle cx="300" cy="62" r="5"/>
+    <circle cx="384" cy="62" r="5"/>
+  </g>
+  <text x="300" y="155" text-anchor="middle" font-size="54" font-weight="800" letter-spacing="10"
+    fill="#e6e8ec">RASHER</text>
+  <text x="300" y="186" text-anchor="middle" font-size="15" letter-spacing="1"
+    fill="#9aa3b2">Bait, Assemble and Compare Illumina short reads</text>
+</svg>

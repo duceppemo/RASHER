@@ -1,4 +1,9 @@
-# RASHER
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/images/rasher_logo_dark.svg">
+    <img src="docs/images/rasher_logo_light.svg" alt="RASHER: Bait, Assemble and Compare Illumina short reads" width="520">
+  </picture>
+</p>
 
 <p align="center">
   <a href="https://github.com/duceppemo/RASHER/actions/workflows/ci.yml"><img src="https://github.com/duceppemo/RASHER/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
@@ -15,11 +20,12 @@ skimming, and works best with targeted sequencing that enriches the region of in
 A rasher is a thin slice of bacon: RASHER is the short-read fork of
 [BACoN](https://github.com/duceppemo/BACoN), which does the same for Nanopore reads.
 
-```
-reads ──► 1. bait (minimap2) ──► 2. filter (fastp) ──► 3. assemble ──────────────► 4. compare
-                                                       templated: samtools consensus    SNPs: minimap2, SKA2 or Parsnp
-                                                       de novo:   SPAdes or SKESA       tree: FastTree or IQ-TREE
-```
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/images/pipeline_dark.svg">
+    <img src="docs/images/pipeline_light.svg" alt="reads → 1 bait (minimap2 or BBDuk) → 2 filter (fastp, then even subsampling) → 3 assemble (templated: samtools consensus; de novo: SPAdes or SKESA) → 4 compare (SNPs: minimap2, SKA2 or Parsnp; tree: FastTree or IQ-TREE) → report" width="920">
+  </picture>
+</p>
 
 ## Quick start
 

@@ -7,7 +7,9 @@ import io
 import re
 import zlib
 from collections.abc import Iterable, Iterator
+from contextlib import nullcontext
 from dataclasses import dataclass, field
+from itertools import zip_longest
 from pathlib import Path
 
 from rasher import RasherError
@@ -219,8 +221,14 @@ def write_fasta(path: Path, records: Iterable[Record], width: int = 80) -> int:
     return count
 
 
+def canonical_name(name: str) -> str:
+    """A read's name without a trailing /1 or /2: the mate suffixes that aligners strip (SAM spec), so a name
+    reported by an aligner matches the read whatever the fastq calls it."""
+    return name[:-2] if name.endswith(("/1", "/2")) else name
+
+
 def extract_reads(inputs: Iterable[Path], names: set[str], output: Path) -> tuple[ReadStats, ReadStats]:
-    """Copy the reads whose name is in `names` from `inputs` to `output`.
+    """Copy the reads whose canonical name is in `names` (canonical names themselves) from `inputs` to `output`.
 
     Returns statistics for all input reads (without lengths) and for the extracted reads.
     """
@@ -229,10 +237,70 @@ def extract_reads(inputs: Iterable[Path], names: set[str], output: Path) -> tupl
         for path in inputs:
             for rec in read_records(path):
                 total.add(len(rec.seq), keep_length=False)
-                if rec.name in names:
+                if canonical_name(rec.name) in names:
                     kept.add(len(rec.seq))
                     out.write(rec.format())
     return total, kept
+
+
+def extract_pairs(pairs: Iterable[tuple[Path, Path]], names: set[str], out1: Path,
+                  out2: Path) -> tuple[ReadStats, ReadStats]:
+    """Copy the read pairs of which either mate's canonical name is in `names` (canonical names themselves) to
+    `out1`/`out2`: a pair stays whole even when only one mate matched the reference.
+
+    Each (R1, R2) file pair is read in lockstep: mates must come in the same order, as sequencers and the SRA
+    write them (checked; identical mate names and `/1 /2` names both pass). Statistics count both mates.
+    """
+    total, kept = ReadStats(), ReadStats()
+    with open_write(out1) as o1, open_write(out2) as o2:
+        for r1_path, r2_path in pairs:
+            for i, (rec1, rec2) in enumerate(zip_longest(read_records(r1_path), read_records(r2_path)), 1):
+                if rec1 is None or rec2 is None:
+                    raise RasherError(f"{r1_path} and {r2_path} do not hold the same number of reads: "
+                                      "not mates of each other")
+                name1, name2 = canonical_name(rec1.name), canonical_name(rec2.name)
+                if name1 != name2:
+                    raise RasherError(f"{r1_path} and {r2_path} desynchronise at read {i}: {rec1.name!r} vs "
+                                      f"{rec2.name!r} (R1 and R2 must list the mates in the same order)")
+                total.add(len(rec1.seq), keep_length=False)
+                total.add(len(rec2.seq), keep_length=False)
+                if name1 in names:
+                    kept.add(len(rec1.seq))
+                    kept.add(len(rec2.seq))
+                    o1.write(rec1.format())
+                    o2.write(rec2.format())
+    return total, kept
+
+
+def subsample_reads(in1: Path, in2: Path | None, out1: Path, out2: Path | None,
+                    target_bases: int) -> ReadStats:
+    """Keep an evenly spread subset of the reads, totalling about `target_bases`, pairs kept whole.
+
+    Systematic sampling of the units (a pair, or a single read): unit i is kept when floor((i+1)*f) exceeds
+    floor(i*f), f being the fraction of the bases to keep. Deterministic (no seed), order-preserving, and
+    even across the file, so a tile- or time-ordered run stays represented. With `in2`, reads are paired and
+    read in lockstep (not checked here: the baiting wrote these files pair by pair)."""
+    bases = sum(len(rec.seq) for rec in read_records(in1))
+    if in2 is not None:
+        bases += sum(len(rec.seq) for rec in read_records(in2))
+    fraction = min(1.0, target_bases / bases) if bases else 1.0
+    kept = ReadStats()
+
+    def keep(i: int) -> bool:
+        return int((i + 1) * fraction) > int(i * fraction)
+
+    second = read_records(in2) if in2 is not None else None
+    with open_write(out1) as o1, (open_write(out2) if out2 is not None else nullcontext()) as o2:
+        for i, rec1 in enumerate(read_records(in1)):
+            rec2 = next(second, None) if second is not None else None
+            if not keep(i):
+                continue
+            kept.add(len(rec1.seq))
+            o1.write(rec1.format())
+            if rec2 is not None:
+                kept.add(len(rec2.seq))
+                o2.write(rec2.format())
+    return kept
 
 
 def concatenate(inputs: Iterable[Path], output: Path) -> None:

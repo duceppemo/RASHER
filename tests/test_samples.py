@@ -169,3 +169,116 @@ def test_linked_subfolders_are_followed_and_folders_without_reads_are_reported(t
                                                              "chunk_2.fastq.gz"]
     assert [f.name for f in samples["barcode03"].files] == ["chunk_0.fastq.gz", "chunk_1.fastq.gz"]
     assert f"Skipping folder {d / 'barcode02'}: no fasta/fastq files" in caplog.text
+
+
+# ----- Read pairing ---------------------------------------------------------------------------------------------
+
+def test_pair_stem_patterns():
+    from rasher.samples import split_pair_stem
+    assert split_pair_stem("x_R1.fastq.gz") == ("x", ("_", "R", ""), 1)
+    assert split_pair_stem("x_r2.fq") == ("x", ("_", "R", ""), 2)
+    assert split_pair_stem("x_1.fastq.gz") == ("x", ("_", "", ""), 1)
+    assert split_pair_stem("x.R2.fasta") == ("x", (".", "R", ""), 2)
+    assert split_pair_stem("x_S1_L001_R1_001.fastq.gz") == ("x_S1_L001", ("_", "R", "_001"), 1)
+    assert split_pair_stem("a_1_2.fastq") == ("a_1", ("_", "", ""), 2)  # The last marker wins
+    assert split_pair_stem("plain.fastq.gz") is None
+    assert split_pair_stem("x_R3.fastq.gz") is None
+    assert split_pair_stem("notaread.txt") is None
+
+
+def test_flat_folder_pairs_one_sample(tmp_path, fastq):
+    (tmp_path / "in").mkdir()
+    fastq("in/x_R1.fastq.gz", [("r", "ACGT")])
+    fastq("in/x_R2.fastq.gz", [("r", "TTTT")])
+    fastq("in/y.fastq.gz", [("s", "ACGT")])
+    samples = {s.name: s for s in discover(tmp_path / "in")}
+    assert sorted(samples) == ["x", "y"]
+    assert [(p1.name, p2.name) for p1, p2 in samples["x"].pairs] == [("x_R1.fastq.gz", "x_R2.fastq.gz")]
+    assert [f.name for f in samples["x"].files] == ["x_R1.fastq.gz", "x_R2.fastq.gz"]
+    assert samples["y"].pairs == []
+
+
+def test_sra_style_underscore_numbers_pair(tmp_path, fastq):
+    (tmp_path / "in").mkdir()
+    fastq("in/Acc_ERR123_1.fastq.gz", [("r", "ACGT")])
+    fastq("in/Acc_ERR123_2.fastq.gz", [("r", "TTTT")])
+    samples = discover(tmp_path / "in")
+    assert [s.name for s in samples] == ["Acc_ERR123"] and samples[0].pairs
+
+
+def test_r1_and_underscore_2_do_not_pair(tmp_path, fastq):
+    (tmp_path / "in").mkdir()
+    fastq("in/x_R1.fastq.gz", [("r", "ACGT")])
+    fastq("in/x_2.fastq.gz", [("r", "TTTT")])
+    samples = {s.name for s in discover(tmp_path / "in")}
+    assert samples == {"x_R1", "x_2"}  # Different marker styles: two single-end samples
+
+
+def test_file_without_a_mate_keeps_its_full_stem(tmp_path, fastq):
+    (tmp_path / "in").mkdir()
+    fastq("in/sample_v2.fastq.gz", [("r", "ACGT")])
+    assert [s.name for s in discover(tmp_path / "in")] == ["sample_v2"]
+
+
+def test_duplicate_mates_stay_single(tmp_path, fastq):
+    (tmp_path / "in").mkdir()
+    fastq("in/x_R1.fastq.gz", [("r", "ACGT")])
+    fastq("in/x_R1.fq", [("r", "ACGT")], gz=False)
+    fastq("in/x_R2.fastq.gz", [("r", "TTTT")])
+    with pytest.raises(RasherError, match="same sample name"):  # Both x_R1 files claim the same name
+        discover(tmp_path / "in")
+
+
+def test_subfolder_files_pair(tmp_path, fastq):
+    (tmp_path / "in" / "s").mkdir(parents=True)
+    fastq("in/s/runA_R1.fastq.gz", [("r", "ACGT")])
+    fastq("in/s/runA_R2.fastq.gz", [("r", "TTTT")])
+    fastq("in/s/runB_R1.fastq.gz", [("q", "ACGT")])
+    fastq("in/s/runB_R2.fastq.gz", [("q", "TTTT")])
+    (sample,) = discover(tmp_path / "in")
+    assert sample.name == "s" and len(sample.pairs) == 2 and len(sample.files) == 4
+
+
+def test_orphan_next_to_pairs_is_skipped_with_a_warning(tmp_path, fastq, caplog):
+    (tmp_path / "in" / "s").mkdir(parents=True)
+    fastq("in/s/a_R1.fastq.gz", [("r", "ACGT")])
+    fastq("in/s/a_R2.fastq.gz", [("r", "TTTT")])
+    fastq("in/s/orphan.fastq.gz", [("q", "AAAA")])
+    (sample,) = discover(tmp_path / "in")
+    assert len(sample.pairs) == 1 and [f.name for f in sample.files] == ["a_R1.fastq.gz", "a_R2.fastq.gz"]
+    assert "orphan.fastq.gz" in caplog.text and "skipped" in caplog.text
+
+
+def test_all_unpaired_subfolder_is_single_end(tmp_path, fastq):
+    (tmp_path / "in" / "s").mkdir(parents=True)
+    fastq("in/s/chunk_a.fastq.gz", [("r", "ACGT")])
+    fastq("in/s/chunk_b.fastq.gz", [("q", "TTTT")])
+    (sample,) = discover(tmp_path / "in")
+    assert sample.pairs == [] and len(sample.files) == 2
+
+
+def test_same_names_in_different_folders_do_not_cross_pair(tmp_path, fastq):
+    (tmp_path / "in" / "s" / "runA").mkdir(parents=True)
+    (tmp_path / "in" / "s" / "runB").mkdir(parents=True)
+    fastq("in/s/runA/x_R1.fastq.gz", [("r", "ACGT")])
+    fastq("in/s/runB/x_R2.fastq.gz", [("r", "TTTT")])
+    (sample,) = discover(tmp_path / "in")
+    assert sample.pairs == []  # Mates pair within one folder only
+
+
+def test_sheet_files_pair(tmp_path, fastq):
+    fastq("x_1.fastq.gz", [("r", "ACGT")])
+    fastq("x_2.fastq.gz", [("r", "TTTT")])
+    sheet = tmp_path / "sheet.tsv"
+    sheet.write_text("sample\tfile\np\tx_1.fastq.gz;x_2.fastq.gz\n")
+    (sample,) = read_sample_sheet(sheet)
+    assert sample.name == "p" and len(sample.pairs) == 1
+
+
+def test_paired_sample_name_collides_with_mate_named_sample(tmp_path, fastq):
+    (tmp_path / "in" / "x_R1").mkdir(parents=True)
+    fastq("in/x_R1/reads.fastq.gz", [("q", "AAAA")])
+    fastq("in/x_R1.fastq.gz", [("r", "ACGT")])
+    fastq("in/x_R2.fastq.gz", [("r", "TTTT")])
+    with pytest.raises(RasherError, match="collide"):
+        discover(tmp_path / "in")

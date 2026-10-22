@@ -144,3 +144,88 @@ def test_a_utf8_bom_is_skipped(tmp_path):
     (tmp_path / "x.fasta").write_bytes(b"\xef\xbb>a\nACGT\n")  # Not a BOM: still not fasta
     with pytest.raises(RasherError, match="neither fasta nor fastq"):
         sniff_format(tmp_path / "x.fasta")
+
+
+# ----- Paired extraction and subsampling ------------------------------------------------------------------------
+
+def test_canonical_name():
+    from rasher.seqio import canonical_name
+    assert canonical_name("read/1") == "read" and canonical_name("read/2") == "read"
+    assert canonical_name("read") == "read" and canonical_name("ERR1.5") == "ERR1.5"
+
+
+def test_extract_pairs_keeps_a_pair_when_either_mate_hits(fastq, tmp_path):
+    from rasher.seqio import extract_pairs
+    r1 = fastq("r1.fastq.gz", [("a", "ACGT"), ("b", "CCCC"), ("c", "GGGG")])
+    r2 = fastq("r2.fastq.gz", [("a", "TTTT"), ("b", "AAAA"), ("c", "ACGT")])
+    out1, out2 = tmp_path / "o1.fastq.gz", tmp_path / "o2.fastq.gz"
+    total, kept = extract_pairs([(r1, r2)], {"a", "c"}, out1, out2)
+    assert (total.reads, kept.reads) == (6, 4)
+    from rasher.seqio import read_records
+    assert [r.name for r in read_records(out1)] == ["a", "c"]
+    assert [r.name for r in read_records(out2)] == ["a", "c"]
+
+
+def test_extract_pairs_with_slash_mate_names(fastq, tmp_path):
+    from rasher.seqio import extract_pairs, read_records
+    r1 = fastq("r1.fastq.gz", [("a/1", "ACGT"), ("b/1", "CCCC")])
+    r2 = fastq("r2.fastq.gz", [("a/2", "TTTT"), ("b/2", "AAAA")])
+    out1, out2 = tmp_path / "o1.fastq.gz", tmp_path / "o2.fastq.gz"
+    total, kept = extract_pairs([(r1, r2)], {"b"}, out1, out2)  # Aligners report "b", not "b/1"
+    assert (total.reads, kept.reads) == (4, 2)
+    assert [r.name for r in read_records(out1)] == ["b/1"]  # The fastq names are kept as they were
+    assert [r.name for r in read_records(out2)] == ["b/2"]
+
+
+def test_extract_pairs_desync_is_an_error(fastq, tmp_path):
+    from rasher.seqio import extract_pairs
+    r1 = fastq("r1.fastq.gz", [("a", "ACGT"), ("b", "CCCC")])
+    r2 = fastq("r2.fastq.gz", [("b", "TTTT"), ("a", "AAAA")])
+    with pytest.raises(RasherError, match="desynchronise at read 1"):
+        extract_pairs([(r1, r2)], {"a"}, tmp_path / "o1.fastq.gz", tmp_path / "o2.fastq.gz")
+
+
+def test_extract_pairs_unequal_counts_is_an_error(fastq, tmp_path):
+    from rasher.seqio import extract_pairs
+    r1 = fastq("r1.fastq.gz", [("a", "ACGT"), ("b", "CCCC")])
+    r2 = fastq("r2.fastq.gz", [("a", "TTTT")])
+    with pytest.raises(RasherError, match="same number of reads"):
+        extract_pairs([(r1, r2)], {"a"}, tmp_path / "o1.fastq.gz", tmp_path / "o2.fastq.gz")
+
+
+def test_extract_reads_canonicalises_names(fastq, tmp_path):
+    from rasher.seqio import extract_reads, read_records
+    reads = fastq("r.fastq.gz", [("a/1", "ACGT"), ("b/1", "CCCC")])
+    out = tmp_path / "o.fastq.gz"
+    total, kept = extract_reads([reads], {"a"}, out)
+    assert (total.reads, kept.reads) == (2, 1) and [r.name for r in read_records(out)] == ["a/1"]
+
+
+def test_subsample_pairs_whole_and_deterministic(fastq, tmp_path):
+    from rasher.seqio import read_records, subsample_reads
+    pairs = [(f"r{i}", "A" * 100) for i in range(100)]
+    r1, r2 = fastq("r1.fastq.gz", pairs), fastq("r2.fastq.gz", pairs)
+    out1, out2 = tmp_path / "o1.fastq.gz", tmp_path / "o2.fastq.gz"
+    kept = subsample_reads(r1, r2, out1, out2, target_bases=5000)  # A quarter of 20,000 bases
+    names1 = [r.name for r in read_records(out1)]
+    assert kept.reads == 2 * len(names1) and 24 <= len(names1) <= 26  # Pairs whole, about a quarter
+    assert names1 == [r.name for r in read_records(out2)]  # The same pairs in both outputs
+    subsample_reads(r1, r2, tmp_path / "p1.fastq.gz", tmp_path / "p2.fastq.gz", target_bases=5000)
+    assert (tmp_path / "p1.fastq.gz").read_bytes() != b"" and \
+        [r.name for r in read_records(tmp_path / "p1.fastq.gz")] == names1  # Deterministic
+
+
+def test_subsample_keeps_everything_when_under_target(fastq, tmp_path):
+    from rasher.seqio import read_records, subsample_reads
+    r1 = fastq("r1.fastq.gz", [("a", "ACGT"), ("b", "CCCC")])
+    out = tmp_path / "o.fastq.gz"
+    kept = subsample_reads(r1, None, out, None, target_bases=1_000_000)
+    assert kept.reads == 2 and [r.name for r in read_records(out)] == ["a", "b"]
+
+
+def test_subsample_single_end_fasta(fasta, tmp_path):
+    from rasher.seqio import read_records, subsample_reads
+    r = fasta("r.fasta", [(f"r{i}", "ACGT" * 25) for i in range(10)])
+    out = tmp_path / "o.fasta"
+    kept = subsample_reads(r, None, out, None, target_bases=300)
+    assert kept.reads == 3 and len(list(read_records(out))) == 3

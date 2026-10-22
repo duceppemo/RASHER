@@ -64,21 +64,21 @@ def logo(theme):
 """
 
 
-def box(x, w, n, title, lines, t, h=110, y=40):
+def box(x, w, n, title, lines, t, h=112, y=40):
     out = [f'<rect x="{x}" y="{y}" width="{w}" height="{h}" rx="12" fill="{t["box"]}" stroke="{t["edge"]}"/>']
-    out.append(f'<circle cx="{x + 24}" cy="{y + 26}" r="12" fill="{MEAT}"/>')
-    out.append(f'<text x="{x + 24}" y="{y + 31}" text-anchor="middle" font-size="14" font-weight="700" '
+    out.append(f'<circle cx="{x + 25}" cy="{y + 27}" r="13" fill="{MEAT}"/>')
+    out.append(f'<text x="{x + 25}" y="{y + 32}" text-anchor="middle" font-size="15" font-weight="700" '
                f'fill="#ffffff">{n}</text>')
-    out.append(f'<text x="{x + 44}" y="{y + 31}" font-size="17" font-weight="700" '
+    out.append(f'<text x="{x + 46}" y="{y + 33}" font-size="19" font-weight="700" '
                f'fill="{t["text"]}">{title}</text>')
     for i, line in enumerate(lines):
-        out.append(f'<text x="{x + 16}" y="{y + 56 + i * 19}" font-size="12.5" fill="{t["muted"]}">{line}</text>')
+        out.append(f'<text x="{x + 16}" y="{y + 60 + i * 21}" font-size="14" fill="{t["muted"]}">{line}</text>')
     return "\n  ".join(out)
 
 
 def chip(x, y, w, label, t):
-    return (f'<rect x="{x}" y="{y}" width="{w}" height="36" rx="18" fill="none" stroke="{MEAT}" '
-            f'stroke-width="1.6"/>\n  <text x="{x + w / 2}" y="{y + 23}" text-anchor="middle" font-size="14" '
+    return (f'<rect x="{x}" y="{y}" width="{w}" height="38" rx="19" fill="none" stroke="{MEAT}" '
+            f'stroke-width="1.6"/>\n  <text x="{x + w / 2}" y="{y + 25}" text-anchor="middle" font-size="15.5" '
             f'font-weight="600" fill="{t["text"]}">{label}</text>')
 
 
@@ -89,19 +89,19 @@ def arrow(x0, x1, t, y=95):
 
 def pipeline(theme, assemble_lines, filter_lines, tool):
     t = THEMES[theme]
-    parts = [chip(12, 77, 74, "reads", t), arrow(86, 118, t)]
-    parts.append(box(118, 168, 1, "Bait", ["minimap2 (-x sr)" if tool == "rasher" else "minimap2 (map-ont)",
+    parts = [chip(12, 76, 80, "reads", t), arrow(92, 124, t)]
+    parts.append(box(124, 182, 1, "Bait", ["minimap2 (-x sr)" if tool == "rasher" else "minimap2 (map-ont)",
                                            "or BBDuk"], t))
-    parts.append(arrow(286, 318, t))
-    parts.append(box(318, 172, 2, "Filter", filter_lines, t))
-    parts.append(arrow(490, 522, t))
-    parts.append(box(522, 230, 3, "Assemble", assemble_lines, t))
-    parts.append(arrow(752, 784, t))
-    parts.append(box(784, 230, 4, "Compare", ["SNPs: minimap2, SKA2 or Parsnp", "tree: FastTree or IQ-TREE"], t))
-    parts.append(arrow(1014, 1046, t))
-    parts.append(chip(1046, 77, 82, "report", t))
+    parts.append(arrow(306, 338, t))
+    parts.append(box(338, 206, 2, "Filter", filter_lines, t))
+    parts.append(arrow(544, 576, t))
+    parts.append(box(576, 252, 3, "Assemble", assemble_lines, t))
+    parts.append(arrow(828, 860, t))
+    parts.append(box(860, 252, 4, "Compare", ["SNPs: minimap2, SKA2 or Parsnp", "tree: FastTree or IQ-TREE"], t))
+    parts.append(arrow(1112, 1144, t))
+    parts.append(chip(1144, 76, 90, "report", t))
     body = "\n  ".join(parts)
-    return f"""<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1142 190" width="1142" height="190"
+    return f"""<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1246 192" width="1246" height="192"
   font-family="{FONT}">
   <title>{'RASHER' if tool == 'rasher' else 'BACoN'} pipeline: bait, filter, assemble, \
 compare</title>{style(theme)}

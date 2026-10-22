@@ -20,8 +20,8 @@ log = logging.getLogger(__name__)
 
 # Conda package providing each executable, for the "missing tool" message.
 PACKAGES = {
-    "minimap2": "minimap2", "samtools": "samtools", "bbduk.sh": "bbmap", "filtlong": "filtlong", "flye": "flye",
-    "myloasm": "myloasm", "ska": "ska2", "parsnp": "parsnp", "harvesttools": "harvesttools",
+    "minimap2": "minimap2", "samtools": "samtools", "bbduk.sh": "bbmap", "fastp": "fastp", "spades.py": "spades",
+    "skesa": "skesa", "ska": "ska2", "parsnp": "parsnp", "harvesttools": "harvesttools",
     "FastTree": "fasttree", "iqtree": "iqtree", "Bandage": "bandage",
 }
 # Alternative executable names, tried in order.
@@ -57,7 +57,7 @@ def stopping() -> bool:
 
 
 def _kill(proc: subprocess.Popen) -> None:
-    """Kill a program and the programs it started (each program runs in its own process group: Flye, for
+    """Kill a program and the programs it started (each program runs in its own process group: SPAdes, for
     one, starts helpers that would otherwise outlive it)."""
     try:
         os.killpg(proc.pid, signal.SIGKILL)

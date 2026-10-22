@@ -1205,7 +1205,7 @@ def read_sequences(path: Path) -> list[tuple[str, int]]:
 # ---------------------------------------------------------------------------------------------------------------
 
 def _tool(info: dict, name: str) -> str:
-    """' (version)' of a program from run_info.json: the version number only ('Filtlong v0.3.1' -> '0.3.1')."""
+    """' (version)' of a program from run_info.json: the version number only ('SKESA v.2.5.1' -> '2.5.1')."""
     text = (info.get("tools", {}).get(name) or {}).get("version") or ""
     match = re.search(r"\d+(?:\.\d+)+(?:-[\w.]+)?", text)
     return f" {html.escape(match.group(0))}" if match else ""
@@ -1256,16 +1256,14 @@ def methods_text(info: dict, rows: list[dict[str, str]] | None = None,
                      f"({ref_desc}) were extracted with BBDuk{_tool(info, 'bbduk.sh')}.")
     else:
         parts.append(f"Reads aligning to the reference ({ref_desc}) were extracted with "
-                     f"minimap2{_tool(info, 'minimap2')} (-x map-ont).")
+                     f"minimap2{_tool(info, 'minimap2')} (-x sr).")
     size = "the given genome size" if s.get("genome_size") else "the reference length"
-    min_length, depth = _num(s.get("min_read_length"), 500), _num(s.get("target_depth"), 100)
-    ranked = (", ranked by their k-mers found in the reference (--assembly)" if s.get("filter_by_reference")
-              else "")
-    fastq_text = (f"reads shorter than {min_length:g} bp were discarded and the best "
-                  f"{_num(s.get('keep_percent'), 95):g}% were kept, up to {depth:g}x of {size}, with "
-                  f"Filtlong{_tool(info, 'filtlong')}{ranked}")
-    fasta_text = (f"reads without qualities (fasta files) were filtered by RASHER: the longest reads of at "
-                  f"least {min_length:g} bp, up to {depth:g}x of {size}")
+    min_length, depth = _num(s.get("min_read_length"), 50), _num(s.get("target_depth"), 100)
+    fastq_text = (f"reads shorter than {min_length:g} bp or failing fastp's quality filters were removed and "
+                  f"adapters trimmed with fastp{_tool(info, 'fastp')}; the reads (pairs kept whole) were then "
+                  f"subsampled evenly to at most {depth:g}x of {size}")
+    fasta_text = (f"reads in fasta files were filtered by length (at least {min_length:g} bp) and subsampled "
+                  f"evenly to at most {depth:g}x of {size} (fasta reads carry no qualities)")
     fasta, total = _fasta_samples(info)
     if fasta == 0:
         parts.append(fastq_text[0].upper() + fastq_text[1:] + ".")
@@ -1279,17 +1277,13 @@ def methods_text(info: dict, rows: list[dict[str, str]] | None = None,
                 if s.get("template_gaps") == "reference" else "")
         parts.append("Each sample was assembled by reference-guided consensus: reads were aligned to the "
                      "reference with minimap2 and the consensus called with samtools consensus"
-                     f"{_tool(info, 'samtools')} (-X r10.4_sup, minimum depth 3, minimum call quality "
+                     f"{_tool(info, 'samtools')} (-X hiseq, minimum depth 3, minimum call quality "
                      f"{s.get('consensus_cutoff', 10)}; positions with less support, or where the reads disagree, "
                      f"are N{gaps}).")
-    elif assembler == "flye":
-        overlap = f", minimum overlap {s['min_size']} bp" if s.get("min_size") else ""
-        parts.append(f"Each sample was assembled de novo with Flye{_tool(info, 'flye')} (--{s.get('read_type')}, "
-                     f"genome size {'as given' if s.get('genome_size') else 'the reference length'}, "
-                     f"{s.get('flye_iterations')} polishing iteration"
-                     f"{'' if s.get('flye_iterations') == 1 else 's'}{overlap}).")
-    elif assembler == "myloasm":
-        parts.append(f"Each sample was assembled de novo with myloasm{_tool(info, 'myloasm')}.")
+    elif assembler == "spades":
+        parts.append(f"Each sample was assembled de novo with SPAdes{_tool(info, 'spades.py')} (--isolate).")
+    elif assembler == "skesa":
+        parts.append(f"Each sample was assembled de novo with SKESA{_tool(info, 'skesa')}.")
     method = s.get("snp_method")
     compared = comparison.get("distances") and not comparison.get("failed") and not comparison.get("skipped")
     added = s.get("add_genomes") or []
@@ -2080,8 +2074,9 @@ def _genome_map_section(output: Path, vcf: Path, reference: Path, settings: dict
                       f"assembly whose length differs from the reference's by up to {RESCALE_WITHIN:.0%} is "
                       "rescaled to it; one differing by more is counted at its own positions).")
     else:
-        n_text = (f" No N track: {assembler or 'the'} assemblies are de novo, so their coordinates do not follow "
-                  "the reference.")
+        assemblies_of = {"spades": "SPAdes", "skesa": "SKESA"}.get(assembler, assembler or "the")
+        n_text = (f" No N track: {assemblies_of} assemblies are de novo, so their coordinates do not follow the "
+                  "reference.")
     missing = sum(1 for s in snps if s.missing)
     pixel_bp = max(1, math.ceil(max(length for _, length in drawn) / (FIG_WIDTH - 138)))
     binned = (f" Ticks closer than {pixel_bp:,} bp are merged; hover shows the SNPs of a tick."

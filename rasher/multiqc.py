@@ -28,7 +28,7 @@ SAMPLE_HEADERS = {
                      "scale": "Blues"},
     "Baited_pct": {"title": "Baited %", "description": "Share of the input bases matching the reference",
                    "suffix": "%", "min": 0, "max": 100, "format": "{:,.1f}", "scale": "Purples"},
-    "Filtered_reads": {"title": "Filtered reads", "description": "Reads kept by Filtlong", "format": "{:,.0f}",
+    "Filtered_reads": {"title": "Filtered reads", "description": "Reads kept by fastp", "format": "{:,.0f}",
                        "scale": "Blues", "hidden": True},
     "Filtered_N50": {"title": "Read N50", "description": "N50 of the filtered reads", "suffix": " bp",
                      "format": "{:,.0f}", "scale": "Greens"},

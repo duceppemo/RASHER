@@ -36,8 +36,24 @@ def test_defaults():
     args = build_parser().parse_args(["-r", "ref.fa", "-i", "in", "-o", "out"])
     assert (args.baiting_method, args.assembly_method, args.snp_method, args.tree) == (
         "minimap2", "samtools", "auto", "fasttree")
-    assert args.kmer_size == 31 and args.min_read_length == 500 and args.ska_min_freq == 1.0
+    assert args.kmer_size == 31 and args.min_read_length == 50 and args.ska_min_freq == 1.0
+    assert args.target_depth == 100 and args.template_gaps == "n"
     assert args.annotation is None
+
+
+@pytest.mark.parametrize("method", ["samtools", "spades", "skesa"])
+def test_assembly_methods(method):
+    args = build_parser().parse_args(["-r", "r", "-i", "i", "-o", "o", "-a", method])
+    assert args.assembly_method == method
+
+
+def test_description_and_input_help_are_for_short_reads(capsys):
+    with pytest.raises(SystemExit):
+        build_parser().parse_args(["--help"])
+    text = " ".join(capsys.readouterr().out.split())
+    assert "Compare Illumina short reads matching a reference" in text
+    assert "sample_R1/_R2, sample_1/_2 or sample.R1/.R2" in text
+    assert "Nanopore" not in text and "Flye" not in text and "Filtlong" not in text
 
 
 def test_annotation_option():
@@ -54,11 +70,12 @@ def test_legacy_snp_flag():
     (["-r", "r", "-o", "o"], "exactly one of -i/--input or --sample-sheet"),
     (["-r", "r", "-i", "i", "--sample-sheet", "s", "-o", "o"], "exactly one of"),
     (["-r", "r", "-i", "i", "-o", "o", "-k", "99"], "at most 31"),
-    (["-r", "r", "-i", "i", "-o", "o", "--keep-percent", "0"], "above 0"),
     (["-r", "r", "-i", "i", "-o", "o", "--ska-min-freq", "1.5"], "at most 1"),
     (["-r", "r", "-i", "i", "-o", "o", "-t", "0"], "at least 1"),
     (["-r", "r", "-i", "i", "-o", "o", "--keep-bam", "-b", "bbduk"], "--keep-bam only applies"),
     (["-r", "r", "-i", "i", "-o", "o", "-a", "shasta"], "invalid choice"),
+    (["-r", "r", "-i", "i", "-o", "o", "-a", "flye"], "invalid choice"),
+    (["-r", "r", "-i", "i", "-o", "o", "--min-read-length", "0"], "at least 1"),
     (["-r", "r", "-i", "i", "-o", "o", "--snp-method", "snippy"], "invalid choice"),
 ])
 def test_argument_errors(argv, message, capsys):
@@ -66,6 +83,15 @@ def test_argument_errors(argv, message, capsys):
         main(argv)
     assert exc.value.code == 2
     assert message in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("option", [["--read-type", "nano-hq"], ["--min-size", "1000"], ["--keep-percent", "90"],
+                                    ["--filter-by-reference"]])
+def test_long_read_options_are_gone(option, capsys):
+    with pytest.raises(SystemExit) as exc:
+        main(["-r", "r", "-i", "i", "-o", "o", *option])
+    assert exc.value.code == 2
+    assert f"unrecognized arguments: {' '.join(option)}" in capsys.readouterr().err
 
 
 def test_hdist_with_minimap2_is_ignored_with_a_warning(tmp_path, caplog, monkeypatch):

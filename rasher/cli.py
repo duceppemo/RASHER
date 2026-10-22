@@ -26,16 +26,6 @@ def _positive_int(value: str) -> int:
     return i
 
 
-def _percent(value: str) -> float:
-    try:
-        f = float(value)
-    except ValueError:
-        raise argparse.ArgumentTypeError(f"not a number: {value!r}") from None
-    if not 0 < f <= 100:
-        raise argparse.ArgumentTypeError(f"must be above 0 and at most 100, got {value}")
-    return f
-
-
 def _fraction(value: str) -> float:
     try:
         f = float(value)
@@ -58,7 +48,7 @@ def build_parser() -> argparse.ArgumentParser:
     max_mem = default_memory_gb()
     parser = argparse.ArgumentParser(
         prog="rasher",
-        description="Bait, Assemble and Compare Nanopore reads matching a reference sequence "
+        description="Bait, Assemble and Compare Illumina short reads matching a reference sequence "
                     "(for example an organelle genome).",
     )
     io = parser.add_argument_group("input/output")
@@ -66,9 +56,10 @@ def build_parser() -> argparse.ArgumentParser:
                     help="Reference sequence(s) used to bait the reads and to call SNPs: fasta, or a GenBank file "
                          "whose sequence is used and whose features annotate the report (gzipped or not).")
     io.add_argument("-i", "--input", metavar="PATH", type=Path,
-                    help="A fastq/fasta file, or a folder: each file is a sample named after the file, and each "
-                         "subfolder is a sample named after the subfolder with all the files it contains (e.g. "
-                         "MinKNOW's fastq_pass/barcode01/). Gzipped or not.")
+                    help="A fastq/fasta file, or a folder of them, gzipped or not. Paired files (sample_R1/_R2, "
+                         "sample_1/_2 or sample.R1/.R2) make one sample, named after them; a file without a mate "
+                         "is a single-end sample named after the file; a subfolder is a sample named after the "
+                         "subfolder with all the files it contains (pairs found the same way).")
     io.add_argument("--sample-sheet", metavar="FILE.tsv", type=Path,
                     help="Instead of -i: a TSV/CSV with the columns 'sample' and 'file' (several files per sample "
                          "separated by ';' or on several rows). Relative paths start from the sheet's folder.")
@@ -102,40 +93,29 @@ def build_parser() -> argparse.ArgumentParser:
                       help="Mismatches allowed in BBDuk's k-mers. Each one multiplies BBDuk's memory: with 2, a "
                            "155 kb plastome needs about 14 GB per sample. Default: 1")
     bait.add_argument("--keep-bam", action="store_true",
-                      help="Keep the sorted BAM of the reads aligned to the reference (minimap2 only).")
+                      help="Keep the sorted BAM of the reads aligned to the reference (minimap2 only; for paired "
+                           "samples, the BAM holds the baited read pairs).")
 
     reads = parser.add_argument_group("read preparation")
-    reads.add_argument("--min-read-length", metavar="500", type=_positive_int, default=500,
-                       help="Discard reads shorter than this. Default: %(default)s")
-    reads.add_argument("--keep-percent", metavar="95", type=_percent, default=95.0,
-                       help="Filtlong keeps the best reads, up to this percentage of the bases. "
-                            "Default: %(default)s")
+    reads.add_argument("--min-read-length", metavar="50", type=_positive_int, default=50,
+                       help="Discard reads (pairs, when paired) shorter than this. Default: %(default)s")
     reads.add_argument("--target-depth", metavar="100", type=_positive_int, default=100,
-                       help="Keep at most this depth of the best reads (Filtlong). Default: %(default)s")
-
-    reads.add_argument("--filter-by-reference", action="store_true",
-                       help="Filtlong ranks the reads by their k-mers found in the reference (--assembly) instead "
-                            "of by base qualities: long reads of which only a stretch matches the reference, such "
-                            "as nuclear reads holding a copy of organelle DNA, no longer fill the target depth. "
-                            "Fastq reads only.")
+                       help="Keep at most this depth of reads: after fastp, the reads are subsampled evenly. "
+                            "Default: %(default)s")
 
     asm = parser.add_argument_group("assembly")
-    asm.add_argument("-a", "--assembly-method", choices=["samtools", "flye", "myloasm"], default="samtools",
+    asm.add_argument("-a", "--assembly-method", choices=["samtools", "spades", "skesa"], default="samtools",
                      help="samtools: templated assembly, the consensus of the reads aligned to the reference "
-                          "(most accurate for SNPs, fastest); flye or myloasm: de novo assembly (independent of "
-                          "the reference, shows structure; myloasm keeps linear tandem arrays linear). "
-                          "Default: %(default)s")
+                          "(most accurate for SNPs, fastest); spades: de novo assembly (SPAdes --isolate, "
+                          "independent of the reference); skesa: de novo assembly, conservative, which breaks at "
+                          "repeats (an organelle's inverted repeats fragment it). Default: %(default)s")
     asm.add_argument("--template-gaps", choices=["n", "reference"], default="n",
                      help="Templated assembly (-a samtools): what to put where fewer than three reads cover the "
                           "reference. n: an N (no base is guessed); reference: the reference's bases, at the ends "
                           "of each sequence only (gaps inside stay N). Default: %(default)s")
-    asm.add_argument("--read-type", choices=["nano-hq", "nano-raw", "nano-corr"], default="nano-hq",
-                     help="Flye read type: nano-hq for Guppy5+/Dorado reads (<5%% error), nano-raw for older "
-                          "reads. Default: %(default)s")
-    asm.add_argument("--min-size", metavar="BP", type=_positive_int, default=None,
-                     help="Flye minimum read overlap. Default: automatic.")
     asm.add_argument("-s", "--size", metavar="BP", type=_positive_int, default=None,
-                     help="Expected genome size, for Flye and read filtering. Default: the reference length.")
+                     help="Expected genome size, for the read depth and the subsampling. Default: the reference "
+                          "length.")
 
     cmp = parser.add_argument_group("comparison")
     cmp.add_argument("--snp-method", "-snp", choices=["auto", "ska", "minimap2", "parsnp", "none"],
@@ -144,7 +124,7 @@ def build_parser() -> argparse.ArgumentParser:
                           "reference and read position by position), ska (SKA2 split k-mers, reference-free; "
                           "skips SNPs near other variants or indels, but also the errors of de novo assemblies) "
                           "or parsnp (core-genome alignment to the reference); 'none' stops after the assembly. "
-                          "Default: auto (minimap2 for templated assemblies, ska for Flye and myloasm)")
+                          "Default: auto (minimap2 for templated assemblies, ska for SPAdes and SKESA)")
     cmp.add_argument("--ska-min-freq", metavar="1.0", type=_fraction, default=1.0,
                      help="SKA2 and minimap2: fraction of genomes that must share a variant's context (SKA2) or "
                           "cover its position (minimap2) for it to be kept. 1 = core SNPs; lower values give a "
@@ -165,8 +145,8 @@ def build_parser() -> argparse.ArgumentParser:
     run_group.add_argument("-p", "--parallel", metavar="2", type=_positive_int, default=2,
                            help="Number of samples processed at the same time. Default: %(default)s")
     run_group.add_argument("-m", "--memory", metavar="GB", type=_positive_int, default=max_mem,
-                           help="Total memory in GB for BBDuk, divided between the samples processed in "
-                                "parallel (-p). Default: 85%% of the total (%(default)s)")
+                           help="Total memory in GB for BBDuk, SPAdes and SKESA, divided between the samples "
+                                "processed in parallel (-p). Default: 85%% of the total (%(default)s)")
     parser.add_argument("--debug", action="store_true", help="Verbose logging.")
     parser.add_argument("-v", "--version", action="version", version=f"RASHER {__version__}")
     return parser
@@ -210,12 +190,8 @@ def main(argv: list[str] | None = None) -> int:
         hdist=1 if args.hdist is None else args.hdist,
         keep_bam=args.keep_bam,
         min_read_length=args.min_read_length,
-        keep_percent=args.keep_percent,
         target_depth=args.target_depth,
-        filter_by_reference=args.filter_by_reference,
         assembler=args.assembly_method,
-        read_type=args.read_type,
-        min_size=args.min_size,
         template_gaps=args.template_gaps,
         genome_size=args.size,
         snp_method=args.snp_method,

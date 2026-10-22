@@ -65,14 +65,9 @@ class Settings:
     kmer: int = 31
     hdist: int = 1
     keep_bam: bool = False
-    min_read_length: int = 500
-    keep_percent: float = 95.0
+    min_read_length: int = 50
     target_depth: int = 100
-    filter_by_reference: bool = False  # Filtlong --assembly reference
     assembler: str = "samtools"
-    read_type: str = "nano-hq"
-    min_size: int | None = None
-    flye_iterations: int = 3
     template_gaps: str = "n"
     # Templated assembly: samtools consensus -C, the quality a call needs (lower: N). Not an option: 20 since 0.4.1
     # (10, samtools' default, before), so that a base called from a few mixed reads becomes N rather than a SNP
@@ -94,6 +89,7 @@ class Settings:
 class SampleState:
     sample: Sample
     reads: Path | None = None
+    reads2: Path | None = None  # The R2 reads of a paired sample
     assembly: Path | None = None
     failed: str = ""
     stats: dict[str, object] = field(default_factory=dict)
@@ -125,14 +121,13 @@ class Checkpoints:
     def path(self, step: str) -> Path:
         return self.folder / f"{step}.json"
 
-    def load(self, step: str, fingerprint: str, *older: str) -> dict | None:
-        """The checkpoint of a step, if it was made with these parameters: `fingerprint`, or one of the `older`
-        fingerprints that earlier versions gave the same parameters (data["fingerprint"] says which)."""
+    def load(self, step: str, fingerprint: str) -> dict | None:
+        """The checkpoint of a step, if it was made with these parameters (`fingerprint`)."""
         try:
             data = json.loads(self.path(step).read_text())
         except (OSError, ValueError):
             return None
-        if data.get("fingerprint") not in (fingerprint, *older):
+        if data.get("fingerprint") != fingerprint:
             return None
         root = data.get("root") or _guess_root(data.get("results"))  # No root before 0.3.4
         if root and root != self.root:  # A moved or copied output folder: its own files
@@ -206,9 +201,18 @@ def _output_signature(path: Path | None) -> list[object] | None:
     return [st.st_size, st.st_mtime_ns]
 
 
+def _reads_signature(st: SampleState) -> object:
+    """The output signature of a sample's reads: of both files when they are paired."""
+    if st.reads2 is None:
+        return _output_signature(st.reads)
+    return [_output_signature(st.reads), _output_signature(st.reads2)]
+
+
 def _size_only(signature: object) -> object:
-    """The size of an output signature ([size, mtime_ns], or None): all that a copy of the output folder made
-    without the files' times (cp -r, scp, an archive) keeps."""
+    """The size of an output signature ([size, mtime_ns], or None; a list of them for paired reads): all that a
+    copy of the output folder made without the files' times (cp -r, scp, an archive) keeps."""
+    if isinstance(signature, list) and any(x is None or isinstance(x, list) for x in signature):
+        return [_size_only(x) for x in signature]
     return signature[0] if isinstance(signature, list) and signature else signature
 
 
@@ -235,10 +239,11 @@ def _same_files(saved: object, current: list[list[object]]) -> bool:
 # ---------------------------------------------------------------------------------------------------------------
 
 def resolve_snp_method(snp_method: str, assembler: str) -> str:
-    """The comparison method: 'auto' is minimap2 for templated assemblies and SKA2 for de novo ones. minimap2 needs
-    no identical context around a SNP, which SKA2 lacks next to other variants or consensus indels, but it counts
-    every difference an assembly carries, including the uncorrected errors of a de novo assembly, which SKA2's
-    split k-mers skip (validation/results/2026-10-16_human_mt)."""
+    """The comparison method: 'auto' is minimap2 for templated assemblies (samtools) and SKA2 for de novo ones
+    (SPAdes, SKESA). minimap2 reads the templated consensus position by position and needs no identical context
+    around a SNP, which SKA2 lacks next to other variants or consensus indels; but it would count every
+    difference an assembly carries, including the uncorrected errors of a de novo assembly, which SKA2's split
+    k-mers skip."""
     if snp_method != "auto":
         return snp_method
     return "minimap2" if assembler == "samtools" else "ska"
@@ -248,7 +253,7 @@ def needed_tools(s: Settings) -> list[str]:
     tools = ["minimap2"] if s.baiting == "minimap2" else ["bbduk.sh"]
     if s.keep_bam and s.baiting == "minimap2":
         tools.append("samtools")
-    tools += ["filtlong", {"flye": "flye", "myloasm": "myloasm", "samtools": "samtools"}[s.assembler]]
+    tools += ["fastp", {"spades": "spades.py", "skesa": "skesa", "samtools": "samtools"}[s.assembler]]
     if "minimap2" not in tools:  # Templated assembly; the off-reference share of de novo assemblies
         tools.append("minimap2")
     method = resolve_snp_method(s.snp_method, s.assembler)
@@ -296,8 +301,9 @@ def _run_parallel(states: list[SampleState], fn: Callable[[SampleState, int], st
             log.warning("  %s: %s", st.sample.name, message)
             return st.sample.name, {"failed": message}
         log.info("  %s done (%.0f s)", st.sample.name, time.monotonic() - start)
-        return st.sample.name, {"output": str(res.output) if res.output else None, "stats": res.stats,
-                                "notes": res.notes}
+        return st.sample.name, {"output": str(res.output) if res.output else None,
+                                **({"output2": str(res.output2)} if res.output2 is not None else {}),
+                                "stats": res.stats, "notes": res.notes}
 
     results: dict[str, dict] = {}
     tools.allow_programs()
@@ -339,10 +345,11 @@ def _apply(states: list[SampleState], results: dict[str, dict], step: str) -> No
                 st.assembly = Path(res["output"])
             else:
                 st.reads = Path(res["output"])
+                st.reads2 = Path(res["output2"]) if res.get("output2") else None
 
 
 def _outputs_exist(results: dict[str, dict]) -> bool:
-    return all(Path(r["output"]).exists() for r in results.values() if r.get("output"))
+    return all(Path(r[key]).exists() for r in results.values() for key in ("output", "output2") if r.get(key))
 
 
 def _reference_records(reference: Path) -> list[Record]:
@@ -742,19 +749,16 @@ def _run(s: Settings, started: float) -> int:
     log.info("RASHER %s", __version__)
     if s.snp_method == "auto":  # Resolved once: checkpoints, folders, run_info.json and the report see the method
         s.snp_method = resolve_snp_method(s.snp_method, s.assembler)
-        log.info("Comparison method: %s (the default for %s assemblies)",
+        log.info("Comparison method: %s (the default for %s)",
                  {"minimap2": "minimap2", "ska": "SKA2"}[s.snp_method],
-                 "templated" if s.assembler == "samtools" else "de novo")
+                 {"samtools": "templated assemblies", "spades": "de novo assemblies (SPAdes)",
+                  "skesa": "de novo assemblies (SKESA)"}[s.assembler])
     tools = require(needed_tools(s))
     samples = _load_samples(s)
     if s.add_genomes and s.snp_method == "none":
         log.warning("--add-genomes is ignored: there is no comparison with --snp-method none")
     elif s.add_genomes:
         _check_added_genomes(s, {x.name for x in samples})  # Before any step, not after the assembly
-    by_reference = s.filter_by_reference and any(x.fmt == "fastq" for x in samples)
-    if s.filter_by_reference and not by_reference:
-        log.warning("--filter-by-reference is ignored: every sample is fasta (Filtlong needs fastq; fasta reads "
-                    "are filtered by length)")
     metadata = _prepare_metadata(s, samples)  # Fails fast on a bad file or column; not part of any checkpoint
     reference, reference_length = _prepare_reference(s)
     genome_size = s.genome_size or reference_length
@@ -774,80 +778,66 @@ def _run(s: Settings, started: float) -> int:
     # reruns that sample only.
     inputs = {x.name: [_file_signature(f) for f in x.files] for x in samples}
     # The parameters that change a step's outputs: not --keep-bam, which only adds a BAM (a sample whose BAM is
-    # missing is baited again), nor Flye's options with another assembler.
-    flye_options = {"read_type": s.read_type, "min_size": s.min_size, "iterations": s.flye_iterations}
+    # missing is baited again), nor the templated assembly's options with a de novo assembler.
     params = {
         "bait": {"reference": _md5(reference),
                  "method": s.baiting, "kmer": s.kmer if s.baiting == "bbduk" else None,
                  **({"hdist": s.hdist} if s.baiting == "bbduk" else {})},
-        "filter": {"min_length": s.min_read_length, "keep_percent": s.keep_percent,
-                   "target_depth": s.target_depth, "genome_size": genome_size,
-                   **({"by_reference": True} if by_reference else {})},
+        "filter": {"min_length": s.min_read_length, "target_depth": s.target_depth, "genome_size": genome_size},
         "assemble": {"assembler": s.assembler, "genome_size": genome_size,
-                     "template_gaps": s.template_gaps if s.assembler == "samtools" else None,
-                     **({"consensus_cutoff": s.consensus_cutoff} if s.assembler == "samtools" else {}),
-                     **(flye_options if s.assembler == "flye" else {})},
+                     **({"template_gaps": s.template_gaps, "consensus_cutoff": s.consensus_cutoff}
+                        if s.assembler == "samtools" else {})},
     }
-    # RASHER <= 0.3.7 also recorded --keep-bam and Flye's options whatever the assembler (as 0.3.2 for minimap2):
-    # the checkpoints of a folder it made are reused when nothing else changed, made with --keep-bam or without.
-    older = {keep_bam: {"bait": {**params["bait"], "keep_bam": keep_bam}, "filter": params["filter"],
-                        "assemble": {**params["assemble"], **flye_options}} for keep_bam in (False, True)}
 
-    baiting = {"samples": len(states)}  # Samples to bait in this run
+    running = {"samples": len(states)}  # Samples to run in this step
+
+    def memory() -> int:
+        """The memory of a sample (BBDuk, SPAdes, SKESA): shared between the samples run at the same time."""
+        return max(1, s.memory_gb // max(1, min(s.parallel, running["samples"])))
 
     def bait(st: SampleState, threads: int) -> steps.StepResult:
         if s.baiting == "minimap2":
             return steps.bait_minimap2(st.sample, reference, folder["bait"], logs / "1_bait", threads, s.keep_bam)
-        # The memory is shared between the samples baited at the same time
         return steps.bait_bbduk(st.sample, reference, folder["bait"], logs / "1_bait", threads, s.kmer, s.hdist,
-                                max(1, s.memory_gb // max(1, min(s.parallel, baiting["samples"]))))
+                                memory())
 
     def filt(st: SampleState, threads: int) -> steps.StepResult:
         assert st.reads is not None
-        return steps.filter_filtlong(st.sample.name, st.reads, st.sample.fmt, folder["filter"],
-                                     logs / "2_filter", min_length=s.min_read_length,
-                                     keep_percent=s.keep_percent, target_bases=genome_size * s.target_depth,
-                                     reference=reference if s.filter_by_reference else None)
+        return steps.filter_fastp(st.sample.name, st.reads, st.reads2, st.sample.fmt, folder["filter"],
+                                  logs / "2_filter", min_length=s.min_read_length,
+                                  target_bases=genome_size * s.target_depth, threads=threads)
 
     dirs = steps.AssemblyDirs(folder["assemble"])
 
     def assemble(st: SampleState, threads: int) -> steps.StepResult:
         assert st.reads is not None
-        name, reads, log_dir = st.sample.name, st.reads, logs / "3_assemble"
+        name, reads, reads2, log_dir = st.sample.name, st.reads, st.reads2, logs / "3_assemble"
         common = {"threads": threads, "reference_length": reference_length}
-        if s.assembler in ("flye", "myloasm"):
-            res = (steps.assemble_flye(name, reads, dirs, log_dir, genome_size=genome_size, read_type=s.read_type,
-                                       min_overlap=s.min_size, iterations=s.flye_iterations, **common)
-                   if s.assembler == "flye" else steps.assemble_myloasm(name, reads, dirs, log_dir, **common))
-            if res.output is not None:
-                res.stats.update(_off_reference(name, res.output, reference, log_dir, threads))
-            return res
-        return steps.assemble_samtools(name, reads, reference, dirs, log_dir,
-                                       fill_gaps=s.template_gaps == "reference", cutoff=s.consensus_cutoff,
-                                       **common)
+        if s.assembler == "samtools":
+            return steps.assemble_samtools(name, reads, reads2, reference, dirs, log_dir,
+                                           fill_gaps=s.template_gaps == "reference", cutoff=s.consensus_cutoff,
+                                           **common)
+        denovo = steps.assemble_spades if s.assembler == "spades" else steps.assemble_skesa
+        res = denovo(name, reads, reads2, dirs, log_dir, memory_gb=memory(), **common)
+        if res.output is not None:
+            res.stats.update(_off_reference(name, res.output, reference, log_dir, threads))
+        return res
 
     functions = {"bait": bait, "filter": filt, "assemble": assemble}
     labels = {"bait": f"Baiting reads matching the reference with {s.baiting}",
-              "filter": "Filtering reads with Filtlong",
+              "filter": "Filtering reads with fastp",
               "assemble": {"samtools": "Building the templated consensus with samtools",
-                           "flye": "Assembling with Flye", "myloasm": "Assembling with myloasm"}[s.assembler]}
+                           "spades": "Assembling with SPAdes", "skesa": "Assembling with SKESA"}[s.assembler]}
     fingerprint = __version__.split(".")[0]
-    older_fingerprints = {keep_bam: fingerprint for keep_bam in older}
     refreshed: set[str] = set()  # Samples whose output changed in this run: their later steps must run again
     for i, step in enumerate(STEPS[:-1]):
         fingerprint = _fingerprint(fingerprint, params[step])
-        older_fingerprints = {k: _fingerprint(fp, older[k][step]) for k, fp in older_fingerprints.items()}
-        saved = None if i >= redo_from else checkpoints.load(step, fingerprint, *older_fingerprints.values())
+        saved = None if i >= redo_from else checkpoints.load(step, fingerprint)
         relocated = bool(saved and saved.get("relocated"))  # A moved or copied folder: sizes alone are compared
-        # With --keep-bam (minimap2), a sample's baiting is reused only if it left its BAM: recorded in its result,
-        # or by the fingerprint of a checkpoint of RASHER <= 0.3.7 made with --keep-bam.
+        # With --keep-bam (minimap2), a sample's baiting is reused only if it left its BAM (recorded in its result)
         bam = step == "bait" and s.keep_bam and s.baiting == "minimap2"
-        made_with_bam = saved is not None and saved["fingerprint"] == older_fingerprints[True]
-        if step == "bait" and s.baiting == "minimap2" and made_with_bam:
-            for res in saved["results"].values():  # type: ignore[index]
-                res["bam"] = not res.get("failed")
         # What each sample's step reads: its input files (bait), or the output of the previous step.
-        upstream = {st.sample.name: inputs[st.sample.name] if step == "bait" else _output_signature(st.reads)
+        upstream = {st.sample.name: inputs[st.sample.name] if step == "bait" else _reads_signature(st)
                     for st in states}
         reads = {st.sample.name: st.reads for st in states}
         # The samples left out of this run (a line of the sample sheet commented out) keep their results: when
@@ -890,8 +880,7 @@ def _run(s: Settings, started: float) -> int:
                     results[name] = res
                     checkpoints.save(step, fp, {**absent, **results})
 
-            if step == "bait":
-                baiting["samples"] = len(todo)
+            running["samples"] = len(todo)
             new = _run_parallel(todo, functions[step], s, step, logs / LOG_FOLDERS[step], on_done=done)
             refreshed |= {name for name, res in new.items() if not res.get("failed")}
         _apply(states, results, step)
@@ -899,22 +888,13 @@ def _run(s: Settings, started: float) -> int:
             _finish(s, states, tools, None, started, annotation, metadata, regions)
             raise RasherError(f"All samples failed at the {step} step; see the logs in {logs}")
 
-    if s.assembler != "samtools":  # Assemblies of RASHER <= 0.3.9, whose checkpoints lack it: added to them
-        late = [st for st in states if not st.failed and st.assembly and st.assembly.is_file()
-                and "Off_reference_pct" not in st.stats and st.sample.name in results]
-        for st in late:
-            share = _off_reference(st.sample.name, st.assembly, reference, logs / "3_assemble", s.threads)
-            st.stats.update(share)  # type: ignore[arg-type]
-            results[st.sample.name].setdefault("stats", {}).update(share)
-        if late:
-            checkpoints.save("assemble", fingerprint, {**absent, **results})
     for st in states:
         if not st.failed:
             _add_notes(st, genome_size)
 
     try:
         comparison = _compare(s, states, reference, folder["compare"], logs / "4_compare", checkpoints,
-                              [fingerprint, *older_fingerprints.values()],
+                              fingerprint,
                               bool(refreshed) or redo_from <= STEPS.index("compare"))
     except Exception as exc:  # The assemblies are still worth reporting
         message = str(exc).splitlines()[0] if isinstance(exc, RasherError) else f"{type(exc).__name__}: {exc}"
@@ -927,9 +907,8 @@ def _run(s: Settings, started: float) -> int:
 
 
 def _compare(s: Settings, states: list[SampleState], reference: Path, root: Path, log_dir: Path,
-             checkpoints: Checkpoints, fingerprints: list[str], force: bool) -> dict | None:
-    """The comparison of the assemblies; `fingerprints`: of the steps before it, this version's first, then those
-    of earlier versions for the same parameters."""
+             checkpoints: Checkpoints, previous: str, force: bool) -> dict | None:
+    """The comparison of the assemblies; `previous`: the fingerprint of the steps before it."""
     if s.snp_method == "none":
         log.info("Comparison skipped (--snp-method none)")
         return None
@@ -942,9 +921,9 @@ def _compare(s: Settings, states: list[SampleState], reference: Path, root: Path
         return {"skipped": why}  # The report: "The comparison was skipped: {why}."
     params = {"method": s.snp_method, "tree": s.tree, "ska_min_freq": s.ska_min_freq,
               "assemblies": sorted(assemblies), "added": {k: _md5(v) for k, v in added.items()}}
-    fingerprint, *older = [_fingerprint(fp, params) for fp in fingerprints]
+    fingerprint = _fingerprint(previous, params)
     signatures = {k: _output_signature(v) for k, v in sorted(assemblies.items())}
-    saved = None if force else checkpoints.load("compare", fingerprint, *older)
+    saved = None if force else checkpoints.load("compare", fingerprint)
     if saved is not None and not _same_assemblies(saved["results"].pop("inputs", None), signatures, assemblies,
                                                   saved["results"].get("distances"), bool(saved.get("relocated"))):
         saved = None  # An assembly changed since (made again, then interrupted before the comparison)

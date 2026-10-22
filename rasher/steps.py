@@ -6,7 +6,9 @@ import logging
 import re
 import shutil
 import tempfile
+from contextlib import nullcontext
 from dataclasses import dataclass, field
+from itertools import zip_longest
 from pathlib import Path
 
 from rasher import RasherError
@@ -15,13 +17,16 @@ from rasher.seqio import (
     ReadStats,
     Record,
     acgtn,
+    canonical_name,
     concatenate,
+    extract_pairs,
     extract_reads,
     n50,
     open_write,
     read_records,
     read_stats,
     split_extension,
+    subsample_reads,
     write_fasta,
 )
 from rasher.tools import ToolError, run, which
@@ -40,6 +45,7 @@ class SampleFailed(RasherError):
 @dataclass
 class StepResult:
     output: Path | None
+    output2: Path | None = None  # The R2 reads of a paired output (bait, filter); None otherwise
     stats: dict[str, object] = field(default_factory=dict)
     notes: list[str] = field(default_factory=list)
 
@@ -48,58 +54,62 @@ def reads_suffix(fmt: str) -> str:
     return ".fastq.gz" if fmt == "fastq" else ".fasta.gz"
 
 
+def _read_outputs(out_dir: Path, name: str, fmt: str, paired: bool) -> list[Path]:
+    """<sample>_R1 and <sample>_R2 reads files when paired, else <sample>."""
+    return [out_dir / f"{name}{tag}{reads_suffix(fmt)}" for tag in (("_R1", "_R2") if paired else ("",))]
+
+
 # ---------------------------------------------------------------------------------------------------------------
 # 1. Baiting
 # ---------------------------------------------------------------------------------------------------------------
 
 def _names_from_paf(paf: Path) -> set[str]:
+    """The canonical names (without /1 or /2) of the reads aligned in a PAF file."""
     with open(paf, encoding="ascii", errors="replace") as fh:  # As the reads are read (seqio)
-        return {line.split("\t", 1)[0] for line in fh if line.strip()}
+        return {canonical_name(line.split("\t", 1)[0]) for line in fh if line.strip()}
 
 
 def bait_minimap2(sample: Sample, reference: Path, out_dir: Path, log_dir: Path, threads: int,
                   keep_bam: bool) -> StepResult:
-    """Keep the reads with at least one alignment to the reference."""
+    """Keep the reads with at least one alignment to the reference; of paired reads, the pairs with a mate that
+    has one.
+
+    Each file is aligned on its own, as single reads: minimap2's short-read mode takes at most two query files,
+    and pairs them (which does not change whether a read aligns). With `keep_bam`, the baited reads (not all the
+    reads) are aligned again, as pairs when paired, into <sample>.bam.
+    """
     out_dir.mkdir(parents=True, exist_ok=True)
     log_file = log_dir / f"{sample.name}.log"
-    mm2 = ["minimap2", "-x", "map-ont", "--secondary=no", "-t", str(threads)]
-    files = [str(f) for f in sample.files]
-    output = out_dir / (sample.name + reads_suffix(sample.fmt))
-    names_file, paf = out_dir / f".{sample.name}.names", out_dir / f".{sample.name}.paf"
+    options = ["sr", "--secondary=no", "-t", str(threads), str(reference)]
+    outputs = _read_outputs(out_dir, sample.name, sample.fmt, bool(sample.pairs))
+    bam, paf = out_dir / f"{sample.name}.bam", out_dir / f".{sample.name}.paf"
     try:
+        names: set[str] = set()
+        for path in sample.files:
+            run(["minimap2", "-x", *options, str(path)], log_file, stdout=paf, what=f"(mapping {sample.name})")
+            names |= _names_from_paf(paf)
+        if sample.pairs:
+            total, kept = extract_pairs(sample.pairs, names, outputs[0], outputs[1])
+        else:
+            total, kept = extract_reads(sample.files, names, outputs[0])
+        result = _bait_result(outputs, total, kept)
         if keep_bam:
-            bam = out_dir / f"{sample.name}.bam"
-            run([[*mm2, "-a", str(reference), *files],
+            run([["minimap2", "-ax", *options, *map(str, outputs)],
                  ["samtools", "sort", "-@", str(max(1, threads // 4)), "-o", str(bam), "-"]], log_file,
                 what=f"(mapping {sample.name})")
             run(["samtools", "index", str(bam)], log_file)
-            run([["samtools", "view", "-F", "0x4", str(bam)], ["cut", "-f1"]], log_file, stdout=names_file)
-            with open(names_file, encoding="ascii", errors="replace") as fh:
-                names = {line.strip() for line in fh if line.strip()}
-        else:
-            run([*mm2, str(reference), *files], log_file, stdout=paf, what=f"(mapping {sample.name})")
-            names = _names_from_paf(paf)
-        total, kept = extract_reads(sample.files, names, output)
-        return _bait_result(output, total, kept)
+        return result
     except BaseException:
-        output.unlink(missing_ok=True)  # A failed (or interrupted) sample leaves no reads, partial or stale
+        # A failed (or interrupted) sample leaves no reads, partial or stale
+        for path in (*outputs, *((bam, out_dir / f"{bam.name}.bai") if keep_bam else ())):
+            path.unlink(missing_ok=True)
         raise
     finally:
-        names_file.unlink(missing_ok=True)
         paf.unlink(missing_ok=True)
 
 
-_SHELL_CHARACTERS = re.compile(r"""[\s'"`$\\!*?\[\](){}<>|&;#,]""")
-
-
-def _shell_safe(*paths: Path) -> bool:
-    """Whether the absolute paths have no whitespace or shell character (that a program running commands through
-    a shell, or splitting them on spaces, would break on), nor a comma (Flye splits its reads' paths on commas)."""
-    return not any(_SHELL_CHARACTERS.search(str(p.absolute())) for p in paths)
-
-
 def _extension(path: Path) -> str:
-    """The extension of a sequence file, compression included ('.fastq.gz'), by which BBDuk reads it."""
+    """The extension of a sequence file, compression included ('.fastq.gz'), as its name gives it."""
     parts = split_extension(path.name)
     return path.name[len(parts[0]):] if parts else "".join(path.suffixes)
 
@@ -117,34 +127,44 @@ _BBDUK_COUNTS = re.compile(r"^(Input|Contaminants):\s+(\d+) reads\s.*?(\d+) base
 
 def bait_bbduk(sample: Sample, reference: Path, out_dir: Path, log_dir: Path, threads: int, kmer: int,
                hdist: int, memory_gb: int) -> StepResult:
-    """Keep the reads sharing at least one k-mer (up to `hdist` mismatches) with the reference."""
+    """Keep the reads sharing at least one k-mer (up to `hdist` mismatches) with the reference; of paired reads,
+    the pairs with a mate that does (BBDuk's default for pairs)."""
     out_dir.mkdir(parents=True, exist_ok=True)
     log_file = log_dir / f"{sample.name}.log"
-    # BBDuk takes one input file: several are merged first
-    merged = out_dir / f".{sample.name}.merged{reads_suffix(sample.fmt)}" if len(sample.files) > 1 else None
-    source = merged or sample.files[0]
-    output = out_dir / (sample.name + reads_suffix(sample.fmt))
+    paired = bool(sample.pairs)
+    tags = ("_R1", "_R2") if paired else ("",)
+    mates = [[pair[i] for pair in sample.pairs] for i in (0, 1)] if paired else [sample.files]
+    outputs = _read_outputs(out_dir, sample.name, sample.fmt, paired)
+    # BBDuk takes one input file (of each mate): several are merged first
+    merged = [out_dir / f".{sample.name}.merged{tag}{reads_suffix(sample.fmt)}" if len(files) > 1 else None
+              for tag, files in zip(tags, mates)]
     start = log_file.stat().st_size if log_file.exists() else 0
     # bbduk.sh passes its arguments through `eval`: a path with a space (or a shell character) breaks it. BBDuk
     # runs in out_dir, on links named after the sample.
     links = {"ref": out_dir / f".{sample.name}.reference.fasta"}
+    targets = {"ref": reference}
     try:
-        if merged is not None:
-            concatenate(sample.files, merged)
-        links["in"] = out_dir / f".{sample.name}.input{_content_extension(source, sample.fmt)}"
-        for link, target in ((links["in"], source), (links["ref"], reference)):
+        for key, tag, files, merge in zip(("in", "in2"), tags, mates, merged):
+            if merge is not None:
+                concatenate(files, merge)
+            targets[key] = merge or files[0]
+            links[key] = out_dir / f".{sample.name}.input{tag}{_content_extension(targets[key], sample.fmt)}"
+        for key, link in links.items():
             link.unlink(missing_ok=True)
-            link.symlink_to(target.resolve())
-        run(["bbduk.sh", f"-Xmx{max(1, memory_gb)}g", "-eoom", "overwrite=true", f"in={links['in'].name}",
-             f"ref={links['ref'].name}", f"threads={threads}", f"k={kmer}", f"hdist={hdist}", "maskmiddle=f",
-             f"outm={output.name}"], log_file, cwd=out_dir, what=f"(baiting {sample.name})")
+            link.symlink_to(targets[key].resolve())
+        run(["bbduk.sh", f"-Xmx{max(1, memory_gb)}g", "-eoom", "overwrite=true",
+             *(f"{key}={links[key].name}" for key in ("in", "in2") if key in links), f"ref={links['ref'].name}",
+             f"threads={threads}", f"k={kmer}", f"hdist={hdist}", "maskmiddle=f",
+             *(f"{key}={out.name}" for key, out in zip(("outm", "outm2"), outputs))], log_file, cwd=out_dir,
+            what=f"(baiting {sample.name})")
         with open(log_file) as fh:
             fh.seek(start)
             counts = {m.group(1): (int(m.group(2)), int(m.group(3))) for m in _BBDUK_COUNTS.finditer(fh.read())}
         total = ReadStats(*counts["Input"]) if "Input" in counts else None
-        return _bait_result(output, total, read_stats([output]))
+        return _bait_result(outputs, total, read_stats(outputs))
     except BaseException as exc:
-        output.unlink(missing_ok=True)  # A failed (or interrupted) sample leaves no reads, partial or stale
+        for out in outputs:  # A failed (or interrupted) sample leaves no reads, partial or stale
+            out.unlink(missing_ok=True)
         if isinstance(exc, ToolError):
             with open(log_file, errors="replace") as fh:
                 fh.seek(start)
@@ -158,64 +178,75 @@ def bait_bbduk(sample: Sample, reference: Path, out_dir: Path, log_dir: Path, th
     finally:
         for link in links.values():
             link.unlink(missing_ok=True)
-        if merged:
-            merged.unlink(missing_ok=True)
+        for merge in merged:
+            if merge is not None:
+                merge.unlink(missing_ok=True)
 
 
-def _bait_result(output: Path, total: ReadStats | None, kept: ReadStats) -> StepResult:
+def _bait_result(outputs: list[Path], total: ReadStats | None, kept: ReadStats) -> StepResult:
+    """`outputs`: the reads file, or the R1 and R2 files. The statistics count the reads of both mates."""
     stats: dict[str, object] = {"Raw_reads": total.reads if total else "NA",
                                 "Raw_bases": total.bases if total else "NA",
                                 "Baited_reads": kept.reads, "Baited_bases": kept.bases}
     stats["Baited_pct"] = (f"{100 * kept.bases / total.bases:.3f}" if total and total.bases else "NA")
     if kept.reads == 0:
         raise SampleFailed("no reads matched the reference", stats)
-    return StepResult(output, stats)
+    return StepResult(outputs[0], outputs[1] if len(outputs) > 1 else None, stats)
 
 
 # ---------------------------------------------------------------------------------------------------------------
 # 2. Read filtering
 # ---------------------------------------------------------------------------------------------------------------
 
-def filter_filtlong(name: str, reads: Path, fmt: str, out_dir: Path, log_dir: Path, *, min_length: int,
-                    keep_percent: float, target_bases: int, reference: Path | None = None) -> StepResult:
-    """Filtlong for fastq reads; for fasta reads (no qualities, which Filtlong needs), `filter_by_length`. With a
-    reference, Filtlong scores the reads by their k-mers found in it (--assembly) rather than by base qualities:
-    a long read of which only a stretch matches the reference ranks low."""
+def filter_fastp(name: str, reads: Path, reads2: Path | None, fmt: str, out_dir: Path, log_dir: Path, *,
+                 min_length: int, target_bases: int, threads: int) -> StepResult:
+    """Trim and filter the reads with fastp (its defaults: adapters, base qualities; a pair goes when either
+    mate does), then keep an evenly spread subset of about `target_bases` (`subsample_reads`).
+
+    fastp cannot read fasta: fasta reads (or pairs) shorter than `min_length` are dropped here instead, without
+    trimming. fastp's report (<sample>.fastp.json, for MultiQC, and .html) goes to `log_dir`.
+    """
     out_dir.mkdir(parents=True, exist_ok=True)
-    output = out_dir / (name + reads_suffix(fmt))
-    if fmt == "fasta":
-        filter_by_length(reads, output, min_length=min_length, target_bases=target_bases)
-    else:
-        run(["filtlong", "--min_length", str(min_length), "--keep_percent", f"{keep_percent:g}",
-             "--target_bases", str(target_bases), *(["--assembly", str(reference)] if reference else []),
-             str(reads)], log_dir / f"{name}.log", stdout=output, what=f"(filtering {name})")
-    stats = read_stats([output])
-    if stats.reads == 0:
-        raise SampleFailed(f"no reads left after filtering (all shorter than {min_length} bp?)")
-    return StepResult(output, {"Filtered_reads": stats.reads, "Filtered_bases": stats.bases,
-                               "Filtered_N50": stats.n50})
+    log_file = log_dir / f"{name}.log"
+    paired = reads2 is not None
+    outputs = _read_outputs(out_dir, name, fmt, paired)
+    trimmed = _read_outputs(out_dir, f".{name}.trimmed", fmt, paired)
+    out2, trimmed2 = (outputs[1], trimmed[1]) if paired else (None, None)
+    try:
+        if fmt == "fasta":
+            _drop_short(reads, reads2, trimmed[0], trimmed2, min_length)
+        else:
+            mates = ["--in2", str(reads2), "--out2", str(trimmed2)] if paired else []
+            run(["fastp", "--in1", str(reads), "--out1", str(trimmed[0]), *mates, "--length_required",
+                 str(min_length), "--thread", str(threads), "--json", str(log_dir / f"{name}.fastp.json"),
+                 "--html", str(log_dir / f"{name}.fastp.html")], log_file, what=f"(filtering {name})")
+        subsample_reads(trimmed[0], trimmed2, outputs[0], out2, target_bases)
+        stats = read_stats(outputs)
+        if stats.reads == 0:
+            raise SampleFailed(f"no reads left after filtering (all shorter than {min_length} bp"
+                               f"{'' if fmt == 'fasta' else ' or of low quality'}?)")
+        return StepResult(outputs[0], out2, {"Filtered_reads": stats.reads, "Filtered_bases": stats.bases,
+                                             "Filtered_N50": stats.n50})
+    except BaseException:
+        for out in outputs:  # A failed (or interrupted) sample leaves no reads, partial or stale
+            out.unlink(missing_ok=True)
+        raise
+    finally:
+        for tmp in trimmed:
+            tmp.unlink(missing_ok=True)
 
 
-def filter_by_length(reads: Path, output: Path, *, min_length: int, target_bases: int) -> None:
-    """Keep the longest reads of at least `min_length` bp, up to `target_bases` (in their original order)."""
-    lengths = sorted((len(r.seq) for r in read_records(reads) if len(r.seq) >= min_length), reverse=True)
-    if not lengths:  # No read long enough: an empty output, and the sample fails like Filtlong's
-        open_write(output).close()
-        return
-    total, threshold, ties = 0, 0, 0
-    for length in lengths:  # The shortest length still kept, and how many reads of that length to keep
-        if total >= target_bases:
-            break
-        total += length
-        ties = ties + 1 if length == threshold else 1
-        threshold = length
-    with open_write(output) as out:
-        for rec in read_records(reads):
-            n = len(rec.seq)
-            if n > threshold or (n == threshold and n >= min_length and ties > 0):
-                if n == threshold:
-                    ties -= 1
-                out.write(rec.format())
+def _drop_short(reads: Path, reads2: Path | None, out: Path, out2: Path | None, min_length: int) -> None:
+    """Copy the reads of at least `min_length` bp; of pairs (`reads2`), those whose mates both are."""
+    first, second = read_records(reads), (read_records(reads2) if reads2 is not None else None)
+    with open_write(out) as o1, (open_write(out2) if out2 is not None else nullcontext()) as o2:
+        for rec1, rec2 in zip_longest(first, second or ()):
+            if rec1 is None or (second is not None and rec2 is None):
+                raise RasherError(f"{reads} and {reads2} do not hold the same number of reads")
+            if len(rec1.seq) >= min_length and (rec2 is None or len(rec2.seq) >= min_length):
+                o1.write(rec1.format())
+                if rec2 is not None:
+                    o2.write(rec2.format())
 
 
 # ---------------------------------------------------------------------------------------------------------------
@@ -245,6 +276,11 @@ class AssemblyDirs:
             raise SampleFailed(f"refusing to delete {work}: not a sample folder in {self.root}")
         shutil.rmtree(work, ignore_errors=True)
         return work
+
+    def clear_graph(self, name: str) -> None:
+        """The graph of an earlier assembly of the sample, deleted (this assembler may draw none)."""
+        for old in (self.graphs / f"{name}.gfa", self.graphs / f"{name}.png"):
+            old.unlink(missing_ok=True)
 
 
 def _publish_assembly(name: str, contigs: Path, dirs: AssemblyDirs, *, rename: bool,
@@ -301,60 +337,87 @@ def _assembly_stats(records: list[Record], reference_length: int) -> dict[str, o
             "Assembly_N50": n50(lengths), "Length_vs_reference": f"{total / reference_length:.3f}"}
 
 
-def _flye_info(info: Path) -> dict[str, dict[str, str]]:
-    rows = {}
-    if info.is_file():
-        with open(info) as fh:
-            header = fh.readline().lstrip("#").strip().split("\t")
-            for line in fh:
-                values = dict(zip(header, line.rstrip("\n").split("\t")))
-                if "seq_name" in values:
-                    rows[values["seq_name"]] = values
-    return rows
+def _denovo_stats(records: list[Record], reference_length: int) -> dict[str, object]:
+    """Assembly statistics of SPAdes and SKESA: both give k-mer coverage, not read depth (NA)."""
+    return {**_assembly_stats(records, reference_length), "Circular_contigs": _circular_count(records),
+            "Assembly_depth": "NA"}
 
 
-def assemble_flye(name: str, reads: Path, dirs: AssemblyDirs, log_dir: Path, *, genome_size: int,
-                  read_type: str, min_overlap: int | None, iterations: int, threads: int,
-                  reference_length: int) -> StepResult:
-    work = dirs.clear_work(name)
+_SHELL_CHARACTERS = re.compile(r"""[\s'"`$\\!*?\[\](){}<>|&;#,]""")
+
+
+def _shell_safe(*paths: Path) -> bool:
+    """Whether the absolute paths have no whitespace or shell character, nor a comma: what a program that writes
+    paths into configuration files, runs commands through a shell, or splits lists on commas may break on."""
+    return not any(_SHELL_CHARACTERS.search(str(p.absolute())) for p in paths)
+
+
+def assemble_spades(name: str, reads: Path, reads2: Path | None, dirs: AssemblyDirs, log_dir: Path, *,
+                    threads: int, memory_gb: int, reference_length: int) -> StepResult:
+    """De novo assembly with SPAdes --isolate (which skips read correction: fasta reads assemble as well). SPAdes
+    flags no contig circular, and the _cov_ of its contig names is k-mer coverage: no Assembly_depth."""
+    work = dirs.clear_work(name)  # SPAdes wants a new (or empty) output folder
+    dirs.clear_graph(name)
     dirs.root.mkdir(parents=True, exist_ok=True)
     log_file = log_dir / f"{name}.log"
-    # Flye refuses reads whose path has a space, and runs some programs through a shell (a space in its output
-    # folder breaks them): with such paths, it reads and writes through links in a temporary folder.
-    link_dir = Path(tempfile.mkdtemp(prefix="rasher_flye_")) if not _shell_safe(reads, work) else None
+    mates = [("-1", reads), ("-2", reads2)] if reads2 is not None else [("-s", reads)]
+    # SPAdes writes its paths into configuration files that a space breaks: with such paths, it reads and writes
+    # through links in a temporary folder
+    link_dir = (Path(tempfile.mkdtemp(prefix="rasher_spades_"))
+                if not _shell_safe(work, *(path for _, path in mates)) else None)
     try:
+        out = work
         if link_dir is not None:
             if not _shell_safe(link_dir):
-                raise SampleFailed(f"Flye cannot use paths with spaces or shell characters ({work}), and the "
+                raise SampleFailed(f"SPAdes cannot use paths with spaces or shell characters ({work}), and the "
                                    f"temporary folder {link_dir.parent} has some too: set TMPDIR to another "
                                    "folder")
-            work.mkdir(parents=True)
-            (link_dir / "out").symlink_to(work.resolve())
-            (link_dir / f"reads{_extension(reads)}").symlink_to(reads.resolve())
-            reads, out = link_dir / f"reads{_extension(reads)}", link_dir / "out"
-        else:
-            out = work
-        cmd = ["flye", f"--{read_type}", str(reads), "--genome-size", str(genome_size), "--threads", str(threads),
-               "--out-dir", str(out), "--iterations", str(iterations)]
-        if min_overlap:
-            cmd += ["--min-overlap", str(min_overlap)]
-        run(cmd, log_file, what=f"(assembling {name})")
+            work.mkdir()
+            out = link_dir / "out"
+            out.symlink_to(work.resolve())
+            links = [(option, link_dir / f"reads{option}{_extension(path)}") for option, path in mates]
+            for (_, link), (_, path) in zip(links, mates):
+                link.symlink_to(path.resolve())
+            mates = links
+        run(["spades.py", "--isolate", *(arg for option, path in mates for arg in (option, str(path))),
+             "-t", str(threads), "-m", str(memory_gb), "-o", str(out)], log_file, what=f"(assembling {name})")
     finally:
         if link_dir is not None:
             shutil.rmtree(link_dir, ignore_errors=True)  # The links only
-    if not (work / "assembly.fasta").is_file():
-        raise SampleFailed(f"Flye produced no assembly (see {work / 'flye.log'})")
-    info = _flye_info(work / "assembly_info.txt")
-    circular = {contig for contig, row in info.items() if row.get("circ.") == "Y"}
-    records = _publish_assembly(name, work / "assembly.fasta", dirs, rename=False, circular=circular)
-    _publish_graph(name, work / "assembly_graph.gfa", dirs, log_file)
-    stats = _assembly_stats(records, reference_length)
-    stats["Circular_contigs"] = _circular_count(records)
-    covered = [(int(row["length"]), float(row["cov."])) for row in info.values()
-               if row.get("length", "").isdigit() and _is_float(row.get("cov.", ""))]
-    total = sum(length for length, _ in covered)
-    stats["Assembly_depth"] = f"{sum(length * cov for length, cov in covered) / total:.1f}" if total else "NA"
-    return StepResult(dirs.assemblies / f"{name}.fasta", stats)
+    contigs = work / "contigs.fasta"
+    if not contigs.is_file():
+        raise SampleFailed(f"SPAdes produced no assembly (see {work / 'spades.log'})")
+    records = _publish_assembly(name, contigs, dirs, rename=False)  # NODE_1_length_..._cov_...: long, unique
+    _publish_graph(name, work / "assembly_graph_with_scaffolds.gfa", dirs, log_file)
+    return StepResult(dirs.assemblies / f"{name}.fasta", stats=_denovo_stats(records, reference_length))
+
+
+def assemble_skesa(name: str, reads: Path, reads2: Path | None, dirs: AssemblyDirs, log_dir: Path, *,
+                   threads: int, memory_gb: int, reference_length: int) -> StepResult:
+    """De novo assembly with SKESA. Conservative, SKESA ends contigs at repeats rather than guess through them:
+    an organelle's inverted repeats split its assembly into several contigs. No graph; no Assembly_depth (its
+    contig names give k-mer coverage)."""
+    work = dirs.clear_work(name)
+    dirs.clear_graph(name)
+    work.mkdir(parents=True)
+    log_file = log_dir / f"{name}.log"
+    # A comma in --reads separates the mates: SKESA reads links in its folder, and runs from there
+    mates = [("", reads)] if reads2 is None else [("_R1", reads), ("_R2", reads2)]
+    links = {work / f"reads{tag}{_extension(path)}": path for tag, path in mates}
+    try:
+        for link, path in links.items():
+            link.symlink_to(path.resolve())
+        run(["skesa", "--reads", ",".join(link.name for link in links), "--contigs_out", "contigs.fasta",
+             "--cores", str(threads), "--memory", str(memory_gb)], log_file, cwd=work,
+            what=f"(assembling {name})")
+    finally:
+        for link in links:
+            link.unlink(missing_ok=True)
+    contigs = work / "contigs.fasta"
+    if not contigs.is_file() or not any(rec.seq for rec in read_records(contigs)):
+        raise SampleFailed(f"SKESA produced no contigs (see {log_file})")
+    records = _publish_assembly(name, contigs, dirs, rename=False)  # Contig_1_42.5: number, k-mer coverage
+    return StepResult(dirs.assemblies / f"{name}.fasta", stats=_denovo_stats(records, reference_length))
 
 
 def off_reference(contigs: Path, reference: Path, log_file: Path, threads: int) -> float:
@@ -383,49 +446,26 @@ def off_reference(contigs: Path, reference: Path, log_file: Path, threads: int) 
     return 100 * (total - aligned) / total
 
 
-def _is_float(text: str) -> bool:
-    try:
-        float(text)
-    except ValueError:
-        return False
-    return True
-
-
-def assemble_myloasm(name: str, reads: Path, dirs: AssemblyDirs, log_dir: Path, *, threads: int,
-                     reference_length: int) -> StepResult:
+def assemble_samtools(name: str, reads: Path, reads2: Path | None, reference: Path, dirs: AssemblyDirs,
+                      log_dir: Path, *, threads: int, reference_length: int, fill_gaps: bool,
+                      cutoff: int = 20) -> StepResult:
+    """Templated assembly: samtools consensus of the reads aligned to the reference with minimap2 (as pairs when
+    `reads2` is given: two query files are mates to minimap2)."""
     work = dirs.clear_work(name)
-    dirs.root.mkdir(parents=True, exist_ok=True)
-    log_file = log_dir / f"{name}.log"
-    run(["myloasm", str(reads), "--output-dir", str(work), "--threads", str(threads)], log_file,
-        what=f"(assembling {name})")
-    raw = work / "assembly_primary.fa"
-    if not raw.is_file():
-        raise SampleFailed(f"myloasm produced no assembly (see {log_file})")
-    records = _publish_assembly(name, raw, dirs, rename=False)
-    _publish_graph(name, work / "final_contig_graph.gfa", dirs, log_file)
-    stats = _assembly_stats(records, reference_length)
-    stats["Circular_contigs"] = _circular_count(records)
-    return StepResult(dirs.assemblies / f"{name}.fasta", stats)
-
-
-def assemble_samtools(name: str, reads: Path, reference: Path, dirs: AssemblyDirs, log_dir: Path, *,
-                      threads: int, reference_length: int, fill_gaps: bool, cutoff: int = 20) -> StepResult:
-    """Templated assembly: samtools consensus of the reads aligned to the reference with minimap2."""
-    work = dirs.clear_work(name)
-    for old in (dirs.graphs / f"{name}.gfa", dirs.graphs / f"{name}.png"):  # From an earlier de novo assembly
-        old.unlink(missing_ok=True)
+    dirs.clear_graph(name)  # From an earlier de novo assembly
     work.mkdir(parents=True)
     log_file = log_dir / f"{name}.log"
     bam = work / "aligned.bam"
-    run([["minimap2", "-ax", "map-ont", "--secondary=no", "-t", str(threads), str(reference), str(reads)],
+    queries = [str(reads)] + ([str(reads2)] if reads2 is not None else [])
+    run([["minimap2", "-ax", "sr", "--secondary=no", "-t", str(threads), str(reference), *queries],
          ["samtools", "sort", "-@", str(max(1, threads // 4)), "-o", str(bam), "-"]], log_file,
         what=f"(aligning {name})")
     run(["samtools", "index", str(bam)], log_file)
     consensus = work / "consensus.fasta"
     # -a: every position of the reference sequences that have reads, N where no read (a reference sequence
-    # without any read is left out); ONT R10.4 SUP error profile; insertions shown, deletions removed, so the
+    # without any read is left out); Illumina error profile; insertions shown, deletions removed, so the
     # consensus follows the sample, not the reference; -C: a call below this quality is N.
-    run(["samtools", "consensus", "-a", "-X", "r10.4_sup", "--show-ins", "yes", "--show-del", "no",
+    run(["samtools", "consensus", "-a", "-X", "hiseq", "--show-ins", "yes", "--show-del", "no",
          "-d", "3", "-C", str(cutoff), "-f", "fasta", "-o", str(consensus), str(bam)], log_file,
         what=f"(consensus {name})")
     records = [r for r in read_records(consensus) if r.seq]
@@ -441,7 +481,7 @@ def assemble_samtools(name: str, reads: Path, reference: Path, dirs: AssemblyDir
     missing = [r.name for r in read_records(reference) if r.name not in {c.name for c in records}]
     if missing:
         notes.append(f"no reads on reference sequence(s) {', '.join(missing)}: not in the assembly")
-    return StepResult(dirs.assemblies / f"{name}.fasta", stats, notes)
+    return StepResult(dirs.assemblies / f"{name}.fasta", stats=stats, notes=notes)
 
 
 def _fill_from(seq: str, ref: str) -> str:

@@ -189,9 +189,9 @@ def test_tool_version_number_only():
     assert _tool(info, "x") == "" and _tool(info, "missing") == ""
 
 
-SETTINGS = {"baiting": "minimap2", "min_read_length": 500, "keep_percent": 95.0, "target_depth": 100,
+SETTINGS = {"baiting": "minimap2", "min_read_length": 500, "target_depth": 100,
             "assembler": "samtools", "snp_method": "ska", "ska_min_freq": 1.0, "tree": "fasttree",
-            "template_gaps": "n", "read_type": "nano-hq", "flye_iterations": 3, "kmer": 31}
+            "template_gaps": "n", "kmer": 31}
 BASE = {"rasher_version": "0.3.1", "reference": {"file": "/x/ref.fasta", "length": 1000},
         "samples": {"s": {"files": ["s.fastq.gz"]}},
         "comparison": {"tree": "t.nwk", "distances": "d.tsv", "method": "ska", "core_snps": 3}}
@@ -206,23 +206,24 @@ def test_methods_text_default():
     text = _methods()
     assert "samtools consensus 1" not in text  # No version recorded: no number invented
     assert "samtools consensus" in text and "core SNPs" in text and "FastTree" in text
-    assert "best 95% were kept" in text and "Filtlong" in text
+    assert "failing fastp's quality filters" in text and "subsampled evenly to at most 100x" in text
+    assert "pairs kept whole" in text
     assert "circular contigs" not in text and "fasta" not in text.lower().replace("ref.fasta", "")
     assert "SNP alignment" in text and "Pairwise SNP distances count" in text and "VCF" not in text
     assert "ska map" in _methods(comparison={**BASE["comparison"], "vcf": "snps.vcf"})
 
 
 def test_methods_text_settings_combinations():
-    text = _methods(samples={"s": {"files": ["s.fa.gz"]}}, settings={"baiting": "bbduk", "assembler": "flye",
-                    "ska_min_freq": 0.5, "tree": "iqtree", "min_size": 3000, "genome_size": 150000})
-    assert "BBDuk" in text and "Flye" in text and "at least 50% of the genomes" in text
-    assert "best 95%" not in text and "filtered by RASHER" in text  # Fasta reads: no Filtlong, no quality cut
-    assert "minimum overlap 3000 bp" in text and "genome size as given" in text
+    text = _methods(samples={"s": {"files": ["s.fa.gz"]}}, settings={"baiting": "bbduk", "assembler": "spades",
+                    "ska_min_freq": 0.5, "tree": "iqtree", "hdist": 2, "genome_size": 150000})
+    assert "BBDuk" in text and "SPAdes" in text and "--isolate" in text and "at least 50% of the genomes" in text
+    assert "fastp" not in text and "filtered by length" in text  # Fasta reads: no fastp, no quality cut
+    assert "carry no qualities" in text and "the given genome size" in text
     assert "bootstrap consensus tree" in text and "circular contigs" not in text  # None circular
-    text = _methods(rows=[{"Circular_contigs": "1"}], settings={"assembler": "myloasm", "ska_min_freq": 0.999})
-    assert "circular contigs (and the reference" in text and "99.9%" in text
+    text = _methods(rows=[{"Circular_contigs": "1"}], settings={"assembler": "skesa", "ska_min_freq": 0.999})
+    assert "SKESA" in text and "circular contigs (and the reference" in text and "99.9%" in text
     text = _methods(samples={"a": {"files": ["a.fq"]}, "b": {"files": ["b.fasta"]}})
-    assert "For samples with base qualities" in text and "without qualities" in text
+    assert "For samples with base qualities" in text and "carry no qualities" in text
     assert "replaced by the reference" in _methods(settings={"template_gaps": "reference"})
     text = _methods(settings={"snp_method": "parsnp", "add_genomes": ["x.fa", "y.fa"]})
     assert "Parsnp" in text and "core-genome alignment" in text and "2 finished genomes were added" in text
@@ -1343,9 +1344,6 @@ def test_run_section_versions_and_small_texts(tmp_path):
     info["rasher_version"] = __version__
     (out / "run_info.json").write_text(json.dumps(info))
     assert "report built with" not in build_report(out)
-    text = _methods(settings={"assembler": "flye", "flye_iterations": 1})
-    assert "1 polishing iteration)" in text and "1 polishing iterations" not in text
-    assert "3 polishing iterations" in _methods(settings={"assembler": "flye", "flye_iterations": 3})
 
 
 def _contrast(fg: str, bg: str, alpha: float = 1.0) -> float:

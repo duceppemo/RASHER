@@ -1,4 +1,4 @@
-"""End-to-end pipeline tests with stub programs that mimic minimap2, filtlong, flye, ska and FastTree."""
+"""End-to-end pipeline tests with stub programs that mimic minimap2, fastp, SPAdes, SKESA, ska and FastTree."""
 
 import gzip
 import json
@@ -16,7 +16,8 @@ from rasher.pipeline import Settings, run
 from rasher.seqio import read_records
 
 STUBS = {
-    # Reads whose name starts with "on" align; writes PAF lines. Samples named "bad*" crash.
+    # Reads whose name starts with "on" align; writes PAF lines with the /1 /2 mate suffixes stripped, as the
+    # real minimap2 reports mates. Samples named "bad*" crash.
     "minimap2": """
         import gzip, sys
         files = [a for a in sys.argv[1:] if a.endswith((".gz", ".fastq", ".fq", ".fasta"))][1:]
@@ -37,53 +38,73 @@ STUBS = {
                     print(f"{name}\\t{length}\\t0\\t{length}\\t+\\tref\\t1000\\t0\\t{length}\\t{length}\\t{length}\\t60"
                           + cs)
             sys.exit()
+        if "sr" in sys.argv and "-x" in sys.argv and len(files) > 2:  # As minimap2 -x sr
+            sys.exit("[ERROR] in the sr mode, please specify no more than two query files")
         for f in files:
             with (gzip.open(f, "rt") if f.endswith(".gz") else open(f)) as fh:
                 for i, line in enumerate(fh):
-                    if i % 4 == 0 and line[1:].startswith("on"):
-                        print(line[1:].split()[0] + "\\t100\\t0\\t100\\t+\\tref\\t1000\\t0\\t100\\t90\\t100\\t60")
+                    if (i % 4 == 0 if ".fastq" in f or ".fq" in f else line.startswith(">")) \\
+                            and line[1:].startswith("on"):
+                        name = line[1:].split()[0]
+                        name = name[:-2] if name.endswith(("/1", "/2")) else name
+                        print(name + "\\t100\\t0\\t100\\t+\\tref\\t1000\\t0\\t100\\t90\\t100\\t60")
     """,
-    # Keeps reads at least --min_length long.
-    "filtlong": """
-        import gzip, sys
+    # Filters by --length_required (a pair is dropped when either mate is short) and writes the JSON and HTML.
+    "fastp": """
+        import gzip, json, os, sys
         args = sys.argv[1:]
-        min_len = int(args[args.index("--min_length") + 1])
-        with gzip.open(args[-1], "rt") as fh:
-            lines = fh.read().splitlines()
-        for i in range(0, len(lines), 4):
-            if len(lines[i + 1]) >= min_len:
-                print("\\n".join(lines[i:i + 4]))
+        def opt(name):
+            return args[args.index(name) + 1] if name in args else None
+        if os.environ.get("STUB_FASTP_FAIL"):  # After writing part of its output
+            open(opt("--out1"), "w").write("partial")
+            sys.exit("ERROR: simulated failure")
+        min_len = int(opt("--length_required"))
+        def read(path):
+            with gzip.open(path, "rt") as fh:
+                lines = fh.read().splitlines()
+            return [lines[i:i + 4] for i in range(0, len(lines), 4)]
+        r1 = read(opt("--in1"))
+        r2 = read(opt("--in2")) if opt("--in2") else None
+        keep = [i for i in range(len(r1))
+                if len(r1[i][1]) >= min_len and (r2 is None or len(r2[i][1]) >= min_len)]
+        def write(path, records):
+            with gzip.open(path, "wt") as out:
+                out.write("".join("\\n".join(r) + "\\n" for r in records))
+        write(opt("--out1"), [r1[i] for i in keep])
+        if r2 is not None:
+            write(opt("--out2"), [r2[i] for i in keep])
+        open(opt("--json"), "w").write(json.dumps({"summary": {"sequencing": "stub"}}))
+        open(opt("--html"), "w").write("<html></html>")
     """,
-    # Writes a one-contig circular assembly made of the first read.
-    "flye": """
+    # Writes a one-contig assembly made of the first read, named as SPAdes names its contigs.
+    "spades.py": """
         import gzip, os, sys
         args = sys.argv[1:]
-        out = args[args.index("--out-dir") + 1]
-        if " " in os.path.abspath(args[args.index("--nano-hq") + 1]):  # As Flye
-            sys.exit("ERROR: Path to reads contain spaces")
-        if "," in args[args.index("--nano-hq") + 1]:  # Flye splits the reads' paths on commas
-            sys.exit("ERROR: No such file")
-        if " " in os.path.abspath(out):  # Flye runs samtools through a shell
-            sys.exit("samtools view: failed to open")
+        def opt(name):
+            return args[args.index(name) + 1] if name in args else None
+        out = opt("-o")
         os.makedirs(out, exist_ok=True)
-        with gzip.open(args[args.index("--nano-hq") + 1], "rt") as fh:
+        if os.environ.get("STUB_SPADES_FAIL"):
+            open(os.path.join(out, "spades.log"), "w").write("== Error == simulated failure\\n")
+            sys.exit(1)
+        reads = opt("-1") or opt("-s")
+        with (gzip.open(reads, "rt") if reads.endswith(".gz") else open(reads)) as fh:
             seq = fh.read().splitlines()[1]
-        open(os.path.join(out, "assembly.fasta"), "w").write(">contig_1\\n" + seq + "\\n")
-        open(os.path.join(out, "assembly_info.txt"), "w").write(
-            "#seq_name\\tlength\\tcov.\\tcirc.\\trepeat\\tmult.\\talt_group\\tgraph_path\\n"
-            f"contig_1\\t{len(seq)}\\t30\\tY\\tN\\t1\\t*\\t1\\n")
-        open(os.path.join(out, "assembly_graph.gfa"), "w").write("H\\tVN:Z:1.0\\n")
+        open(os.path.join(out, "contigs.fasta"), "w").write(f">NODE_1_length_{len(seq)}_cov_12.5\\n{seq}\\n")
+        open(os.path.join(out, "assembly_graph_with_scaffolds.gfa"), "w").write("H\\tVN:Z:1.0\\n")
     """,
-    # Writes a one-contig circular assembly made of the first read, named as myloasm names its contigs.
-    "myloasm": """
+    # Writes one contig made of the first read to --contigs_out; --reads may be "R1,R2" or one file.
+    "skesa": """
         import gzip, os, sys
         args = sys.argv[1:]
-        out = args[args.index("--output-dir") + 1]
-        os.makedirs(out, exist_ok=True)
-        with gzip.open(args[0], "rt") as fh:
+        def opt(name):
+            return args[args.index(name) + 1] if name in args else None
+        if os.environ.get("STUB_SKESA_FAIL"):
+            sys.exit("simulated failure")
+        reads = opt("--reads").split(",")[0]
+        with (gzip.open(reads, "rt") if reads.endswith(".gz") else open(reads)) as fh:
             seq = fh.read().splitlines()[1]
-        open(os.path.join(out, "assembly_primary.fa"), "w").write(
-            f">u1ctg_len-{len(seq)}_circular-yes_depth-30 mult=1\\n{seq}\\n")
+        open(opt("--contigs_out"), "w").write(f">Contig_1_12.5\\n{seq}\\n")
     """,
     # ska build: reads its file list as SKA2 does (each line split on whitespace: a name and a file); ska align: an
     # alignment of every genome in the build table (last base = sample index).
@@ -129,6 +150,8 @@ STUBS = {
         elif args[0] == "view":
             sys.stdout.write(open(args[-1]).read())
         elif args[0] == "consensus":
+            if args[args.index("-X") + 1] != "hiseq":  # The short-read error profile, always
+                sys.exit("unexpected consensus profile " + args[args.index("-X") + 1])
             out = Path(args[args.index("-o") + 1])
             ref = out.parents[2] / "reference.fasta"
             name, seq = ref.read_text().split("\\n", 1)
@@ -152,13 +175,24 @@ STUBS = {
         if os.environ.get("STUB_BBDUK_OOM"):
             sys.stderr.write("Allocating kmer table: Terminating due to java.lang.OutOfMemoryError: Java heap space\\n")
             sys.exit(3)
-        with gzip.open(opts["in"], "rt") as fh:
-            lines = fh.read().splitlines()
-        kept = [lines[i:i + 4] for i in range(0, len(lines), 4) if lines[i][1:].startswith("on")]
-        with gzip.open(opts["outm"], "wt") as out:
-            out.write("".join("\\n".join(r) + "\\n" for r in kept))
-        total = sum(len(lines[i + 1]) for i in range(0, len(lines), 4))
-        sys.stderr.write(f"Input:                  \\t{len(lines) // 4} reads \\t\\t{total} bases.\\n")
+        def records(path):
+            with gzip.open(path, "rt") as fh:
+                lines = fh.read().splitlines()
+            return [lines[i:i + 4] for i in range(0, len(lines), 4)]
+        r1 = records(opts["in"])
+        r2 = records(opts["in2"]) if "in2" in opts else None
+        hit = lambda rec: rec[0][1:].startswith("on")
+        keep = [i for i in range(len(r1)) if hit(r1[i]) or (r2 is not None and hit(r2[i]))]
+        def write(path, records_):
+            with gzip.open(path, "wt") as out:
+                out.write("".join("\\n".join(r) + "\\n" for r in records_))
+        write(opts["outm"], [r1[i] for i in keep])
+        if r2 is not None:
+            write(opts["outm2"], [r2[i] for i in keep])
+        both = r1 + (r2 or [])
+        kept = [r1[i] for i in keep] + ([r2[i] for i in keep] if r2 is not None else [])
+        total = sum(len(r[1]) for r in both)
+        sys.stderr.write(f"Input:                  \\t{len(both)} reads \\t\\t{total} bases.\\n")
         sys.stderr.write(f"Contaminants:           \\t{len(kept)} reads (x%) \\t{sum(len(r[1]) for r in kept)} bases (x%)\\n")
         sys.stderr.write("hdist=" + opts["hdist"] + "\\n")
     """,
@@ -222,7 +256,7 @@ def dataset(tmp_path):
 
 
 def settings(ref: Path, reads: Path, out: Path, **kw) -> Settings:
-    base = {"reference": ref, "input": reads, "output": out, "assembler": "flye", "snp_method": "ska", "threads": 2,
+    base = {"reference": ref, "input": reads, "output": out, "assembler": "spades", "snp_method": "ska", "threads": 2,
             "parallel": 2, "min_read_length": 100}
     return Settings(**{**base, **kw})
 
@@ -260,11 +294,11 @@ def test_minimap2_comparison(stubs, dataset, tmp_path):
     assert "minimap2 SNPs" in report and "aligned to the reference with minimap2" in report
 
 
-@pytest.mark.parametrize(("assembler", "method"), [("samtools", "minimap2"), ("flye", "ska")])
+@pytest.mark.parametrize(("assembler", "method"), [("samtools", "minimap2"), ("spades", "ska")])
 def test_auto_snp_method_follows_the_assembler(stubs, dataset, tmp_path, assembler, method):
     """The default comparison: minimap2 for templated assemblies, SKA2 for de novo ones, recorded as resolved."""
     from rasher.pipeline import resolve_snp_method
-    assert resolve_snp_method("parsnp", "samtools") == "parsnp" and resolve_snp_method("auto", "myloasm") == "ska"
+    assert resolve_snp_method("parsnp", "samtools") == "parsnp" and resolve_snp_method("auto", "skesa") == "ska"
     ref, reads = dataset
     out = tmp_path / "out"
     assert run(settings(ref, reads, out, assembler=assembler, snp_method="auto")) == 0
@@ -290,10 +324,11 @@ def test_consensus_cutoff_is_recorded_and_reported(stubs, dataset, tmp_path):
 def test_needed_tools_follow_the_default_comparison(tmp_path):
     from rasher.pipeline import needed_tools
     base = {"reference": tmp_path / "r.fasta", "output": tmp_path / "o"}
-    assert needed_tools(Settings(**base)) == ["minimap2", "filtlong", "samtools", "FastTree"]
-    for assembler in ("flye", "myloasm"):
-        assert "ska" in needed_tools(Settings(**base, assembler=assembler))
-    assert needed_tools(Settings(**base, snp_method="none")) == ["minimap2", "filtlong", "samtools"]
+    assert needed_tools(Settings(**base)) == ["minimap2", "fastp", "samtools", "FastTree"]
+    for assembler, tool in (("spades", "spades.py"), ("skesa", "skesa")):
+        tools = needed_tools(Settings(**base, assembler=assembler))
+        assert "ska" in tools and tool in tools and "minimap2" in tools
+    assert needed_tools(Settings(**base, snp_method="none")) == ["minimap2", "fastp", "samtools"]
 
 
 def test_folder_of_the_old_default_resumes_with_minimap2(stubs, dataset, tmp_path):
@@ -305,7 +340,7 @@ def test_folder_of_the_old_default_resumes_with_minimap2(stubs, dataset, tmp_pat
     before = calls(stubs)
     assert run(settings(ref, reads, out, assembler="samtools", snp_method="auto")) == 0
     made = calls(stubs)[len(before):]
-    assert "samtools" not in made and "ska" not in made and "filtlong" not in made
+    assert "samtools" not in made and "ska" not in made and "fastp" not in made
     assert (out / "4_compared" / "ska" / "snp_distances.tsv").exists()
     assert (out / "4_compared" / "minimap2" / "snp_distances.tsv").exists()
     info = json.loads((out / "run_info.json").read_text())
@@ -325,11 +360,12 @@ def test_full_run(stubs, dataset, tmp_path):
     rows = summary(out)
     assert rows["s1"]["Status"] == "ok"
     assert rows["s1"]["Raw_reads"] == "3" and rows["s1"]["Baited_reads"] == "2"
-    assert rows["s1"]["Contigs"] == "1" and rows["s1"]["Circular_contigs"] == "1"
+    assert rows["s1"]["Contigs"] == "1" and rows["s1"]["Circular_contigs"] == "0"  # SPAdes does not flag circles
     assert rows["s1"]["Filtered_N50"] == "900"
     assert rows["none"]["Status"] == "failed (bait)"
     assert "no reads matched" in rows["none"]["Note"]
-    assert [r.name for r in read_records(out / "3_assembled" / "all_assemblies" / "s1.fasta")] == ["s1_contig_1"]
+    assert [r.name for r in read_records(out / "3_assembled" / "all_assemblies" / "s1.fasta")] == \
+        ["s1_NODE_1_length_900_cov_12.5"]
     tree = (out / "4_compared" / "ska" / "tree.nwk").read_text()
     assert all(n in tree for n in ("s1", "s2", "s3", "Reference"))
     assert (out / "4_compared" / "ska" / "tree.svg").read_text().startswith("<svg")
@@ -338,7 +374,7 @@ def test_full_run(stubs, dataset, tmp_path):
     info = json.loads((out / "run_info.json").read_text())
     assert info["samples"]["none"]["status"] == "failed (bait)"
     assert info["comparison"]["method"] == "ska"
-    assert "flye" in info["tools"]
+    assert "spades.py" in info["tools"]
     assert "Baiting reads matching the reference" in (out / "rasher.log").read_text()  # INFO, not only warnings
     vcf = (out / "4_compared" / "ska" / "snps.vcf").read_text().splitlines()
     assert vcf[0] == "##fileformat=VCFv4.2" and "##contig=<ID=ref,length=1000>" in vcf
@@ -373,7 +409,7 @@ def test_changed_parameter_reruns_that_step_and_later(stubs, dataset, tmp_path):
     stubs.unlink()
     run(settings(ref, reads, out, min_read_length=850))
     made = calls(stubs)
-    assert made.count("filtlong") == 3 and made.count("flye") == 3 and "ska" in made
+    assert made.count("fastp") == 3 and made.count("spades.py") == 3 and "ska" in made
     assert made.count("minimap2") == 1  # Only the failed sample; baiting did not change
     assert summary(out)["s1"]["Filtered_reads"] == "1"
 
@@ -384,7 +420,7 @@ def test_changed_comparison_keeps_assemblies(stubs, dataset, tmp_path):
     run(settings(ref, reads, out))
     stubs.unlink()
     run(settings(ref, reads, out, ska_min_freq=0.5))
-    assert "flye" not in calls(stubs)
+    assert "spades.py" not in calls(stubs)
     assert (out / "4_compared" / "ska_0.5" / "tree.nwk").exists()
     assert (out / "4_compared" / "ska" / "tree.nwk").exists()  # The earlier comparison is kept
 
@@ -396,7 +432,7 @@ def test_redo(stubs, dataset, tmp_path):
     stubs.unlink()
     run(settings(ref, reads, out, redo="assemble"))
     made = calls(stubs)
-    assert "filtlong" not in made and made.count("flye") == 3
+    assert "fastp" not in made and made.count("spades.py") == 3
 
 
 def test_missing_output_triggers_rerun_of_that_sample(stubs, dataset, tmp_path):
@@ -407,7 +443,7 @@ def test_missing_output_triggers_rerun_of_that_sample(stubs, dataset, tmp_path):
     stubs.unlink()
     run(settings(ref, reads, out))
     made = calls(stubs)
-    assert made.count("filtlong") == 1 and made.count("flye") == 1
+    assert made.count("fastp") == 1 and made.count("spades.py") == 1
 
 
 def test_tool_crash_fails_only_that_sample(stubs, dataset, tmp_path):
@@ -516,14 +552,14 @@ def test_adding_or_changing_a_sample_reruns_only_that_sample(stubs, dataset, tmp
     run(settings(ref, reads, out))
     made = calls(stubs)
     # s4 and the previously failed sample are baited; only s4 is filtered and assembled; all are compared.
-    assert made.count("minimap2") == 2 and made.count("filtlong") == 1 and made.count("flye") == 1
+    assert made.count("minimap2") == 2 and made.count("fastp") == 1 and made.count("spades.py") == 1
     assert "ska" in made
     assert summary(out)["s4"]["Baited_reads"] == "2"
     stubs.unlink()
     os.utime(reads / "s2.fastq.gz", (1, 1))  # s2's reads changed (new modification time)
     run(settings(ref, reads, out))
     made = calls(stubs)
-    assert made.count("filtlong") == 1 and made.count("flye") == 1
+    assert made.count("fastp") == 1 and made.count("spades.py") == 1
 
 
 def test_a_sample_left_out_of_a_run_keeps_its_checkpoints(stubs, dataset, tmp_path):
@@ -534,12 +570,12 @@ def test_a_sample_left_out_of_a_run_keeps_its_checkpoints(stubs, dataset, tmp_pa
     (reads / "s4.fastq.gz").rename(tmp_path / "s4.fastq.gz")  # Left out (as a line commented out of a sheet)
     stubs.unlink()
     run(settings(ref, reads, out))
-    assert calls(stubs).count("minimap2") == 1 and "flye" not in calls(stubs)  # Only the failed sample
+    assert calls(stubs).count("minimap2") == 1 and "spades.py" not in calls(stubs)  # Only the failed sample
     (tmp_path / "s4.fastq.gz").rename(reads / "s4.fastq.gz")  # Back, unchanged: not done again
     stubs.unlink()
     run(settings(ref, reads, out))
     made = calls(stubs)
-    assert made.count("minimap2") == 1 and "filtlong" not in made and "flye" not in made
+    assert made.count("minimap2") == 1 and "fastp" not in made and "spades.py" not in made
     assert "ska" in made  # Compared with the other three again
     assert summary(out)["s4"]["Status"] == "ok" and summary(out)["s4"]["Filtered_reads"] == "2"
 
@@ -560,7 +596,7 @@ def test_add_genomes(stubs, dataset, tmp_path):
         run(settings(ref, reads, out, add_genomes=[clash]))
 
 
-def test_fasta_reads_are_filtered_without_filtlong(stubs, dataset, tmp_path):
+def test_fasta_reads_are_filtered_without_fastp(stubs, dataset, tmp_path):
     ref, reads = dataset
     for s in ("s1", "s2", "s3", "none"):
         (reads / f"{s}.fastq.gz").unlink()
@@ -568,7 +604,7 @@ def test_fasta_reads_are_filtered_without_filtlong(stubs, dataset, tmp_path):
         (reads / f"{s}.fasta").write_text(">on1\n" + "A" * 900 + "\n>on2\n" + "A" * 50 + "\n")
     out = tmp_path / "out"
     assert run(settings(ref, reads, out)) == 0
-    assert "filtlong" not in calls(stubs)
+    assert "fastp" not in calls(stubs)
     assert summary(out)["f1"]["Filtered_reads"] == "1"
 
 
@@ -686,14 +722,14 @@ def test_added_genomes_do_not_redo_the_comparison(stubs, dataset, tmp_path):
 
 def test_unexpected_error_fails_one_sample_not_the_run(stubs, dataset, tmp_path, monkeypatch):
     import rasher.steps
-    real = rasher.steps.filter_filtlong
+    real = rasher.steps.filter_fastp
 
     def flaky(name, *args, **kwargs):
         if name == "s2":
             raise UnicodeEncodeError("ascii", "x", 0, 1, "boom")
         return real(name, *args, **kwargs)
 
-    monkeypatch.setattr(rasher.steps, "filter_filtlong", flaky)
+    monkeypatch.setattr(rasher.steps, "filter_fastp", flaky)
     out = tmp_path / "out"
     assert run(settings(*dataset, out, snp_method="none")) == 0
     rows = summary(out)
@@ -732,20 +768,20 @@ def test_an_interruption_loses_only_the_samples_still_running(stubs, dataset, tm
     run(settings(ref, reads, out, snp_method="none"))
     _reads(reads / "s4.fastq.gz", [("on1", 900), ("on2", 850)])
     import rasher.steps
-    real = rasher.steps.assemble_flye
+    real = rasher.steps.assemble_spades
 
     def interrupted(name, *args, **kwargs):
         if name == "s4":
             raise KeyboardInterrupt
         return real(name, *args, **kwargs)
 
-    monkeypatch.setattr(rasher.steps, "assemble_flye", interrupted)
+    monkeypatch.setattr(rasher.steps, "assemble_spades", interrupted)
     with pytest.raises(KeyboardInterrupt):
         run(settings(ref, reads, out, snp_method="none"))
-    monkeypatch.setattr(rasher.steps, "assemble_flye", real)
+    monkeypatch.setattr(rasher.steps, "assemble_spades", real)
     stubs.unlink()
     run(settings(ref, reads, out, snp_method="none"))
-    assert calls(stubs).count("flye") == 1  # Only s4: the assemblies of s1-s3 were kept
+    assert calls(stubs).count("spades.py") == 1  # Only s4: the assemblies of s1-s3 were kept
 
 
 def test_bbduk_counts_hdist_and_out_of_memory(stubs, dataset, tmp_path, monkeypatch):
@@ -787,7 +823,7 @@ def test_interruption_kills_the_programs_still_running(tmp_path, caplog):
     pidfile = tmp_path / "child.pid"
 
     def fn(st, threads):
-        if st.sample.name == "slow":  # A program that starts a program of its own, like Flye
+        if st.sample.name == "slow":  # A program that starts a program of its own, like SPAdes
             run_tool(["sh", "-c", f"sleep 30 & echo $! > {pidfile}.tmp; mv {pidfile}.tmp {pidfile}; wait"],
                      tmp_path / "slow.log")
         else:  # "fast" ends (and the interruption comes) once the slow program and its child are running
@@ -878,7 +914,7 @@ def test_output_of_interrupted_parameter_change_is_not_reused(stubs, dataset, tm
     ref, reads = dataset
     out = tmp_path / "out"
     run(settings(ref, reads, out, snp_method="none", parallel=1))
-    restore = _interrupt(monkeypatch, rasher.steps, "filter_filtlong", "s1", after=True)
+    restore = _interrupt(monkeypatch, rasher.steps, "filter_fastp", "s1", after=True)
     with pytest.raises(KeyboardInterrupt):  # s1 filtered with 850, interrupted before it was recorded
         run(settings(ref, reads, out, snp_method="none", parallel=1, min_read_length=850))
     restore()
@@ -909,11 +945,11 @@ def test_sigterm_kills_the_programs_still_running(stubs, dataset, tmp_path):
     import time
     ref, reads = dataset
     pidfile = tmp_path / "child.pid"
-    flye = tmp_path / "bin" / "flye"  # A Flye that starts a program of its own and waits
-    flye.write_text(f'#!/bin/sh\n[ "$1" = "--version" ] && exit 0\n'
+    slow = tmp_path / "bin" / "spades.py"  # A SPAdes that starts a program of its own and waits
+    slow.write_text(f'#!/bin/sh\n[ "$1" = "--version" ] && exit 0\n'
                     f"sleep 30 & echo $! > {pidfile}.tmp; mv {pidfile}.tmp {pidfile}; wait\n")
     code = (f"import sys; from rasher.cli import main; sys.exit(main(['-r', {str(ref)!r}, '-i', {str(reads)!r}, "
-            f"'-o', {str(tmp_path / 'out')!r}, '-a', 'flye', '-t', '1', '-p', '1']))")
+            f"'-o', {str(tmp_path / 'out')!r}, '-a', 'spades', '-t', '1', '-p', '1']))")
     rasher = subprocess.Popen([sys.executable, "-c", code], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     for _ in range(200):
         if pidfile.exists():
@@ -932,54 +968,7 @@ def test_sigterm_kills_the_programs_still_running(stubs, dataset, tmp_path):
         time.sleep(0.05)
     else:
         os.kill(child, 9)
-        raise AssertionError("the program started by Flye outlived RASHER")
-
-
-def _as_0_3_7(out: Path, assembler: str = "flye", keep_bam: bool = False) -> None:
-    """Rewrite the fingerprints of a run's checkpoints (made with the settings of settings()) as RASHER 0.3.7 computed
-    them: --keep-bam in the baiting's parameters (as 0.3.2 for minimap2) and Flye's options in the assembly's,
-    whatever the assembler."""
-    import hashlib
-
-    from rasher.pipeline import _fingerprint
-    md5 = hashlib.md5((out / "reference.fasta").read_bytes()).hexdigest()
-    fingerprints = {"bait": _fingerprint("0", {"reference": md5, "method": "minimap2", "kmer": None,
-                                               "keep_bam": keep_bam})}
-    fingerprints["filter"] = _fingerprint(fingerprints["bait"], {"min_length": 100, "keep_percent": 95.0,
-                                                                 "target_depth": 100, "genome_size": 1000})
-    fingerprints["assemble"] = _fingerprint(fingerprints["filter"], {
-        "assembler": assembler, "read_type": "nano-hq", "min_size": None, "iterations": 3, "genome_size": 1000,
-        "template_gaps": "n" if assembler == "samtools" else None})
-    fingerprints["compare"] = _fingerprint(fingerprints["assemble"], {
-        "method": "ska", "tree": "fasttree", "ska_min_freq": 1.0, "assemblies": ["s1", "s2", "s3"], "added": {}})
-    for step, fingerprint in fingerprints.items():
-        checkpoint = out / ".checkpoints" / f"{step}.json"
-        data = json.loads(checkpoint.read_text())
-        for res in data["results"].values():
-            if isinstance(res, dict):
-                res.pop("bam", None)  # Not recorded by 0.3.7
-        checkpoint.write_text(json.dumps({**data, "fingerprint": fingerprint}))
-
-
-@pytest.mark.parametrize("assembler, keep_bam", [("flye", False), ("samtools", False), ("myloasm", True)])
-def test_checkpoints_of_0_3_7_are_reused(stubs, dataset, tmp_path, assembler, keep_bam):
-    ref, reads = dataset
-    out = tmp_path / "out"
-    run(settings(ref, reads, out, assembler=assembler, keep_bam=keep_bam))
-    assert summary(out)["s1"]["Status"] == "ok"
-    _as_0_3_7(out, assembler, keep_bam)
-    stubs.unlink()
-    run(settings(ref, reads, out, assembler=assembler, keep_bam=keep_bam))
-    made = sorted(calls(stubs))  # Only the sample that failed at baiting is tried again (samtools: its BAM)
-    if assembler == "samtools":  # 0.4.1 calls the consensus with -C 20 (0.3.7: 10): the assemblies are made again
-        assert "filtlong" not in made and made.count("samtools") >= 3 and made.count("minimap2") >= 1 + 3
-        return
-    assert made == ["minimap2"] + ["samtools"] * (3 if keep_bam else 0)  # In any order (parallel samples)
-    if keep_bam:  # Made with --keep-bam, resumed without: nothing to do either
-        _as_0_3_7(out, assembler, keep_bam)
-        stubs.unlink()
-        run(settings(ref, reads, out, assembler=assembler))
-        assert calls(stubs) == ["minimap2"]
+        raise AssertionError("the program started by SPAdes outlived RASHER")
 
 
 def test_options_that_change_no_output_rerun_nothing(stubs, dataset, tmp_path):
@@ -987,13 +976,15 @@ def test_options_that_change_no_output_rerun_nothing(stubs, dataset, tmp_path):
     out = tmp_path / "out"
     run(settings(ref, reads, out, assembler="samtools"))
     stubs.unlink()
-    # Flye's options, with another assembler
-    run(settings(ref, reads, out, assembler="samtools", read_type="nano-raw", min_size=2000, flye_iterations=1))
+    # BBDuk's options, with minimap2 baiting
+    run(settings(ref, reads, out, assembler="samtools", hdist=2, kmer=21))
     assert calls(stubs) == ["minimap2"]
     stubs.unlink()
     run(settings(ref, reads, out, assembler="samtools", keep_bam=True))  # Baiting again for the BAMs only
     made = calls(stubs)
-    assert made.count("minimap2") == 4 + 3 and all((out / "1_extracted" / f"s{i}.bam").exists() for i in (1, 2, 3))
+    # 4 baits (PAF), 3 alignments of the baited reads (the BAMs), 3 templated alignments (new bait outputs)
+    assert made.count("minimap2") == 4 + 3 + 3
+    assert all((out / "1_extracted" / f"s{i}.bam").exists() for i in (1, 2, 3))
     stubs.unlink()
     run(settings(ref, reads, out, assembler="samtools"))  # Without --keep-bam: nothing to do
     assert calls(stubs) == ["minimap2"]
@@ -1001,7 +992,8 @@ def test_options_that_change_no_output_rerun_nothing(stubs, dataset, tmp_path):
     (out / "1_extracted" / "s2.bam").unlink()
     run(settings(ref, reads, out, assembler="samtools", keep_bam=True))  # The BAMs that are there are kept
     made = calls(stubs)
-    assert made.count("minimap2") == 2 + 1 and (out / "1_extracted" / "s2.bam").exists()
+    # s2: bait, BAM and templated alignment; the failed sample: bait
+    assert made.count("minimap2") == 3 + 1 and (out / "1_extracted" / "s2.bam").exists()
 
 
 def test_a_moved_output_folder_resumes_with_its_own_files(stubs, dataset, tmp_path):
@@ -1067,10 +1059,10 @@ def test_a_moved_folder_of_0_3_3_resumes_with_its_own_files(stubs, dataset, tmp_
 
 
 def _rasher_cli(ref, reads, out, **popen):
-    """Start `rasher` (Flye assembly, one sample at a time) in a separate process."""
+    """Start `rasher` (SPAdes assembly, one sample at a time) in a separate process."""
     import subprocess
     code = (f"import sys; from rasher.cli import main; sys.exit(main(['-r', {str(ref)!r}, '-i', {str(reads)!r}, "
-            f"'-o', {str(out)!r}, '-a', 'flye', '-t', '1', '-p', '1']))")
+            f"'-o', {str(out)!r}, '-a', 'spades', '-t', '1', '-p', '1']))")
     return subprocess.Popen([sys.executable, "-c", code], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                             **popen)
 
@@ -1080,8 +1072,8 @@ def test_nohup_runs_survive_a_closed_terminal(stubs, dataset, tmp_path):
     import time
     ref, reads = dataset
     started = tmp_path / "started"
-    flye = tmp_path / "bin" / "flye"  # A Flye that takes a while
-    flye.write_text(f'#!/bin/sh\n[ "$1" = "--version" ] && exit 0\ntouch {started}\nsleep 30\n')
+    slow = tmp_path / "bin" / "spades.py"  # A SPAdes that takes a while
+    slow.write_text(f'#!/bin/sh\n[ "$1" = "--version" ] && exit 0\ntouch {started}\nsleep 30\n')
     rasher = _rasher_cli(ref, reads, tmp_path / "out",
                        preexec_fn=lambda: signal.signal(signal.SIGHUP, signal.SIG_IGN))  # As nohup starts it
     for _ in range(200):
@@ -1101,7 +1093,7 @@ def test_cli_in_another_thread_and_signal_handlers_restored(stubs, dataset, tmp_
 
     from rasher.cli import main
     ref, reads = dataset
-    args = ["-r", str(ref), "-i", str(reads), "-a", "flye", "-t", "1", "--snp-method", "none"]
+    args = ["-r", str(ref), "-i", str(reads), "-a", "spades", "-t", "1", "--snp-method", "none"]
     codes = []
     thread = threading.Thread(target=lambda: codes.append(main([*args, "-o", str(tmp_path / "a")])))
     thread.start()
@@ -1119,7 +1111,7 @@ def test_errors_and_interruptions_are_in_rasher_log(stubs, dataset, tmp_path, mo
     with pytest.raises(RasherError, match="All samples failed"):
         run(settings(ref, reads, out, min_read_length=5000))
     assert "[ERROR] All samples failed at the filter step" in (out / "rasher.log").read_text()
-    _interrupt(monkeypatch, rasher.steps, "filter_filtlong", "s1")
+    _interrupt(monkeypatch, rasher.steps, "filter_fastp", "s1")
     with pytest.raises(KeyboardInterrupt):
         run(settings(ref, reads, out))
     assert (out / "rasher.log").read_text().rstrip().endswith("[ERROR] Interrupted")
@@ -1656,7 +1648,7 @@ def test_a_copied_output_folder_without_the_files_times_resumes(stubs, dataset, 
     stubs.unlink()
     assert run(settings(ref, reads, copy)) == 0
     made = calls(stubs)
-    assert made.count("filtlong") == 1 and made.count("flye") == 1 and "ska" in made
+    assert made.count("fastp") == 1 and made.count("spades.py") == 1 and "ska" in made
 
 
 def test_copies_of_an_interrupted_first_run_are_known_as_rashers(stubs, dataset, tmp_path, monkeypatch):
@@ -1801,7 +1793,7 @@ def test_paths_with_spaces_and_accents(stubs, tmp_path):
         assert dist.split("\t") == ["snp-dists", "Reference", "pub", "s1", "s2"]
         assert (out / "4_compared" / "ska" / "snps.vcf").is_file()
         assert not [p.name for p in (out / "1_extracted").iterdir() if p.name.startswith(".")]  # Links removed
-        assert (out / "3_assembled" / "s1" / "assembly.fasta").is_file()  # Flye wrote in its folder, through a link
+        assert (out / "3_assembled" / "s1" / "contigs.fasta").is_file()  # SPAdes wrote through a link folder
 
 
 def test_a_moved_project_reruns_nothing(stubs, dataset, tmp_path):
@@ -1822,7 +1814,7 @@ def test_a_moved_project_reruns_nothing(stubs, dataset, tmp_path):
     stubs.unlink()
     assert run(settings(moved / "ref.fasta", moved / "reads", moved / "out")) == 0
     made = calls(stubs)
-    assert made.count("minimap2") == 2 and made.count("flye") == 1  # s1 and the failed sample
+    assert made.count("minimap2") == 2 and made.count("spades.py") == 1  # s1 and the failed sample
 
 
 def test_added_genomes_are_checked_before_any_step(stubs, dataset, tmp_path, caplog):
@@ -1966,15 +1958,16 @@ def test_failed_baiting_leaves_no_partial_or_temporary_files(stubs, dataset, tmp
 
 
 def test_an_output_folder_with_a_comma(stubs, dataset, tmp_path):
-    """Flye splits its reads' paths on commas, IQ-TREE its alignment's (and the stubs do the same)."""
+    """SKESA takes its reads as a comma-separated pair, IQ-TREE splits its alignment's paths on commas (the
+    stubs do the same): both run on comma-free paths whatever the output folder is called."""
     ref, reads = dataset
     out = tmp_path / "x,y"
-    assert run(settings(ref, reads, out, tree="iqtree")) == 0
-    assert summary(out)["s1"]["Status"] == "ok" and (out / "3_assembled" / "s1" / "assembly.fasta").is_file()
+    assert run(settings(ref, reads, out, assembler="skesa", tree="iqtree")) == 0
+    assert summary(out)["s1"]["Status"] == "ok" and (out / "3_assembled" / "s1" / "contigs.fasta").is_file()
     assert (out / "4_compared" / "ska" / "tree.nwk").is_file()
     assert f"$ (cd {out / '4_compared' / 'ska'} && " in (out / "logs" / "4_compare" / "iqtree.log").read_text()
     stubs.unlink()
-    assert run(settings(ref, reads, out, tree="iqtree")) == 0
+    assert run(settings(ref, reads, out, assembler="skesa", tree="iqtree")) == 0
     assert calls(stubs) == ["minimap2"]  # Only the failed sample is tried again
 
 
@@ -2019,40 +2012,6 @@ def test_templated_assemblies_have_no_off_reference_share(stubs, dataset, tmp_pa
     assert "Off ref %" not in (out / "report.html").read_text()
 
 
-def test_filter_by_reference_gives_filtlong_the_reference(stubs, dataset, tmp_path):
-    ref, reads = dataset
-    out = tmp_path / "out"
-    run(settings(ref, reads, out))
-    assert "--assembly" not in (out / "logs" / "2_filter" / "s1.log").read_text()
-    stubs.unlink()
-    run(settings(ref, reads, out, filter_by_reference=True))
-    made = calls(stubs)
-    assert made.count("filtlong") == 3 and made.count("minimap2") == 1  # Filtering reruns, baiting does not
-    assert f"--assembly {out / 'reference.fasta'}" in (out / "logs" / "2_filter" / "s1.log").read_text()
-    assert "ranked by their k-mers found in the reference" in (out / "report.html").read_text()
-    stubs.unlink()
-    run(settings(ref, reads, out, filter_by_reference=True))
-    assert calls(stubs) == ["minimap2"]
-    stubs.unlink()
-    run(settings(ref, reads, out))  # Removed: filtering again, without the reference
-    assert calls(stubs).count("filtlong") == 3
-    assert "--assembly" not in (out / "logs" / "2_filter" / "s1.log").read_text().split("$ filtlong")[-1]
-
-
-def test_filter_by_reference_is_ignored_for_fasta_reads(stubs, dataset, tmp_path, caplog):
-    ref, reads = dataset
-    for s in ("s1", "s2", "s3", "none"):
-        (reads / f"{s}.fastq.gz").unlink()
-    for s in ("f1", "f2", "f3"):
-        (reads / f"{s}.fasta").write_text(">on1\n" + "A" * 900 + "\n")
-    out = tmp_path / "out"
-    run(settings(ref, reads, out))
-    stubs.unlink()
-    assert run(settings(ref, reads, out, filter_by_reference=True)) == 0
-    assert "--filter-by-reference is ignored: every sample is fasta" in caplog.text
-    assert calls(stubs) == []  # Nothing reruns: the flag changes nothing for fasta reads
-
-
 def test_off_reference_note_reaches_the_summary_and_the_report(stubs, dataset, tmp_path):
     ref, reads = dataset
     _reads(reads / "nuc.fastq.gz", [("on1", 900), ("on2", 800)])  # Its contig aligns nowhere (minimap2 stub)
@@ -2063,26 +2022,6 @@ def test_off_reference_note_reaches_the_summary_and_the_report(stubs, dataset, t
     assert re.search(r'<td class="warn num" data-v="100.0">100.0</td>', (out / "report.html").read_text())
     mqc = json.loads((out / "rasher_samples_mqc.json").read_text())
     assert mqc["data"]["nuc"]["Off_reference_pct"] == 100.0 and "Off_reference_pct" in mqc["headers"]
-
-
-def test_off_reference_share_is_added_to_older_assemblies_once(stubs, dataset, tmp_path):
-    ref, reads = dataset
-    out = tmp_path / "out"
-    run(settings(ref, reads, out))
-    checkpoint = out / ".checkpoints" / "assemble.json"
-    data = json.loads(checkpoint.read_text())
-    for res in data["results"].values():  # As RASHER <= 0.3.9 left them
-        res.get("stats", {}).pop("Off_reference_pct", None)
-    checkpoint.write_text(json.dumps(data))
-    stubs.unlink()
-    run(settings(ref, reads, out))
-    assert calls(stubs).count("minimap2_asm") == 3 and "flye" not in calls(stubs)
-    assert summary(out)["s1"]["Off_reference_pct"] == "0.0"
-    assert all("Off_reference_pct" in res["stats"]
-               for res in json.loads(checkpoint.read_text())["results"].values() if not res.get("failed"))
-    stubs.unlink()
-    run(settings(ref, reads, out))
-    assert "minimap2_asm" not in calls(stubs)
 
 
 def test_failed_contig_alignment_leaves_the_sample_ok(stubs, dataset, tmp_path, caplog):
@@ -2096,3 +2035,107 @@ def test_failed_contig_alignment_leaves_the_sample_ok(stubs, dataset, tmp_path, 
     stubs.unlink()
     run(settings(ref, reads, out))
     assert "minimap2_asm" not in calls(stubs)  # Recorded as NA: not tried on every resume
+
+
+# ----- Paired-end runs ------------------------------------------------------------------------------------------
+
+def _pair(reads_dir: Path, name: str, mates: list[tuple[str, int]], slash: bool = False) -> None:
+    """Write <name>_R1/_R2.fastq.gz; `slash` names the mates read/1 and read/2 (SRA keeps identical names)."""
+    _reads(reads_dir / f"{name}_R1.fastq.gz", [(f"{n}/1" if slash else n, length) for n, length in mates])
+    _reads(reads_dir / f"{name}_R2.fastq.gz", [(f"{n}/2" if slash else n, length) for n, length in mates])
+
+
+@pytest.fixture
+def dataset_pe(tmp_path):
+    ref = tmp_path / "ref.fasta"
+    ref.write_text(">ref\n" + "ACGT" * 250 + "\n")
+    reads = tmp_path / "reads"
+    reads.mkdir()
+    _pair(reads, "p1", [("on1", 900), ("on2", 800), ("off1", 700)], slash=True)  # /1 /2 mate names
+    _pair(reads, "p2", [("on1", 900), ("on2", 800), ("off1", 700)])  # identical mate names
+    _pair(reads, "p3", [("on1", 900), ("on2", 800), ("off1", 700)])
+    _pair(reads, "pnone", [("off1", 900)])  # Nothing matches the reference
+    return ref, reads
+
+
+def test_paired_full_run(stubs, dataset_pe, tmp_path):
+    ref, reads = dataset_pe
+    out = tmp_path / "out"
+    assert run(settings(ref, reads, out)) == 0
+    rows = summary(out)
+    for name in ("p1", "p2", "p3"):
+        # Both mates are counted; a pair is kept whole when either mate aligns
+        assert rows[name]["Status"] == "ok" and rows[name]["Raw_reads"] == "6"
+        assert rows[name]["Baited_reads"] == "4" and rows[name]["Filtered_reads"] == "4"
+        for step in ("1_extracted", "2_filtered"):
+            assert (out / step / f"{name}_R1.fastq.gz").exists() and (out / step / f"{name}_R2.fastq.gz").exists()
+            assert not (out / step / f"{name}.fastq.gz").exists()
+    assert rows["pnone"]["Status"] == "failed (bait)"
+    # The mate names are kept as the input wrote them
+    assert [r.name for r in read_records(out / "1_extracted" / "p1_R1.fastq.gz")] == ["on1/1", "on2/1"]
+    assert [r.name for r in read_records(out / "1_extracted" / "p1_R2.fastq.gz")] == ["on1/2", "on2/2"]
+    bait = json.loads((out / ".checkpoints" / "bait.json").read_text())["results"]
+    assert bait["p1"]["output2"].endswith("p1_R2.fastq.gz")
+    filt = json.loads((out / ".checkpoints" / "filter.json").read_text())["results"]
+    assert len(filt["p1"]["upstream"]) == 2 and all(len(sig) == 2 for sig in filt["p1"]["upstream"])
+    tree = (out / "4_compared" / "ska" / "tree.nwk").read_text()
+    assert all(n in tree for n in ("p1", "p2", "p3", "Reference"))
+
+
+def test_paired_resume_reruns_nothing(stubs, dataset_pe, tmp_path):
+    ref, reads = dataset_pe
+    out = tmp_path / "out"
+    run(settings(ref, reads, out))
+    stubs.unlink()
+    run(settings(ref, reads, out))
+    assert calls(stubs) == ["minimap2", "minimap2"]  # Only the failed pair is baited again (one call per file)
+    stubs.unlink()
+    os.utime(reads / "p2_R2.fastq.gz", (1, 1))  # One mate changed: that sample runs again
+    run(settings(ref, reads, out))
+    made = calls(stubs)
+    assert made.count("fastp") == 1 and made.count("spades.py") == 1 and "ska" in made
+
+
+def test_paired_templated_assembly(stubs, dataset_pe, tmp_path):
+    ref, reads = dataset_pe
+    out = tmp_path / "out"
+    assert run(settings(ref, reads, out, assembler="samtools", snp_method="none")) == 0
+    rows = summary(out)
+    assert rows["p1"]["Assembly_length"] == "1000" and rows["p1"]["N_bases"] == "10"
+    align = (out / "logs" / "3_assemble" / "p1.log").read_text()
+    assert "p1_R1.fastq.gz" in align and "p1_R2.fastq.gz" in align  # Both mates aligned, as a pair
+
+
+def test_paired_bbduk_keeps_a_pair_when_either_mate_matches(stubs, tmp_path):
+    ref = tmp_path / "ref.fasta"
+    ref.write_text(">ref\n" + "ACGT" * 250 + "\n")
+    reads = tmp_path / "reads"
+    reads.mkdir()
+    # R1 off target, R2 on target: BBDuk keeps the pair
+    _reads(reads / "m_R1.fastq.gz", [("off1", 900), ("off2", 800)])
+    _reads(reads / "m_R2.fastq.gz", [("on1", 900), ("off9", 800)])
+    assert run(settings(ref, reads, tmp_path / "out", baiting="bbduk", snp_method="none")) == 0
+    row = summary(tmp_path / "out")["m"]
+    assert row["Raw_reads"] == "4" and row["Baited_reads"] == "2"
+    assert [r.name for r in read_records(tmp_path / "out" / "1_extracted" / "m_R1.fastq.gz")] == ["off1"]
+
+
+def test_paired_keep_bam(stubs, dataset_pe, tmp_path):
+    out = tmp_path / "out"
+    ref, reads = dataset_pe
+    assert run(settings(ref, reads, out, keep_bam=True, snp_method="none")) == 0
+    assert (out / "1_extracted" / "p1.bam").exists()
+    assert summary(out)["p1"]["Baited_reads"] == "4"
+
+
+def test_paired_and_single_end_samples_in_one_run(stubs, dataset_pe, tmp_path):
+    ref, reads = dataset_pe
+    _reads(reads / "single.fastq.gz", [("on1", 900), ("off1", 700)])
+    out = tmp_path / "out"
+    assert run(settings(ref, reads, out)) == 0
+    rows = summary(out)
+    assert rows["single"]["Status"] == "ok" and rows["single"]["Baited_reads"] == "1"
+    assert (out / "1_extracted" / "single.fastq.gz").exists()
+    assert rows["p1"]["Status"] == "ok"
+    tree = (out / "4_compared" / "ska" / "tree.nwk").read_text()
+    assert "single" in tree and "p1" in tree

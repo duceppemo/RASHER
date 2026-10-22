@@ -1,9 +1,23 @@
 """RASHER logo and the RASHER/BACoN pipeline diagrams, light and dark variants (run from docs/images/)."""
 
+LIGHT = {"text": "#1d2433", "muted": "#5d6678", "box": "#f6f7f9", "edge": "#d7dbe2", "arrow": "#8a93a3"}
+DARK = {"text": "#e6e8ec", "muted": "#9aa3b2", "box": "#1d2129", "edge": "#363c47", "arrow": "#737d8e"}
 THEMES = {
-    "light": {"text": "#1d2433", "muted": "#5d6678", "box": "#f6f7f9", "edge": "#d7dbe2", "arrow": "#8a93a3"},
-    "dark": {"text": "#e6e8ec", "muted": "#9aa3b2", "box": "#1d2129", "edge": "#363c47", "arrow": "#737d8e"},
+    "light": LIGHT,
+    "dark": DARK,
+    # One adaptive file: colors are CSS variables, flipped by a media query inside the SVG. Works wherever
+    # the SVG is shown in an <img>, GitHub wikis included (the #gh-*-mode-only trick does not work there).
+    "auto": {k: f"var(--{k})" for k in LIGHT},
 }
+
+
+def style(theme):
+    if theme != "auto":
+        return ""
+    inner = "; ".join(f"--{k}: {v}" for k, v in LIGHT.items())
+    dark = "; ".join(f"--{k}: {v}" for k, v in DARK.items())
+    return (f"\n  <style>:root {{ {inner} }} "
+            f"@media (prefers-color-scheme: dark) {{ :root {{ {dark} }} }}</style>")
 MEAT, MEAT_EDGE, FAT = "#d94f3d", "#9c2f21", "#faeedd"
 FONT = "system-ui, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif"
 
@@ -38,7 +52,7 @@ def logo(theme):
     t = THEMES[theme]
     return f"""<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 220" width="600" height="220"
   font-family="{FONT}">
-  <title>RASHER: Bait, Assemble and Compare Illumina short reads</title>
+  <title>RASHER: Bait, Assemble and Compare Illumina short reads</title>{style(theme)}
   <path d="{ribbon()}" fill="{MEAT}" stroke="{MEAT_EDGE}" stroke-width="3" stroke-linejoin="round"/>
   <path d="{streak(56)}" fill="none" stroke="{FAT}" stroke-width="10" stroke-linecap="butt"/>
   <path d="{streak(76)}" fill="none" stroke="{FAT}" stroke-width="10" stroke-linecap="butt"/>
@@ -89,7 +103,8 @@ def pipeline(theme, assemble_lines, filter_lines, tool):
     body = "\n  ".join(parts)
     return f"""<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1142 190" width="1142" height="190"
   font-family="{FONT}">
-  <title>{'RASHER' if tool == 'rasher' else 'BACoN'} pipeline: bait, filter, assemble, compare</title>
+  <title>{'RASHER' if tool == 'rasher' else 'BACoN'} pipeline: bait, filter, assemble, \
+compare</title>{style(theme)}
   {body}
 </svg>
 """
@@ -100,12 +115,12 @@ def write(name, text):
         fh.write(text)
 
 
-for theme in ("light", "dark"):
-    write(f"rasher_logo_{theme}.svg", logo(theme))
-    write(f"rasher_pipeline_{theme}.svg", pipeline(
+for theme in ("light", "dark", "auto"):
+    write("rasher_logo.svg" if theme == "auto" else f"rasher_logo_{theme}.svg", logo(theme))
+    write("rasher_pipeline.svg" if theme == "auto" else f"rasher_pipeline_{theme}.svg", pipeline(
         theme, ["templated: samtools consensus", "de novo: SPAdes or SKESA"],
         ["fastp (quality, adapters),", "then even subsampling"], "rasher"))
-    write(f"bacon_pipeline_{theme}.svg", pipeline(
+    write("bacon_pipeline.svg" if theme == "auto" else f"bacon_pipeline_{theme}.svg", pipeline(
         theme, ["templated: samtools consensus", "de novo: Flye or myloasm"],
         ["Filtlong: the best reads,", "up to the target depth"], "bacon"))
 print("written")

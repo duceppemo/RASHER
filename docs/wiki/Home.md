@@ -1,6 +1,5 @@
 <p align="center">
-  <img src="https://raw.githubusercontent.com/duceppemo/RASHER/main/docs/images/rasher_logo_light.svg#gh-light-mode-only" alt="RASHER: Bait, Assemble and Compare Illumina short reads" width="520">
-  <img src="https://raw.githubusercontent.com/duceppemo/RASHER/main/docs/images/rasher_logo_dark.svg#gh-dark-mode-only" alt="RASHER: Bait, Assemble and Compare Illumina short reads" width="520">
+  <img src="https://raw.githubusercontent.com/duceppemo/RASHER/main/docs/images/rasher_logo.svg" alt="RASHER: Bait, Assemble and Compare Illumina short reads" width="520">
 </p>
 
 RASHER takes Illumina short reads, paired or single-end, from many samples and a reference sequence, typically an
@@ -18,11 +17,9 @@ templated assemblies; SKA2 split k-mers, the default for de novo ones; or a Pars
 matrix of pairwise SNP distances, a VCF of the SNPs relative to the reference, and a tree (FastTree or IQ-TREE).
 Everything is summarized in an HTML report, and in MultiQC sections (next to fastp's own).
 
-```
-reads ──► 1. bait ──────► 2. filter ──────► 3. assemble ──────────────────► 4. compare
-          minimap2 -x sr   fastp, then       templated: samtools consensus    SNPs: minimap2, SKA2 or Parsnp
-          or BBDuk         even subsampling  de novo:   SPAdes or SKESA       tree: FastTree or IQ-TREE
-```
+<p align="center">
+  <img src="https://raw.githubusercontent.com/duceppemo/RASHER/main/docs/images/pipeline.svg" alt="reads → 1 bait (minimap2 or BBDuk) → 2 filter (fastp, then even subsampling) → 3 assemble (templated: samtools consensus; de novo: SPAdes or SKESA) → 4 compare (SNPs: minimap2, SKA2 or Parsnp; tree: FastTree or IQ-TREE) → report" width="920">
+</p>
 
 RASHER was designed for genome skimming: low-coverage sequencing of total DNA, where the organelle reads are
 abundant enough to assemble. Enriching the target (targeted sequencing, hybridization capture) gives more depth

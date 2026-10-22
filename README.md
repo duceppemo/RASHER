@@ -1,8 +1,5 @@
 <p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/images/rasher_logo_dark.svg">
-    <img src="docs/images/rasher_logo_light.svg" alt="RASHER: Bait, Assemble and Compare Illumina short reads" width="520">
-  </picture>
+  <img src="docs/images/rasher_logo.svg" alt="RASHER: Bait, Assemble and Compare Illumina short reads" width="520">
 </p>
 
 <p align="center">
@@ -21,10 +18,7 @@ A rasher is a thin slice of bacon: RASHER is the short-read fork of
 [BACoN](https://github.com/duceppemo/BACoN), which does the same for Nanopore reads.
 
 <p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/images/pipeline_dark.svg">
-    <img src="docs/images/pipeline_light.svg" alt="reads → 1 bait (minimap2 or BBDuk) → 2 filter (fastp, then even subsampling) → 3 assemble (templated: samtools consensus; de novo: SPAdes or SKESA) → 4 compare (SNPs: minimap2, SKA2 or Parsnp; tree: FastTree or IQ-TREE) → report" width="920">
-  </picture>
+  <img src="docs/images/pipeline.svg" alt="reads → 1 bait (minimap2 or BBDuk) → 2 filter (fastp, then even subsampling) → 3 assemble (templated: samtools consensus; de novo: SPAdes or SKESA) → 4 compare (SNPs: minimap2, SKA2 or Parsnp; tree: FastTree or IQ-TREE) → report" width="920">
 </p>
 
 ## Quick start

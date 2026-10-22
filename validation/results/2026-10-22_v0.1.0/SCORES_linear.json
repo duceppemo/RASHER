@@ -1,0 +1,530 @@
+[
+ {
+  "run": "samtools",
+  "assembly": {
+   "l01": {
+    "contigs": 3,
+    "length": 30000,
+    "true_length": 30000,
+    "covered_fraction": 1.0,
+    "duplicated_bases": 0,
+    "unaligned_bases": 0,
+    "mismatches": 0,
+    "inserted": 0,
+    "deleted": 0,
+    "errors_per_100kb": 0.0,
+    "circular_contigs": "NA",
+    "true_circular": 0
+   },
+   "l02": {
+    "contigs": 3,
+    "length": 30000,
+    "true_length": 30000,
+    "covered_fraction": 1.0,
+    "duplicated_bases": 0,
+    "unaligned_bases": 0,
+    "mismatches": 0,
+    "inserted": 0,
+    "deleted": 0,
+    "errors_per_100kb": 0.0,
+    "circular_contigs": "NA",
+    "true_circular": 0
+   },
+   "l03": {
+    "contigs": 3,
+    "length": 30000,
+    "true_length": 30000,
+    "covered_fraction": 1.0,
+    "duplicated_bases": 0,
+    "unaligned_bases": 0,
+    "mismatches": 0,
+    "inserted": 0,
+    "deleted": 0,
+    "errors_per_100kb": 0.0,
+    "circular_contigs": "NA",
+    "true_circular": 0
+   },
+   "l04": {
+    "contigs": 3,
+    "length": 30000,
+    "true_length": 30000,
+    "covered_fraction": 1.0,
+    "duplicated_bases": 0,
+    "unaligned_bases": 0,
+    "mismatches": 0,
+    "inserted": 0,
+    "deleted": 0,
+    "errors_per_100kb": 0.0,
+    "circular_contigs": "NA",
+    "true_circular": 0
+   }
+  },
+  "snps": {
+   "minimap2": {
+    "samples_expected": 5,
+    "samples_present": 5,
+    "missing": [],
+    "pairs": 10,
+    "best_convention": "events",
+    "exact_pairs": 10,
+    "max_abs_error": 0,
+    "total_abs_error": 0,
+    "wrong_pairs": [],
+    "by_convention": {
+     "events": {
+      "exact_pairs": 10,
+      "max_abs_error": 0,
+      "total_abs_error": 0
+     },
+     "sites": {
+      "exact_pairs": 10,
+      "max_abs_error": 0,
+      "total_abs_error": 0
+     },
+     "no_repeat": {
+      "exact_pairs": 10,
+      "max_abs_error": 0,
+      "total_abs_error": 0
+     }
+    }
+   },
+   "ska": {
+    "samples_expected": 5,
+    "samples_present": 5,
+    "missing": [],
+    "pairs": 10,
+    "best_convention": "events",
+    "exact_pairs": 10,
+    "max_abs_error": 0,
+    "total_abs_error": 0,
+    "wrong_pairs": [],
+    "by_convention": {
+     "events": {
+      "exact_pairs": 10,
+      "max_abs_error": 0,
+      "total_abs_error": 0
+     },
+     "sites": {
+      "exact_pairs": 10,
+      "max_abs_error": 0,
+      "total_abs_error": 0
+     },
+     "no_repeat": {
+      "exact_pairs": 10,
+      "max_abs_error": 0,
+      "total_abs_error": 0
+     }
+    }
+   }
+  },
+  "duration_s": 2.35
+ },
+ {
+  "run": "skesa",
+  "assembly": {
+   "l01": {
+    "contigs": 3,
+    "length": 29874,
+    "true_length": 30000,
+    "covered_fraction": 0.9958,
+    "duplicated_bases": 0,
+    "unaligned_bases": 0,
+    "mismatches": 0,
+    "inserted": 0,
+    "deleted": 0,
+    "errors_per_100kb": 0.0,
+    "circular_contigs": "0",
+    "true_circular": 0
+   },
+   "l02": {
+    "contigs": 3,
+    "length": 29874,
+    "true_length": 30000,
+    "covered_fraction": 0.9958,
+    "duplicated_bases": 0,
+    "unaligned_bases": 0,
+    "mismatches": 0,
+    "inserted": 0,
+    "deleted": 0,
+    "errors_per_100kb": 0.0,
+    "circular_contigs": "0",
+    "true_circular": 0
+   },
+   "l03": {
+    "contigs": 3,
+    "length": 29874,
+    "true_length": 30000,
+    "covered_fraction": 0.9958,
+    "duplicated_bases": 0,
+    "unaligned_bases": 0,
+    "mismatches": 0,
+    "inserted": 0,
+    "deleted": 0,
+    "errors_per_100kb": 0.0,
+    "circular_contigs": "0",
+    "true_circular": 0
+   },
+   "l04": {
+    "contigs": 3,
+    "length": 29874,
+    "true_length": 30000,
+    "covered_fraction": 0.9958,
+    "duplicated_bases": 0,
+    "unaligned_bases": 0,
+    "mismatches": 0,
+    "inserted": 0,
+    "deleted": 0,
+    "errors_per_100kb": 0.0,
+    "circular_contigs": "0",
+    "true_circular": 0
+   }
+  },
+  "snps": {
+   "minimap2": {
+    "samples_expected": 5,
+    "samples_present": 5,
+    "missing": [],
+    "pairs": 10,
+    "best_convention": "events",
+    "exact_pairs": 10,
+    "max_abs_error": 0,
+    "total_abs_error": 0,
+    "wrong_pairs": [],
+    "by_convention": {
+     "events": {
+      "exact_pairs": 10,
+      "max_abs_error": 0,
+      "total_abs_error": 0
+     },
+     "sites": {
+      "exact_pairs": 10,
+      "max_abs_error": 0,
+      "total_abs_error": 0
+     },
+     "no_repeat": {
+      "exact_pairs": 10,
+      "max_abs_error": 0,
+      "total_abs_error": 0
+     }
+    }
+   },
+   "parsnp": {
+    "samples_expected": 5,
+    "samples_present": 5,
+    "missing": [],
+    "pairs": 10,
+    "best_convention": "events",
+    "exact_pairs": 10,
+    "max_abs_error": 0,
+    "total_abs_error": 0,
+    "wrong_pairs": [],
+    "by_convention": {
+     "events": {
+      "exact_pairs": 10,
+      "max_abs_error": 0,
+      "total_abs_error": 0
+     },
+     "sites": {
+      "exact_pairs": 10,
+      "max_abs_error": 0,
+      "total_abs_error": 0
+     },
+     "no_repeat": {
+      "exact_pairs": 10,
+      "max_abs_error": 0,
+      "total_abs_error": 0
+     }
+    }
+   },
+   "parsnp_default": {
+    "samples_expected": 5,
+    "samples_present": 5,
+    "missing": [],
+    "pairs": 10,
+    "best_convention": "events",
+    "exact_pairs": 10,
+    "max_abs_error": 0,
+    "total_abs_error": 0,
+    "wrong_pairs": [],
+    "by_convention": {
+     "events": {
+      "exact_pairs": 10,
+      "max_abs_error": 0,
+      "total_abs_error": 0
+     },
+     "sites": {
+      "exact_pairs": 10,
+      "max_abs_error": 0,
+      "total_abs_error": 0
+     },
+     "no_repeat": {
+      "exact_pairs": 10,
+      "max_abs_error": 0,
+      "total_abs_error": 0
+     }
+    }
+   },
+   "ska": {
+    "samples_expected": 5,
+    "samples_present": 5,
+    "missing": [],
+    "pairs": 10,
+    "best_convention": "events",
+    "exact_pairs": 10,
+    "max_abs_error": 0,
+    "total_abs_error": 0,
+    "wrong_pairs": [],
+    "by_convention": {
+     "events": {
+      "exact_pairs": 10,
+      "max_abs_error": 0,
+      "total_abs_error": 0
+     },
+     "sites": {
+      "exact_pairs": 10,
+      "max_abs_error": 0,
+      "total_abs_error": 0
+     },
+     "no_repeat": {
+      "exact_pairs": 10,
+      "max_abs_error": 0,
+      "total_abs_error": 0
+     }
+    }
+   },
+   "ska_0.5": {
+    "samples_expected": 5,
+    "samples_present": 5,
+    "missing": [],
+    "pairs": 10,
+    "best_convention": "events",
+    "exact_pairs": 10,
+    "max_abs_error": 0,
+    "total_abs_error": 0,
+    "wrong_pairs": [],
+    "by_convention": {
+     "events": {
+      "exact_pairs": 10,
+      "max_abs_error": 0,
+      "total_abs_error": 0
+     },
+     "sites": {
+      "exact_pairs": 10,
+      "max_abs_error": 0,
+      "total_abs_error": 0
+     },
+     "no_repeat": {
+      "exact_pairs": 10,
+      "max_abs_error": 0,
+      "total_abs_error": 0
+     }
+    }
+   }
+  },
+  "duration_s": 6.5
+ },
+ {
+  "run": "spades",
+  "assembly": {
+   "l01": {
+    "contigs": 3,
+    "length": 30000,
+    "true_length": 30000,
+    "covered_fraction": 1.0,
+    "duplicated_bases": 0,
+    "unaligned_bases": 0,
+    "mismatches": 0,
+    "inserted": 0,
+    "deleted": 0,
+    "errors_per_100kb": 0.0,
+    "circular_contigs": "0",
+    "true_circular": 0
+   },
+   "l02": {
+    "contigs": 3,
+    "length": 30000,
+    "true_length": 30000,
+    "covered_fraction": 1.0,
+    "duplicated_bases": 0,
+    "unaligned_bases": 0,
+    "mismatches": 0,
+    "inserted": 0,
+    "deleted": 0,
+    "errors_per_100kb": 0.0,
+    "circular_contigs": "0",
+    "true_circular": 0
+   },
+   "l03": {
+    "contigs": 3,
+    "length": 30000,
+    "true_length": 30000,
+    "covered_fraction": 1.0,
+    "duplicated_bases": 0,
+    "unaligned_bases": 0,
+    "mismatches": 0,
+    "inserted": 0,
+    "deleted": 0,
+    "errors_per_100kb": 0.0,
+    "circular_contigs": "0",
+    "true_circular": 0
+   },
+   "l04": {
+    "contigs": 3,
+    "length": 30000,
+    "true_length": 30000,
+    "covered_fraction": 1.0,
+    "duplicated_bases": 0,
+    "unaligned_bases": 0,
+    "mismatches": 0,
+    "inserted": 0,
+    "deleted": 0,
+    "errors_per_100kb": 0.0,
+    "circular_contigs": "0",
+    "true_circular": 0
+   }
+  },
+  "snps": {
+   "minimap2": {
+    "samples_expected": 5,
+    "samples_present": 5,
+    "missing": [],
+    "pairs": 10,
+    "best_convention": "events",
+    "exact_pairs": 10,
+    "max_abs_error": 0,
+    "total_abs_error": 0,
+    "wrong_pairs": [],
+    "by_convention": {
+     "events": {
+      "exact_pairs": 10,
+      "max_abs_error": 0,
+      "total_abs_error": 0
+     },
+     "sites": {
+      "exact_pairs": 10,
+      "max_abs_error": 0,
+      "total_abs_error": 0
+     },
+     "no_repeat": {
+      "exact_pairs": 10,
+      "max_abs_error": 0,
+      "total_abs_error": 0
+     }
+    }
+   },
+   "parsnp": {
+    "samples_expected": 5,
+    "samples_present": 5,
+    "missing": [],
+    "pairs": 10,
+    "best_convention": "events",
+    "exact_pairs": 10,
+    "max_abs_error": 0,
+    "total_abs_error": 0,
+    "wrong_pairs": [],
+    "by_convention": {
+     "events": {
+      "exact_pairs": 10,
+      "max_abs_error": 0,
+      "total_abs_error": 0
+     },
+     "sites": {
+      "exact_pairs": 10,
+      "max_abs_error": 0,
+      "total_abs_error": 0
+     },
+     "no_repeat": {
+      "exact_pairs": 10,
+      "max_abs_error": 0,
+      "total_abs_error": 0
+     }
+    }
+   },
+   "parsnp_default": {
+    "samples_expected": 5,
+    "samples_present": 5,
+    "missing": [],
+    "pairs": 10,
+    "best_convention": "events",
+    "exact_pairs": 10,
+    "max_abs_error": 0,
+    "total_abs_error": 0,
+    "wrong_pairs": [],
+    "by_convention": {
+     "events": {
+      "exact_pairs": 10,
+      "max_abs_error": 0,
+      "total_abs_error": 0
+     },
+     "sites": {
+      "exact_pairs": 10,
+      "max_abs_error": 0,
+      "total_abs_error": 0
+     },
+     "no_repeat": {
+      "exact_pairs": 10,
+      "max_abs_error": 0,
+      "total_abs_error": 0
+     }
+    }
+   },
+   "ska": {
+    "samples_expected": 5,
+    "samples_present": 5,
+    "missing": [],
+    "pairs": 10,
+    "best_convention": "events",
+    "exact_pairs": 10,
+    "max_abs_error": 0,
+    "total_abs_error": 0,
+    "wrong_pairs": [],
+    "by_convention": {
+     "events": {
+      "exact_pairs": 10,
+      "max_abs_error": 0,
+      "total_abs_error": 0
+     },
+     "sites": {
+      "exact_pairs": 10,
+      "max_abs_error": 0,
+      "total_abs_error": 0
+     },
+     "no_repeat": {
+      "exact_pairs": 10,
+      "max_abs_error": 0,
+      "total_abs_error": 0
+     }
+    }
+   },
+   "ska_0.5": {
+    "samples_expected": 5,
+    "samples_present": 5,
+    "missing": [],
+    "pairs": 10,
+    "best_convention": "events",
+    "exact_pairs": 10,
+    "max_abs_error": 0,
+    "total_abs_error": 0,
+    "wrong_pairs": [],
+    "by_convention": {
+     "events": {
+      "exact_pairs": 10,
+      "max_abs_error": 0,
+      "total_abs_error": 0
+     },
+     "sites": {
+      "exact_pairs": 10,
+      "max_abs_error": 0,
+      "total_abs_error": 0
+     },
+     "no_repeat": {
+      "exact_pairs": 10,
+      "max_abs_error": 0,
+      "total_abs_error": 0
+     }
+    }
+   }
+  },
+  "duration_s": 4.55
+ }
+]

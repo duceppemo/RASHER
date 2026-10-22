@@ -1,0 +1,483 @@
+[
+ {
+  "run": "samtools",
+  "assembly": {
+   "t01": {
+    "contigs": 1,
+    "length": 22000,
+    "true_length": 22000,
+    "covered_fraction": 1.0,
+    "duplicated_bases": 0,
+    "unaligned_bases": 0,
+    "mismatches": 0,
+    "inserted": 0,
+    "deleted": 0,
+    "errors_per_100kb": 0.0,
+    "circular_contigs": "NA",
+    "true_circular": 0
+   },
+   "t02": {
+    "contigs": 1,
+    "length": 22000,
+    "true_length": 22000,
+    "covered_fraction": 1.0,
+    "duplicated_bases": 0,
+    "unaligned_bases": 0,
+    "mismatches": 0,
+    "inserted": 0,
+    "deleted": 0,
+    "errors_per_100kb": 0.0,
+    "circular_contigs": "NA",
+    "true_circular": 0
+   },
+   "t03": {
+    "contigs": 1,
+    "length": 22000,
+    "true_length": 22000,
+    "covered_fraction": 1.0,
+    "duplicated_bases": 0,
+    "unaligned_bases": 0,
+    "mismatches": 0,
+    "inserted": 0,
+    "deleted": 0,
+    "errors_per_100kb": 0.0,
+    "circular_contigs": "NA",
+    "true_circular": 0
+   },
+   "t04": {
+    "contigs": 1,
+    "length": 22000,
+    "true_length": 22000,
+    "covered_fraction": 1.0,
+    "duplicated_bases": 0,
+    "unaligned_bases": 0,
+    "mismatches": 0,
+    "inserted": 0,
+    "deleted": 0,
+    "errors_per_100kb": 0.0,
+    "circular_contigs": "NA",
+    "true_circular": 0
+   }
+  },
+  "snps": {
+   "minimap2": {
+    "samples_expected": 5,
+    "samples_present": 5,
+    "missing": [],
+    "pairs": 10,
+    "best_convention": "sites",
+    "exact_pairs": 10,
+    "max_abs_error": 0,
+    "total_abs_error": 0,
+    "wrong_pairs": [],
+    "by_convention": {
+     "events": {
+      "exact_pairs": 2,
+      "max_abs_error": 10,
+      "total_abs_error": 50
+     },
+     "sites": {
+      "exact_pairs": 10,
+      "max_abs_error": 0,
+      "total_abs_error": 0
+     },
+     "no_repeat": {
+      "exact_pairs": 2,
+      "max_abs_error": 12,
+      "total_abs_error": 60
+     }
+    }
+   },
+   "ska": {
+    "samples_expected": 5,
+    "samples_present": 5,
+    "missing": [],
+    "pairs": 10,
+    "best_convention": "events",
+    "exact_pairs": 10,
+    "max_abs_error": 0,
+    "total_abs_error": 0,
+    "wrong_pairs": [],
+    "by_convention": {
+     "events": {
+      "exact_pairs": 10,
+      "max_abs_error": 0,
+      "total_abs_error": 0
+     },
+     "sites": {
+      "exact_pairs": 2,
+      "max_abs_error": 10,
+      "total_abs_error": 50
+     },
+     "no_repeat": {
+      "exact_pairs": 2,
+      "max_abs_error": 2,
+      "total_abs_error": 10
+     }
+    }
+   }
+  },
+  "duration_s": 2.49
+ },
+ {
+  "run": "skesa",
+  "assembly": {
+   "t01": {
+    "contigs": 1,
+    "length": 6958,
+    "true_length": 22000,
+    "covered_fraction": 0.4527,
+    "duplicated_bases": 0,
+    "unaligned_bases": 0,
+    "mismatches": 0,
+    "inserted": 0,
+    "deleted": 0,
+    "errors_per_100kb": 0.0,
+    "circular_contigs": "0",
+    "true_circular": 0
+   },
+   "t02": {
+    "contigs": 1,
+    "length": 6958,
+    "true_length": 22000,
+    "covered_fraction": 0.4527,
+    "duplicated_bases": 0,
+    "unaligned_bases": 0,
+    "mismatches": 0,
+    "inserted": 0,
+    "deleted": 0,
+    "errors_per_100kb": 0.0,
+    "circular_contigs": "0",
+    "true_circular": 0
+   },
+   "t03": {
+    "contigs": 1,
+    "length": 6958,
+    "true_length": 22000,
+    "covered_fraction": 0.4527,
+    "duplicated_bases": 0,
+    "unaligned_bases": 0,
+    "mismatches": 0,
+    "inserted": 0,
+    "deleted": 0,
+    "errors_per_100kb": 0.0,
+    "circular_contigs": "0",
+    "true_circular": 0
+   },
+   "t04": {
+    "contigs": 1,
+    "length": 6958,
+    "true_length": 22000,
+    "covered_fraction": 0.4527,
+    "duplicated_bases": 0,
+    "unaligned_bases": 0,
+    "mismatches": 0,
+    "inserted": 0,
+    "deleted": 0,
+    "errors_per_100kb": 0.0,
+    "circular_contigs": "0",
+    "true_circular": 0
+   }
+  },
+  "snps": {
+   "minimap2": {
+    "samples_expected": 5,
+    "samples_present": 5,
+    "missing": [],
+    "pairs": 10,
+    "best_convention": "events",
+    "exact_pairs": 2,
+    "max_abs_error": 2,
+    "total_abs_error": 10,
+    "wrong_pairs": [
+     "Reference-t02: 5 (truth 4)",
+     "Reference-t03: 7 (truth 6)",
+     "Reference-t04: 7 (truth 6)",
+     "t01-t02: 5 (truth 4)",
+     "t01-t03: 7 (truth 6)",
+     "t01-t04: 7 (truth 6)",
+     "t02-t04: 12 (truth 10)",
+     "t03-t04: 14 (truth 12)"
+    ],
+    "by_convention": {
+     "events": {
+      "exact_pairs": 2,
+      "max_abs_error": 2,
+      "total_abs_error": 10
+     },
+     "sites": {
+      "exact_pairs": 2,
+      "max_abs_error": 8,
+      "total_abs_error": 40
+     },
+     "no_repeat": {
+      "exact_pairs": 2,
+      "max_abs_error": 4,
+      "total_abs_error": 20
+     }
+    }
+   },
+   "parsnp": {
+    "samples_expected": 5,
+    "samples_present": 5,
+    "missing": [],
+    "pairs": 10,
+    "best_convention": "no_repeat",
+    "exact_pairs": 10,
+    "max_abs_error": 0,
+    "total_abs_error": 0,
+    "wrong_pairs": [],
+    "by_convention": {
+     "events": {
+      "exact_pairs": 2,
+      "max_abs_error": 2,
+      "total_abs_error": 10
+     },
+     "sites": {
+      "exact_pairs": 2,
+      "max_abs_error": 12,
+      "total_abs_error": 60
+     },
+     "no_repeat": {
+      "exact_pairs": 10,
+      "max_abs_error": 0,
+      "total_abs_error": 0
+     }
+    }
+   },
+   "ska": {
+    "samples_expected": 5,
+    "samples_present": 5,
+    "missing": [],
+    "pairs": 10,
+    "best_convention": "events",
+    "exact_pairs": 10,
+    "max_abs_error": 0,
+    "total_abs_error": 0,
+    "wrong_pairs": [],
+    "by_convention": {
+     "events": {
+      "exact_pairs": 10,
+      "max_abs_error": 0,
+      "total_abs_error": 0
+     },
+     "sites": {
+      "exact_pairs": 2,
+      "max_abs_error": 10,
+      "total_abs_error": 50
+     },
+     "no_repeat": {
+      "exact_pairs": 2,
+      "max_abs_error": 2,
+      "total_abs_error": 10
+     }
+    }
+   },
+   "ska_0.5": {
+    "samples_expected": 5,
+    "samples_present": 5,
+    "missing": [],
+    "pairs": 10,
+    "best_convention": "events",
+    "exact_pairs": 10,
+    "max_abs_error": 0,
+    "total_abs_error": 0,
+    "wrong_pairs": [],
+    "by_convention": {
+     "events": {
+      "exact_pairs": 10,
+      "max_abs_error": 0,
+      "total_abs_error": 0
+     },
+     "sites": {
+      "exact_pairs": 2,
+      "max_abs_error": 10,
+      "total_abs_error": 50
+     },
+     "no_repeat": {
+      "exact_pairs": 2,
+      "max_abs_error": 2,
+      "total_abs_error": 10
+     }
+    }
+   }
+  },
+  "duration_s": 6.59
+ },
+ {
+  "run": "spades",
+  "assembly": {
+   "t01": {
+    "contigs": 2,
+    "length": 7152,
+    "true_length": 22000,
+    "covered_fraction": 0.3251,
+    "duplicated_bases": 0,
+    "unaligned_bases": 0,
+    "mismatches": 0,
+    "inserted": 0,
+    "deleted": 0,
+    "errors_per_100kb": 0.0,
+    "circular_contigs": "0",
+    "true_circular": 0
+   },
+   "t02": {
+    "contigs": 2,
+    "length": 7152,
+    "true_length": 22000,
+    "covered_fraction": 0.3251,
+    "duplicated_bases": 0,
+    "unaligned_bases": 0,
+    "mismatches": 0,
+    "inserted": 0,
+    "deleted": 0,
+    "errors_per_100kb": 0.0,
+    "circular_contigs": "0",
+    "true_circular": 0
+   },
+   "t03": {
+    "contigs": 2,
+    "length": 7152,
+    "true_length": 22000,
+    "covered_fraction": 0.3251,
+    "duplicated_bases": 0,
+    "unaligned_bases": 0,
+    "mismatches": 0,
+    "inserted": 0,
+    "deleted": 0,
+    "errors_per_100kb": 0.0,
+    "circular_contigs": "0",
+    "true_circular": 0
+   },
+   "t04": {
+    "contigs": 2,
+    "length": 7152,
+    "true_length": 22000,
+    "covered_fraction": 0.3251,
+    "duplicated_bases": 0,
+    "unaligned_bases": 0,
+    "mismatches": 0,
+    "inserted": 0,
+    "deleted": 0,
+    "errors_per_100kb": 0.0,
+    "circular_contigs": "0",
+    "true_circular": 0
+   }
+  },
+  "snps": {
+   "minimap2": {
+    "samples_expected": 5,
+    "samples_present": 5,
+    "missing": [],
+    "pairs": 10,
+    "best_convention": "events",
+    "exact_pairs": 10,
+    "max_abs_error": 0,
+    "total_abs_error": 0,
+    "wrong_pairs": [],
+    "by_convention": {
+     "events": {
+      "exact_pairs": 10,
+      "max_abs_error": 0,
+      "total_abs_error": 0
+     },
+     "sites": {
+      "exact_pairs": 2,
+      "max_abs_error": 10,
+      "total_abs_error": 50
+     },
+     "no_repeat": {
+      "exact_pairs": 2,
+      "max_abs_error": 2,
+      "total_abs_error": 10
+     }
+    }
+   },
+   "parsnp": {
+    "samples_expected": 5,
+    "samples_present": 5,
+    "missing": [],
+    "pairs": 10,
+    "best_convention": "no_repeat",
+    "exact_pairs": 10,
+    "max_abs_error": 0,
+    "total_abs_error": 0,
+    "wrong_pairs": [],
+    "by_convention": {
+     "events": {
+      "exact_pairs": 2,
+      "max_abs_error": 2,
+      "total_abs_error": 10
+     },
+     "sites": {
+      "exact_pairs": 2,
+      "max_abs_error": 12,
+      "total_abs_error": 60
+     },
+     "no_repeat": {
+      "exact_pairs": 10,
+      "max_abs_error": 0,
+      "total_abs_error": 0
+     }
+    }
+   },
+   "ska": {
+    "samples_expected": 5,
+    "samples_present": 5,
+    "missing": [],
+    "pairs": 10,
+    "best_convention": "events",
+    "exact_pairs": 10,
+    "max_abs_error": 0,
+    "total_abs_error": 0,
+    "wrong_pairs": [],
+    "by_convention": {
+     "events": {
+      "exact_pairs": 10,
+      "max_abs_error": 0,
+      "total_abs_error": 0
+     },
+     "sites": {
+      "exact_pairs": 2,
+      "max_abs_error": 10,
+      "total_abs_error": 50
+     },
+     "no_repeat": {
+      "exact_pairs": 2,
+      "max_abs_error": 2,
+      "total_abs_error": 10
+     }
+    }
+   },
+   "ska_0.5": {
+    "samples_expected": 5,
+    "samples_present": 5,
+    "missing": [],
+    "pairs": 10,
+    "best_convention": "events",
+    "exact_pairs": 10,
+    "max_abs_error": 0,
+    "total_abs_error": 0,
+    "wrong_pairs": [],
+    "by_convention": {
+     "events": {
+      "exact_pairs": 10,
+      "max_abs_error": 0,
+      "total_abs_error": 0
+     },
+     "sites": {
+      "exact_pairs": 2,
+      "max_abs_error": 10,
+      "total_abs_error": 50
+     },
+     "no_repeat": {
+      "exact_pairs": 2,
+      "max_abs_error": 2,
+      "total_abs_error": 10
+     }
+    }
+   }
+  },
+  "duration_s": 5.4
+ }
+]

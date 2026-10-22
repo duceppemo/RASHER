@@ -4,43 +4,47 @@ THEMES = {
     "light": {"text": "#1d2433", "muted": "#5d6678", "box": "#f6f7f9", "edge": "#d7dbe2", "arrow": "#8a93a3"},
     "dark": {"text": "#e6e8ec", "muted": "#9aa3b2", "box": "#1d2129", "edge": "#363c47", "arrow": "#737d8e"},
 }
-MEAT, MEAT_EDGE, FAT = "#c2402f", "#8c2b1f", "#f4dfc8"
+MEAT, MEAT_EDGE, FAT = "#d94f3d", "#9c2f21", "#faeedd"
 FONT = "system-ui, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif"
 
 
-def wave(y, x0=90, x1=510, amp=13):
-    """A smooth 2.5-period wave from x0 to x1 at baseline y."""
-    step = (x1 - x0) / 5
-    d = f"M{x0},{y} "
-    up = True
-    for i in range(5):
-        a, b = x0 + i * step, x0 + (i + 1) * step
-        cy = y - amp if up else y + amp
-        d += f"C{a + step * 0.35:.0f},{cy} {b - step * 0.35:.0f},{cy} {b:.0f},{y} "
-        up = not up
+def wave_points(y, x0, x1, amp, periods=2.5, step_px=6):
+    """Points along a sine from x0 to x1 at baseline y."""
+    import math
+    n = max(2, int((x1 - x0) / step_px))
+    return [(x0 + (x1 - x0) * i / n, y + amp * math.sin(2 * math.pi * periods * i / n)) for i in range(n + 1)]
+
+
+def polyline(points):
+    return " ".join(f"L{x:.1f},{y:.1f}" for x, y in points)
+
+
+def ribbon(x0=110, x1=490, top=40, thickness=52, amp=15):
+    """A closed wavy strip of constant vertical thickness: a rasher seen flat, with cut ends."""
+    upper = wave_points(top, x0, x1, amp)
+    lower = wave_points(top + thickness, x1, x0, amp)[::1]
+    lower = [(x, y) for x, y in reversed(wave_points(top + thickness, x0, x1, amp))]
+    d = f"M{upper[0][0]:.1f},{upper[0][1]:.1f} " + polyline(upper[1:])
+    d += f" L{lower[0][0]:.1f},{lower[0][1]:.1f} " + polyline(lower[1:]) + " Z"
     return d
+
+
+def streak(y, x0=124, x1=476, amp=15):
+    pts = wave_points(y, x0, x1, amp)
+    return f"M{pts[0][0]:.1f},{pts[0][1]:.1f} " + polyline(pts[1:])
 
 
 def logo(theme):
     t = THEMES[theme]
-    strip = wave(62)
-    fat1 = wave(50, 110, 490, 10)
-    fat2 = wave(74, 110, 490, 10)
-    return f"""<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 210" width="600" height="210"
+    return f"""<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 220" width="600" height="220"
   font-family="{FONT}">
   <title>RASHER: Bait, Assemble and Compare Illumina short reads</title>
-  <path d="{strip}" fill="none" stroke="{MEAT_EDGE}" stroke-width="54" stroke-linecap="round"/>
-  <path d="{strip}" fill="none" stroke="{MEAT}" stroke-width="46" stroke-linecap="round"/>
-  <path d="{fat1}" fill="none" stroke="{FAT}" stroke-width="7" stroke-linecap="round" opacity="0.95"/>
-  <path d="{fat2}" fill="none" stroke="{FAT}" stroke-width="7" stroke-linecap="round" opacity="0.95"/>
-  <g fill="{FAT}">
-    <circle cx="216" cy="62" r="5"/>
-    <circle cx="300" cy="62" r="5"/>
-    <circle cx="384" cy="62" r="5"/>
-  </g>
-  <text x="300" y="155" text-anchor="middle" font-size="54" font-weight="800" letter-spacing="10"
+  <path d="{ribbon()}" fill="{MEAT}" stroke="{MEAT_EDGE}" stroke-width="3" stroke-linejoin="round"/>
+  <path d="{streak(56)}" fill="none" stroke="{FAT}" stroke-width="10" stroke-linecap="butt"/>
+  <path d="{streak(76)}" fill="none" stroke="{FAT}" stroke-width="10" stroke-linecap="butt"/>
+  <text x="300" y="165" text-anchor="middle" font-size="54" font-weight="800" letter-spacing="10"
     fill="{t['text']}">RASHER</text>
-  <text x="300" y="186" text-anchor="middle" font-size="15" letter-spacing="1"
+  <text x="300" y="196" text-anchor="middle" font-size="15" letter-spacing="1"
     fill="{t['muted']}">Bait, Assemble and Compare Illumina short reads</text>
 </svg>
 """

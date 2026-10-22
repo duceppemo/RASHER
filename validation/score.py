@@ -232,19 +232,21 @@ def score_heteroplasmy(scenario: Path, run: Path, truth: dict, snps: dict) -> di
     return out
 
 
-def origins(path: Path) -> dict[str, list[int]]:
-    """Reads and bases by origin, the last token of the read names written by simulate.py."""
+def origins(folder: Path, sample: str) -> dict[str, list[int]]:
+    """Reads (mates of a pair count as two) and bases by origin, the last token of the read names written by
+    simulate.py, in a sample's reads files of a folder: <sample>_R1/_R2.fastq.gz, or <sample>.fastq.gz."""
     counts: dict[str, list[int]] = {}
-    if not path.is_file():
-        return counts
-    with gzip.open(path, "rt") as fh:
-        for i, line in enumerate(fh):
-            if i % 4 == 0:
-                origin = line[1:].split()[0].rsplit("_", 1)[-1]
-            elif i % 4 == 1:
-                c = counts.setdefault(origin, [0, 0])
-                c[0] += 1
-                c[1] += len(line.strip())
+    for path in (folder / f"{sample}{tag}.fastq.gz" for tag in ("", "_R1", "_R2")):
+        if not path.is_file():
+            continue
+        with gzip.open(path, "rt") as fh:
+            for i, line in enumerate(fh):
+                if i % 4 == 0:
+                    origin = line[1:].split()[0].removesuffix("/1").removesuffix("/2").rsplit("_", 1)[-1]
+                elif i % 4 == 1:
+                    c = counts.setdefault(origin, [0, 0])
+                    c[0] += 1
+                    c[1] += len(line.strip())
     return counts
 
 
@@ -254,11 +256,11 @@ def score_numt(scenario: Path, run: Path, truth: dict, snps: dict, cache: dict) 
     dist = {m: read_distances(p) for m in snps for p in [run / "4_compared" / m / "snp_distances.tsv"]}
     for sample, t in truth["samples"].items():
         if sample not in cache:
-            cache[sample] = origins(scenario / "reads" / f"{sample}.fastq.gz")
+            cache[sample] = origins(scenario / "reads", sample)
         row: dict = {"nuclear_depth": t["nuclear_depth"], "nuclear_genome": t["nuclear_genome"],
                      "reads": {"simulated": cache[sample],
-                               "baited": origins(run / "1_extracted" / f"{sample}.fastq.gz"),
-                               "filtered": origins(run / "2_filtered" / f"{sample}.fastq.gz")},
+                               "baited": origins(run / "1_extracted", sample),
+                               "filtered": origins(run / "2_filtered", sample)},
                      "distance_to_reference": {m: d.get("Reference", {}).get(sample) for m, d in dist.items()},
                      "true_distance": truth["distances"]["events"]["Reference"][sample]}
         asm = run / "3_assembled" / "all_assemblies" / f"{sample}.fasta"
@@ -428,9 +430,9 @@ def _reads(counts: dict[str, list[int]], kind: str) -> int:
 def markdown_numt(results: list[dict], truth: dict) -> list[str]:
     inserts = {g: v["inserts"] for g, v in truth["nuclear"].items()}
     out = ["", "### Reads by origin", "",
-           "Reads simulated / baited (1_extracted) / kept by the filter (2_filtered). NUPT reads: nuclear reads "
-           "covering at least 100 bp of an insert; nuclear: the other nuclear reads. Share: of the filtered "
-           "reads (bases).", "",
+           "Reads (both mates of a pair counted) simulated / baited (1_extracted) / kept by the filter "
+           "(2_filtered). NUPT reads: nuclear pairs whose fragment covers at least 100 bp of an insert; nuclear: "
+           "the other nuclear reads. Share: of the filtered reads (bases).", "",
            "| Run | Sample | Nuclear depth (genome) | Organelle reads | NUPT reads | Nuclear reads | "
            "NUPT share of filtered reads (bases) |",
            "|---|---|---|---|---|---|---|"]

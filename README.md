@@ -44,8 +44,8 @@ as `-r`), the report also shows the genes and the effect of each SNP; with `--me
 with a `sample` column and any others, such as a group or a year), it shows the metadata in the samples table
 and colours every genome in the report (tree, heatmap, bar charts, tables) by one column (`--color-by`).
 
-To check an installation, run the example (simulated reads with known SNPs; a few seconds). It is in the
-repository:
+To check an installation, run the example (simulated paired reads with known SNPs; about ten seconds). It is
+in the repository:
 
 ```bash
 curl -sL https://github.com/duceppemo/RASHER/archive/refs/tags/v0.1.0.tar.gz | tar -xz --strip-components=1 RASHER-0.1.0/example

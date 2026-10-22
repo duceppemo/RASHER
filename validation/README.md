@@ -6,7 +6,7 @@ dated records of every validation.
 | File | Purpose |
 |---|---|
 | `simulate.py` | Generates the scenarios (reference, reads, true genomes, `truth.json`). Deterministic: the same seed gives byte-identical files. Standard library only |
-| `run_validation.sh` | Runs RASHER on every scenario with every assembler and SNP method, then `score.py` (`new`: the heteroplasmy and NUPT scenarios, templated and Flye, compared with SKA2 and minimap2) |
+| `run_validation.sh` | Runs RASHER on every scenario with every assembler (samtools, SPAdes, SKESA) and SNP method, then `score.py` (`new`: the heteroplasmy and NUPT scenarios) |
 | `score.py` | Scores RASHER output folders against the truth: assembly completeness and consensus errors (minimap2), SNP distances; for the new scenarios, the alleles called at minor-haplotype or NUPT sites and the origin of the baited reads |
 | `compare_runs.py` | For real data without a truth: agreement between runs (assemblers, SNP methods) |
 | `results/<date>_<version>/` | Records: summary, scores, program versions |
@@ -21,10 +21,11 @@ dated records of every validation.
 | `heteroplasmy` | 70 kb circular, as `plastid` | 9 mixtures of a major and a minor haplotype (25 SNPs: 15 LSC, 5 SSC, 5 in the inverted repeat; and 3 indels of 1–5 bp), minor fraction 0, 0.02, 0.05, 0.10, 0.20, 0.30, 0.40 and 0.50 (a tie); one more at 0.20 whose haplotypes both carry 12 SNPs of their own; 80x | at which minor fraction the consensus stops reporting the major allele (N, or the minor allele), and whether the SNP distances move |
 | `numt` | 120 kb circular, chloroplast-like (LSC 80 kb, IR 12 kb, SSC 16 kb), 50x | 6 (0–7 SNPs), whose off-target reads are nuclear: four with reads of a 765 kb nuclear sequence holding eight plastome segments (NUPTs: 0.5, 2, 5 and 15 kb at 99.9, 99, 97 and 90% identity) between 80 kb spacers, at 0.5, 2, 10 and 25x; two (10x, 25x) whose NUPTs are all 99.9% identical, with substitutions recorded in the truth | how many NUPT reads baiting keeps, consensus errors inside the copied segments, whether NUPT alleles reach the assembly or the SNP distances (they must not) |
 
-Reads mimic R10.4.1 SUP reads: about 0.4% substitutions, 0.2% random insertions and deletions, and homopolymer
-length errors that grow with the run length; log-normal lengths (N50 about 8 kb); 15% of the reads come from
-an unrelated sequence, which baiting must remove (in `numt`, the nuclear reads instead). Real Nanopore errors
-are more systematic than these; the real-data comparisons in the records complement the simulations.
+Reads mimic Illumina 2x150 bp pairs: inserts of 350 ± 50 bp (at least 170), about 0.2% substitutions and no
+indels, qualities around Q36 falling off towards the 3' end; 15% of the pairs come from an unrelated
+sequence, which baiting must remove (in `numt`, the nuclear reads instead). Real Illumina errors are more
+systematic than these; the real-data comparisons in the records complement the simulations. The mates of a
+pair carry the same name, as the SRA writes them; depths count the bases of both mates.
 
 In `heteroplasmy` and `numt` each read name ends with its origin (`_major`, `_minor` or `_offtarget`;
 `_organelle`, `_nupt<insert>` for a nuclear read covering at least 100 bp of an insert, or `_nuclear`), which
@@ -47,8 +48,9 @@ bash validation/run_validation.sh /tmp/rasher_validation 16          # plastid, 
 bash validation/run_validation.sh /tmp/rasher_validation_new 16 new  # heteroplasmy, numt
 ```
 
-Each takes a few minutes (the second about 10: Flye on the mixtures, and generating about 170 Mb of reads).
-`python validation/simulate.py FOLDER --scenario new` writes only the new scenarios; `all` (the default) is
-still the original three, so earlier records reproduce unchanged. To add a record, copy `versions.txt` and `SCORES_*` into a new
-`results/<date>_<version>/` folder with a `SUMMARY.md`. Records are never rewritten: an error found later is
-noted as an erratum in a new record.
+Each takes a few minutes. `python validation/simulate.py FOLDER --scenario new` writes only the new
+scenarios; `all` (the default) is the original three. The simulator writes paired short reads since RASHER
+0.1.0: the BACoN-era records under `results/` (dated before the fork) were made with its Nanopore read
+model and do not reproduce from this simulator. To add a record, copy `versions.txt` and `SCORES_*` into a
+new `results/<date>_<version>/` folder with a `SUMMARY.md`. Records are never rewritten: an error found
+later is noted as an erratum in a new record.

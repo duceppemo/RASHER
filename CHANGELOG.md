@@ -8,6 +8,25 @@ changelog" is the parent tool's history, kept for provenance.
 
 ### Changed
 - Renamed throughout: the package, command, log (`rasher.log`) and lock file (`.rasher.lock`) are `rasher`.
+- **The pipeline reads Illumina short reads**, paired or single-end. `sample_R1`/`sample_R2`, `sample_1`/`_2`
+  and `sample.R1`/`.R2` files (bcl2fastq `_001` tails included) pair into one sample, in flat folders,
+  subfolders and sample sheets; a file without a mate is a single-end sample. A pair is baited whole when
+  either mate matches the reference, mates travel together through every step (`1_extracted/<sample>_R1/_R2`,
+  `2_filtered/...`), and a desynchronised pair is an error, whether the mates carry identical names or `/1 /2`
+  suffixes.
+- Baiting aligns with minimap2 `-x sr` (BBDuk baits pairs natively with `in2=`/`outm2=`). `--keep-bam` now
+  keeps the *baited* reads aligned to the reference (paired samples: a proper paired BAM).
+- Filtering: **fastp** (adapter trimming, quality and length filters; its JSON and HTML reports land in
+  `logs/2_filter/` where MultiQC finds them) followed by deterministic, evenly spread subsampling of the
+  reads (pairs kept whole) to `--target-depth`. Filtlong, `--keep-percent` and `--filter-by-reference` are
+  gone; `--min-read-length` defaults to 50. Fasta reads skip fastp and are filtered by length.
+- Templated assembly aligns pairs with minimap2 `-ax sr` and calls `samtools consensus -X hiseq` (call
+  quality at least 20, as BACoN 0.4.1).
+- De novo assembly: **SPAdes** (`-a spades`, `--isolate`) or **SKESA** (`-a skesa`; conservative, breaks at
+  repeats such as the plastome inverted repeat — see the validation before choosing it). Flye and myloasm
+  are gone, with `--read-type` and `--min-size`.
+- `--snp-method auto` is minimap2 for templated assemblies and SKA2 for SPAdes and SKESA assemblies.
+- Output folders of BACoN do not resume under RASHER (every step runs again); BACoN VCFs are rewritten.
 
 ---
 

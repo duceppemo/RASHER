@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-"""Generate the RASHER example: an annotated 30 kb circular "organelle" reference, four simulated nanopore samples
-with known SNPs, and a sample metadata file, so that every part of the report is exercised.
+"""Generate the RASHER example: an annotated 30 kb circular "organelle" reference, four samples of simulated
+Illumina read pairs with known SNPs, and a sample metadata file, so that every part of the report is exercised.
 
 The reference is laid out like a plastome: a large single-copy region (LSC, 16,000 bp), an inverted repeat
 (IRb, 3,000 bp), a small single-copy region (SSC, 8,000 bp) and the second copy of the repeat (IRa, the reverse
@@ -24,9 +24,9 @@ the second exon of the split gene), an intron, tRNAs, the pseudogene and interge
 lists them per sample; planted_effects.tsv gives the expected region, gene, context and effect of each, computed
 here without RASHER. metadata.tsv is a sample metadata file with simulated values.
 
-Reads are 1-20 kb long with about 1.5% errors (substitutions, insertions, deletions), at ~50x depth, mixed with
-20% off-target reads from an unrelated sequence, which baiting must remove. Deterministic (fixed seed).
-Standard library only.
+Reads are 2 x 150 bp pairs (reads/<sample>_R1.fastq.gz and _R2.fastq.gz) from inserts of 350 +- 50 bp (at
+least 170), with 0.2% substitutions, at ~50x depth (both mates), mixed with 20% off-target pairs from an unrelated
+sequence, which baiting must remove. Deterministic (fixed seed). Standard library only.
 
 Usage: python make_example.py OUTPUT_FOLDER
 """
@@ -40,8 +40,10 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 GENOME_LENGTH = 30_000
-DEPTH = 50
-ERROR_RATE = 0.015
+DEPTH = 50  # Of both mates' bases
+READ_LENGTH = 150  # 2 x 150 bp pairs
+INSERT_MEAN, INSERT_SD, MIN_INSERT = 350, 50, 170
+ERROR_RATE = 0.002  # Substitutions per base
 OFF_TARGET_FRACTION = 0.2
 SEED = 20260924
 MIN_SNP_SPACING = 40  # SKA's split k-mers need clean flanks
@@ -508,54 +510,59 @@ def write_reference(out: Path, reference: Reference) -> None:
 # Reads
 # ---------------------------------------------------------------------------------------------------------------
 
-def add_errors(seq: str, rng: random.Random) -> str:
-    out = []
-    for base in seq:
-        r = rng.random()
-        if r < ERROR_RATE * 0.5:
-            out.append(rng.choice([b for b in "ACGT" if b != base]))
-        elif r < ERROR_RATE * 0.75:
-            out.append(base + rng.choice("ACGT"))
-        elif r < ERROR_RATE:
-            continue
+def insert_length(rng: random.Random) -> int:
+    return max(MIN_INSERT, int(rng.gauss(INSERT_MEAN, INSERT_SD)))
+
+
+def read(seq: str, rng: random.Random) -> tuple[str, str]:
+    """A read with substitutions and its base qualities (about Q36, lower towards the 3' end; Q10-25 on a
+    substituted base)."""
+    bases, qual = [], []
+    for i, base in enumerate(seq):
+        if rng.random() < ERROR_RATE:
+            bases.append(rng.choice([b for b in "ACGT" if b != base]))
+            qual.append(rng.randint(10, 25))
         else:
-            out.append(base)
-    return "".join(out)
+            bases.append(base)
+            qual.append(36 - 5 * i // READ_LENGTH + rng.randint(-2, 2))
+    return "".join(bases), "".join(chr(33 + q) for q in qual)
 
 
-def read_length(rng: random.Random) -> int:
-    return max(1000, min(20_000, int(rng.lognormvariate(8.6, 0.5))))
-
-
-def simulate(genome: str, off_target: str, rng: random.Random, name: str) -> list[str]:
-    records, bases, n = [], 0, 0
+def simulate(genome: str, off_target: str, rng: random.Random, name: str) -> list[tuple[str, str]]:
+    """Read pairs until both mates' bases on the genome reach DEPTH: an insert from either strand of the circular
+    genome (or, for OFF_TARGET_FRACTION of the pairs, of the unrelated sequence), R1 its first READ_LENGTH bases,
+    R2 the reverse complement of its last ones. Both mates have the same name."""
+    pairs, bases, n = [], 0, 0
     circular = genome + genome
     while bases < DEPTH * len(genome):
         n += 1
-        length = read_length(rng)
+        length = insert_length(rng)
         if rng.random() < OFF_TARGET_FRACTION:
             start = rng.randrange(len(off_target) - length)
             fragment = off_target[start: start + length]
         else:
             start = rng.randrange(len(genome))
-            fragment = circular[start: start + min(length, len(genome))]
-            bases += len(fragment)
+            fragment = circular[start: start + length]
+            bases += 2 * READ_LENGTH
         if rng.random() < 0.5:
             fragment = revcomp(fragment)
-        seq = add_errors(fragment, rng)
-        qual = "".join(rng.choice("0123456789:;<=>?@ABC") for _ in seq)
-        records.append(f"@{name}_read{n} simulated\n{seq}\n+\n{qual}\n")
-    return records
+        mates = [read(seq, rng) for seq in (fragment[:READ_LENGTH], revcomp(fragment[-READ_LENGTH:]))]
+        pairs.append(tuple(f"@{name}_read{n} simulated\n{seq}\n+\n{qual}\n" for seq, qual in mates))
+    return pairs
 
 
 def write_reads(out: Path, reference: Reference, rng: random.Random) -> None:
+    """reads/<sample>_R1.fastq.gz and reads/<sample>_R2.fastq.gz (RASHER pairs them by their names)."""
     off_target = random_sequence(rng, 200_000, gc=0.5)
     sets = reference.snp_sets()
     (out / "reads").mkdir(parents=True, exist_ok=True)
     for sample, keys in SAMPLES.items():
         genome = mutate(reference.seq, [change for k in keys for change in sets[k]])
-        with gzip.GzipFile(out / "reads" / f"{sample}.fastq.gz", "wb", compresslevel=6, mtime=0) as fh:
-            fh.write("".join(simulate(genome, off_target, rng, sample)).encode())
+        pairs = simulate(genome, off_target, rng, sample)
+        for mate in (0, 1):
+            path = out / "reads" / f"{sample}_R{mate + 1}.fastq.gz"
+            with gzip.GzipFile(path, "wb", compresslevel=6, mtime=0) as fh:
+                fh.write("".join(p[mate] for p in pairs).encode())
 
 
 def main(out: Path) -> None:

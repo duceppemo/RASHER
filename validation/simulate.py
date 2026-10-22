@@ -29,13 +29,17 @@ numt     A 120 kb plastome (LSC 80 kb, IR 12 kb, SSC 16 kb) at 50x and, instead 
          nuclear genome whose eight copies are all 99.9% identical, with substitutions only (recorded in truth).
          Organelle SNPs: n01 none; n02 = n05: 3; n03 = n02 + 2; n04 5; n06 = n04 + 2.
 
-Reads mimic R10.4.1 SUP reads: ~0.4% substitutions, ~0.2% random indels and homopolymer length errors that grow
-with the run length; read lengths are log-normal (N50 ~8 kb); 15% of the reads come from an unrelated sequence
-(baiting must remove them). Deterministic: the same seed gives the same files. Standard library only. The
-read names of heteroplasmy and numt say where each read comes from (a last token after "_": major, minor,
-offtarget; organelle, nupt<insert id>, nuclear), for score.py to count them.
+Reads are Illumina-like 2 x 150 bp pairs: inserts of normal length (mean 350, sd 50 bp, at least 170 bp, clipped
+at the ends of linear molecules; circular ones wrap) from either strand, R1 the first 150 bases of the insert and
+R2 the reverse complement of the last 150; 0.2% substitutions per base, no indels; base qualities about Q36
+decaying to Q31 at the 3' end (Q10-25 on a substituted base). 15% of the pairs come from an unrelated sequence
+(baiting must remove them). The depth counts the bases of both mates. Both mates have the same name (no /1,
+/2). Deterministic: the same seed gives the same files. Standard library only. The read names of heteroplasmy
+and numt say where each pair comes from (a last token after "_": major, minor, offtarget; organelle,
+nupt<insert id>, nuclear), for score.py to count them.
 
-Writes, for each scenario: reference.fasta, reads/<sample>.fastq.gz, truth/<sample>.fasta (true genomes) and
+Writes, for each scenario: reference.fasta, reads/<sample>_R1.fastq.gz and reads/<sample>_R2.fastq.gz,
+truth/<sample>.fasta (true genomes) and
 truth.json (SNP events, expected distances, circularity, repeats); heteroplasmy adds truth/minor/<sample>.fasta
 (the minor haplotype) and the minor sites, numt truth/nuclear/<A|B>.fasta and the inserts.
 
@@ -51,6 +55,7 @@ from __future__ import annotations
 import argparse
 import gzip
 import json
+import math
 import random
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -279,7 +284,7 @@ def heteroplasmy(rng: random.Random) -> Scenario:
 # NUPTs: (length, identity to the plastome) of each insert, numbered from 1 in this order.
 NUPT_INSERTS = ((500, 0.999), (500, 0.90), (2_000, 0.99), (2_000, 0.97), (5_000, 0.97), (5_000, 0.999),
                 (15_000, 0.90), (15_000, 0.99))
-NUPT_SPACER = 80_000  # Two of the longest reads (40 kb): no chain of baited reads joins two inserts
+NUPT_SPACER = 80_000  # Far wider than any fragment: no chain of baited reads joins two inserts
 # Sample: (nuclear depth, nuclear genome). B: the same inserts, all 99.9% identical, substitutions only.
 NUMT_SAMPLES = {"n01": (0.5, "A"), "n02": (2.0, "A"), "n03": (10.0, "A"), "n04": (25.0, "A"), "n05": (10.0, "B"),
                 "n06": (25.0, "B")}
@@ -398,122 +403,110 @@ def apply_variants(sc: Scenario, variant_ids: list[str]) -> list[Molecule]:
 # Reads
 # ---------------------------------------------------------------------------------------------------------------
 
-SUB, INDEL = 0.004, 0.002
+READ_LENGTH = 150  # 2 x 150 bp pairs
+INSERT_MEAN, INSERT_SD, MIN_INSERT = 350, 50, 170  # Insert (fragment) lengths: normal, at least MIN_INSERT
+SUB = 0.002  # Substitutions per base (no indels: Illumina's are rare)
+LOG_NO_SUB = math.log(1 - SUB)
+# Base qualities: about Q36 at the 5' end, decaying to about Q31 at the 3' end, -3 to +2; a substituted base gets
+# Q10-25 (so qualities and errors agree only loosely, as on real data).
+QUALITY_PROFILE = [36 - 5 * (i / (READ_LENGTH - 1)) ** 2 for i in range(READ_LENGTH)]
+QUALITY_NOISE = (-3, -2, -1, 0, 1, 2)
 
 
-def add_errors(seq: str, rng: random.Random) -> str:
-    out = []
-    i, n = 0, len(seq)
-    while i < n:
-        j = i
-        while j < n and seq[j] == seq[i]:
-            j += 1
-        run = j - i
-        base = seq[i]
-        # Homopolymer length errors: more likely in long runs, mostly deletions (typical of R10.4.1 SUP).
-        if run >= 3 and rng.random() < 0.012 * (run - 2):
-            run += 1 if rng.random() < 0.35 else -1
-        for _ in range(run):
-            r = rng.random()
-            if r < SUB:
-                out.append(_alt(rng, base))
-            elif r < SUB + INDEL / 2:
-                continue
-            elif r < SUB + INDEL:
-                out.append(base + rng.choice("ACGT"))
-            else:
-                out.append(base)
-        i = j
-    return "".join(out)
-
-
-def read_length(rng: random.Random) -> int:
-    return max(800, min(40_000, int(rng.lognormvariate(8.7, 0.6))))
-
-
-def quality(rng: random.Random, n: int) -> str:
-    return "".join(chr(33 + max(3, min(50, int(rng.gauss(22, 6))))) for _ in range(n))
-
-
-def simulate_reads(genome: list[Molecule], off_target: str, depth: float, rng: random.Random, name: str,
-                   off_target_fraction: float = 0.15) -> list[str]:
-    total = sum(len(m.seq) for m in genome)
-    weights = [len(m.seq) for m in genome]
-    records, bases, n = [], 0, 0
-    while bases < depth * total:
-        n += 1
-        length = read_length(rng)
-        if rng.random() < off_target_fraction:
-            start = rng.randrange(len(off_target) - length)
-            fragment = off_target[start: start + length]
-        else:
-            mol = rng.choices(genome, weights=weights)[0]
-            if mol.circular:
-                start = rng.randrange(len(mol.seq))
-                fragment = (mol.seq + mol.seq)[start: start + min(length, len(mol.seq))]
-            else:  # Linear molecule: fragments stop at the ends
-                start = rng.randrange(-length + 200, len(mol.seq) - 200)
-                fragment = mol.seq[max(0, start): max(0, start) + length if start >= 0 else start + length]
-            if len(fragment) < 200:
-                continue
-            bases += len(fragment)
-        if rng.random() < 0.5:
-            fragment = revcomp(fragment)
-        seq = add_errors(fragment, rng)
-        records.append(f"@{name}_{n} simulated\n{seq}\n+\n{quality(rng, len(seq))}\n")
-    return records
+def insert_length(rng: random.Random) -> int:
+    return max(MIN_INSERT, int(rng.gauss(INSERT_MEAN, INSERT_SD)))
 
 
 def _fragment(mol: Molecule, length: int, rng: random.Random) -> tuple[int, str]:
-    """A fragment of `mol` and its start (as in simulate_reads: circular molecules wrap, linear ones stop)."""
+    """A fragment of `mol` and its start: circular molecules wrap; linear ones stop at the ends (the fragment is
+    clipped there, never below MIN_INSERT)."""
     if mol.circular:
         start = rng.randrange(len(mol.seq))
         return start, (mol.seq + mol.seq)[start: start + min(length, len(mol.seq))]
-    start = rng.randrange(-length + 200, len(mol.seq) - 200)
+    start = rng.randrange(-length + MIN_INSERT, len(mol.seq) - MIN_INSERT)
     return max(0, start), mol.seq[max(0, start): start + length]
 
 
-def _fastq(fragment: str, rng: random.Random, name: str) -> str:
+def _read(seq: str, rng: random.Random) -> tuple[str, str]:
+    """A read with substitutions (geometric gaps between them) and its qualities."""
+    noise = rng.choices(QUALITY_NOISE, k=len(seq))
+    qual = [min(41, max(2, int(QUALITY_PROFILE[i] + noise[i]))) for i in range(len(seq))]
+    bases = list(seq)
+    i = int(math.log(1 - rng.random()) / LOG_NO_SUB)
+    while i < len(bases):
+        bases[i] = _alt(rng, bases[i])
+        qual[i] = rng.randint(10, 25)
+        i += 1 + int(math.log(1 - rng.random()) / LOG_NO_SUB)
+    return "".join(bases), "".join(chr(33 + q) for q in qual)
+
+
+def _pair(fragment: str, rng: random.Random, name: str) -> tuple[str, str]:
+    """The two mates of a fragment taken from a random strand: R1 the first READ_LENGTH bases, R2 the reverse
+    complement of the last ones. Both mates have the same name (no /1, /2: as SRA writes them)."""
     if rng.random() < 0.5:
         fragment = revcomp(fragment)
-    seq = add_errors(fragment, rng)
-    return f"@{name} simulated\n{seq}\n+\n{quality(rng, len(seq))}\n"
+    out = []
+    for seq in (fragment[:READ_LENGTH], revcomp(fragment[-READ_LENGTH:])):
+        seq, qual = _read(seq, rng)
+        out.append(f"@{name} simulated\n{seq}\n+\n{qual}\n")
+    return out[0], out[1]
+
+
+def _off_target(off_target: str, rng: random.Random) -> str:
+    length = insert_length(rng)
+    start = rng.randrange(len(off_target) - length)
+    return off_target[start: start + length]
+
+
+Pairs = list[tuple[str, str]]
+
+
+def simulate_reads(genome: list[Molecule], off_target: str, depth: float, rng: random.Random, name: str,
+                   off_target_fraction: float = 0.15) -> Pairs:
+    """Read pairs of the genome until both mates' bases reach `depth`, with unrelated pairs mixed in (15% of the
+    pairs, not counted in the depth)."""
+    total = sum(len(m.seq) for m in genome)
+    weights = [len(m.seq) for m in genome]
+    pairs, bases, n = [], 0, 0
+    while bases < depth * total:
+        n += 1
+        if rng.random() < off_target_fraction:
+            fragment = _off_target(off_target, rng)
+        else:
+            fragment = _fragment(rng.choices(genome, weights=weights)[0], insert_length(rng), rng)[1]
+            bases += 2 * READ_LENGTH
+        pairs.append(_pair(fragment, rng, f"{name}_{n}"))
+    return pairs
 
 
 def mixture_reads(major: Molecule, minor: Molecule, fraction: float, off_target: str, depth: float,
-                  rng: random.Random, name: str, off_target_fraction: float = 0.15) -> list[str]:
-    """Reads of a mixture of two haplotypes, the minor one making `fraction` of the organelle reads, plus
-    unrelated reads. Each read name ends in its origin: major, minor or offtarget."""
-    records, bases, n = [], 0, 0
+                  rng: random.Random, name: str, off_target_fraction: float = 0.15) -> Pairs:
+    """Read pairs of a mixture of two haplotypes, the minor one making `fraction` of the organelle pairs, plus
+    unrelated pairs. Each read name ends in its origin: major, minor or offtarget."""
+    pairs, bases, n = [], 0, 0
     while bases < depth * len(major.seq):
         n += 1
-        length = read_length(rng)
         if rng.random() < off_target_fraction:
-            start = rng.randrange(len(off_target) - length)
-            fragment, origin = off_target[start: start + length], "offtarget"
+            fragment, origin = _off_target(off_target, rng), "offtarget"
         else:
             origin = "minor" if rng.random() < fraction else "major"
-            fragment = _fragment(minor if origin == "minor" else major, length, rng)[1]
-            if len(fragment) < 200:
-                continue
-            bases += len(fragment)
-        records.append(_fastq(fragment, rng, f"{name}_{n}_{origin}"))
-    return records
+            fragment = _fragment(minor if origin == "minor" else major, insert_length(rng), rng)[1]
+            bases += 2 * READ_LENGTH
+        pairs.append(_pair(fragment, rng, f"{name}_{n}_{origin}"))
+    return pairs
 
 
 def numt_reads(organelle: Molecule, nuclear: Molecule, inserts: list[dict], organelle_depth: float,
-               nuclear_depth: float, rng: random.Random, name: str) -> list[str]:
-    """Organelle reads and nuclear reads (no other off-target reads), shuffled. Each read name ends in its
-    origin: organelle, nupt<id> (a nuclear read covering at least 100 bp of insert <id>; the insert it covers
-    most) or nuclear."""
-    records, n = [], 0
+               nuclear_depth: float, rng: random.Random, name: str) -> Pairs:
+    """Organelle pairs and nuclear pairs (no other off-target reads), shuffled. Each read name ends in its
+    origin: organelle, nupt<id> (a nuclear fragment covering at least 100 bp of insert <id>; the insert it
+    covers most) or nuclear."""
+    pairs, n = [], 0
     for mol, depth in ((organelle, organelle_depth), (nuclear, nuclear_depth)):
         bases = 0
         while bases < depth * len(mol.seq):
-            start, fragment = _fragment(mol, read_length(rng), rng)
-            if len(fragment) < 200:
-                continue
-            bases += len(fragment)
+            start, fragment = _fragment(mol, insert_length(rng), rng)
+            bases += 2 * READ_LENGTH
             n += 1
             origin = "organelle" if mol is organelle else "nuclear"
             if mol is nuclear:
@@ -522,9 +515,9 @@ def numt_reads(organelle: Molecule, nuclear: Molecule, inserts: list[dict], orga
                                     for i in inserts)
                 if overlap >= 100:
                     origin = f"nupt{best}"
-            records.append(_fastq(fragment, rng, f"{name}_{n}_{origin}"))
-    rng.shuffle(records)
-    return records
+            pairs.append(_pair(fragment, rng, f"{name}_{n}_{origin}"))
+    rng.shuffle(pairs)
+    return pairs
 
 
 # ---------------------------------------------------------------------------------------------------------------
@@ -560,10 +553,11 @@ def write_fasta(path: Path, molecules: list[Molecule]) -> None:
                 fh.write(m.seq[i: i + 80] + "\n")
 
 
-def write_reads(path: Path, records: list[str]) -> None:
-    # mtime=0: the same seed gives byte-identical files.
-    with gzip.GzipFile(path, "wb", compresslevel=6, mtime=0) as fh:
-        fh.write("".join(records).encode())
+def write_reads(folder: Path, sample: str, pairs: Pairs) -> None:
+    """<sample>_R1.fastq.gz and <sample>_R2.fastq.gz; mtime=0: the same seed gives byte-identical files."""
+    for mate in (0, 1):
+        with gzip.GzipFile(folder / f"{sample}_R{mate + 1}.fastq.gz", "wb", compresslevel=6, mtime=0) as fh:
+            fh.write("".join(p[mate] for p in pairs).encode())
 
 
 def truth_record(sc: Scenario, depth: float) -> dict:
@@ -586,7 +580,7 @@ def build(sc: Scenario, out: Path, depth: float, rng: random.Random) -> None:
         genome = apply_variants(sc, variant_ids)
         write_fasta(out / "truth" / f"{sample}.fasta", genome)
         reads = simulate_reads(genome, off_target, sc.depth.get(sample, depth), rng, sample)
-        write_reads(out / "reads" / f"{sample}.fastq.gz", reads)
+        write_reads(out / "reads", sample, reads)
     (out / "truth.json").write_text(json.dumps(truth_record(sc, depth), indent=1) + "\n")
 
 
@@ -625,7 +619,7 @@ def build_heteroplasmy(sc: Scenario, out: Path, rng: random.Random) -> None:
         write_fasta(out / "truth" / "minor" / f"{sample}.fasta", minor)
         fraction = sc.extra["minor_fraction"][sample]
         reads = mixture_reads(major[0], minor[0], fraction, off_target, sc.depth[sample], rng, sample)
-        write_reads(out / "reads" / f"{sample}.fastq.gz", reads)
+        write_reads(out / "reads", sample, reads)
         truth["samples"][sample].update(minor_fraction=fraction, minor_sites=minor_sites(sc, major[0].seq))
     truth["minor_variants"] = sc.extra["minor_variants"]
     (out / "truth.json").write_text(json.dumps(truth, indent=1) + "\n")
@@ -645,7 +639,7 @@ def build_numt(sc: Scenario, out: Path, rng: random.Random) -> None:
         depth = sc.extra["nuclear_depth"][sample]
         reads = numt_reads(organelle[0], sc.extra["nuclear"][genome], sc.extra["inserts"][genome],
                            sc.depth[sample], depth, rng, sample)
-        write_reads(out / "reads" / f"{sample}.fastq.gz", reads)
+        write_reads(out / "reads", sample, reads)
         truth["samples"][sample].update(nuclear_depth=depth, nuclear_genome=genome)
     truth["copied_regions"] = sc.extra["copied_regions"]
     truth["nuclear"] = {name: {"length": len(mol.seq), "inserts": sc.extra["inserts"][name]}

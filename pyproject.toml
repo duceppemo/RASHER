@@ -3,10 +3,10 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "bacon-nanopore"
-# Static on purpose (see mashID): tests/test_cli.py keeps this in sync with bacon.__version__.
-version = "0.4.0"
-description = "Bait, Assemble and Compare Nanopore reads matching a reference sequence, such as an organelle genome."
+name = "rasher"
+# Static on purpose (see mashID): tests/test_cli.py keeps this in sync with rasher.__version__.
+version = "0.1.0"
+description = "Bait, Assemble and Compare Illumina short reads matching a reference sequence, such as an organelle genome."
 readme = "README.md"
 license = { text = "MIT" }
 authors = [{ name = "Marc-Olivier Duceppe" }]
@@ -24,21 +24,21 @@ fast = ["isal>=1.0"]      # faster gzip decompression of reads
 test = ["pytest>=7", "pytest-cov>=5", "ruff", "pre-commit"]
 
 [project.urls]
-Homepage = "https://github.com/duceppemo/BACoN"
-Documentation = "https://github.com/duceppemo/BACoN/wiki"
+Homepage = "https://github.com/duceppemo/RASHER"
+Documentation = "https://github.com/duceppemo/RASHER/wiki"
 
 [project.scripts]
-bacon = "bacon.cli:main"
+rasher = "rasher.cli:main"
 
 [tool.setuptools]
-packages = ["bacon"]
+packages = ["rasher"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-markers = ["tools: needs the external programs (minimap2, filtlong, flye, ska, ...) on PATH"]
+markers = ["tools: needs the external programs (minimap2, fastp, spades.py, ska, ...) on PATH"]
 
 [tool.coverage.run]
-source = ["bacon"]
+source = ["rasher"]
 
 [tool.ruff]
 line-length = 115

@@ -1,7 +1,7 @@
 import pytest
 
-from bacon import BaconError
-from bacon.seqio import (
+from rasher import RasherError
+from rasher.seqio import (
     check_reference,
     extract_reads,
     n50,
@@ -42,7 +42,7 @@ def test_multiline_fasta(tmp_path):
 def test_truncated_fastq_is_an_error(tmp_path):
     p = tmp_path / "t.fastq"
     p.write_text("@r1\nACGT\n+\nII\n")
-    with pytest.raises(BaconError, match="malformed or truncated"):
+    with pytest.raises(RasherError, match="malformed or truncated"):
         list(read_records(p))
 
 
@@ -50,7 +50,7 @@ def test_sniff_format(tmp_path):
     (tmp_path / "e.fastq").write_text("\n\n")
     assert sniff_format(tmp_path / "e.fastq") is None
     (tmp_path / "x.fasta").write_text("hello\n")
-    with pytest.raises(BaconError, match="neither fasta nor fastq"):
+    with pytest.raises(RasherError, match="neither fasta nor fastq"):
         sniff_format(tmp_path / "x.fasta")
 
 
@@ -79,20 +79,20 @@ def test_extract_reads(fastq, tmp_path):
 
 def test_check_reference(fasta):
     assert check_reference(fasta("ok.fasta", [("a", "ACGT"), ("b", "GG")])) == [("a", 4), ("b", 2)]
-    with pytest.raises(BaconError, match="duplicate"):
+    with pytest.raises(RasherError, match="duplicate"):
         check_reference(fasta("dup.fasta", [("a", "ACGT"), ("a", "GG")]))
-    with pytest.raises(BaconError, match="no sequence"):
+    with pytest.raises(RasherError, match="no sequence"):
         check_reference(fasta("empty.fasta", [("a", "")]))
 
 
 def test_check_reference_rejects_fastq_and_missing(fastq, tmp_path):
-    with pytest.raises(BaconError, match="must be a fasta"):
+    with pytest.raises(RasherError, match="must be a fasta"):
         check_reference(fastq("r.fastq.gz", [("r1", "ACGT")]))
-    with pytest.raises(BaconError, match="not found"):
+    with pytest.raises(RasherError, match="not found"):
         check_reference(tmp_path / "missing.fasta")
 
 
-def test_truncated_or_corrupt_gzip_is_a_bacon_error(tmp_path, fastq):
+def test_truncated_or_corrupt_gzip_is_a_rasher_error(tmp_path, fastq):
     import random
     rng = random.Random(3)  # Random reads: a compressed file large enough to corrupt its middle
     good = fastq("g.fastq.gz", [(f"r{i}", "".join(rng.choice("ACGT") for _ in range(800))) for i in range(300)])
@@ -102,12 +102,12 @@ def test_truncated_or_corrupt_gzip_is_a_bacon_error(tmp_path, fastq):
     corrupt[10:60] = bytes(50)  # Right after the gzip header: an invalid deflate block
     (tmp_path / "c.fastq.gz").write_bytes(bytes(corrupt))
     for name in ("t.fastq.gz", "c.fastq.gz"):
-        with pytest.raises(BaconError, match="truncated or corrupt compressed file"):
+        with pytest.raises(RasherError, match="truncated or corrupt compressed file"):
             list(read_records(tmp_path / name))
 
 
 def test_non_ascii_headers_do_not_break_writing(tmp_path):
-    from bacon.seqio import Record, open_write, write_fasta
+    from rasher.seqio import Record, open_write, write_fasta
     write_fasta(tmp_path / "a.fasta", [Record("Solanum × sp", "ACGT")])
     with open_write(tmp_path / "b.fastq.gz") as fh:
         fh.write(Record("é", "AC", "II").format())
@@ -115,18 +115,18 @@ def test_non_ascii_headers_do_not_break_writing(tmp_path):
 
 
 def test_acgtn():
-    from bacon.seqio import acgtn
+    from rasher.seqio import acgtn
     assert acgtn("acgtRYN-*x") == "ACGTNNNNNN"
 
 
-def test_reading_stops_when_bacon_is_interrupted(fastq):
+def test_reading_stops_when_rasher_is_interrupted(fastq):
     import pytest
 
-    from bacon import BaconError, tools
-    from bacon.seqio import read_records
+    from rasher import RasherError, tools
+    from rasher.seqio import read_records
     path = fastq("r.fq.gz", [(f"r{i}", "ACGT") for i in range(10)])
     tools.kill_running()
-    with pytest.raises(BaconError, match="BACoN is stopping"):
+    with pytest.raises(RasherError, match="RASHER is stopping"):
         list(read_records(path))
     tools.allow_programs()
     assert len(list(read_records(path))) == 10
@@ -142,5 +142,5 @@ def test_a_utf8_bom_is_skipped(tmp_path):
     assert [(r.name, r.qual) for r in read_records(tmp_path / "r.fastq.gz")] == [("r1", "IIII")]
     assert check_reference(tmp_path / "r.fasta") == [("a", 4)]
     (tmp_path / "x.fasta").write_bytes(b"\xef\xbb>a\nACGT\n")  # Not a BOM: still not fasta
-    with pytest.raises(BaconError, match="neither fasta nor fastq"):
+    with pytest.raises(RasherError, match="neither fasta nor fastq"):
         sniff_format(tmp_path / "x.fasta")

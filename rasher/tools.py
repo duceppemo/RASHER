@@ -14,7 +14,7 @@ import threading
 from collections.abc import Sequence
 from pathlib import Path
 
-from bacon import BaconError
+from rasher import RasherError
 
 log = logging.getLogger(__name__)
 
@@ -28,7 +28,7 @@ PACKAGES = {
 ALIASES = {"FastTree": ("FastTree", "fasttree"), "iqtree": ("iqtree3", "iqtree2", "iqtree")}
 
 
-# Programs running now, in every thread: killed when BACoN is interrupted (see kill_running). Once stopping,
+# Programs running now, in every thread: killed when RASHER is interrupted (see kill_running). Once stopping,
 # no new program starts (a thread could otherwise start one just after the others were killed).
 _RUNNING: set[subprocess.Popen] = set()
 _RUNNING_LOCK = threading.Lock()
@@ -65,7 +65,7 @@ def _kill(proc: subprocess.Popen) -> None:
         proc.kill()
 
 
-class ToolError(BaconError):
+class ToolError(RasherError):
     """An external program failed."""
 
 
@@ -88,7 +88,7 @@ def require(names: Sequence[str]) -> dict[str, str]:
             missing.append(name)
     if missing:
         packages = " ".join(sorted({PACKAGES.get(n, n) for n in missing}))
-        raise BaconError(f"Required program(s) not found on PATH: {', '.join(missing)}. "
+        raise RasherError(f"Required program(s) not found on PATH: {', '.join(missing)}. "
                          f"Install with: conda install -c conda-forge -c bioconda {packages}")
     return found
 
@@ -126,7 +126,7 @@ def run(cmds: Sequence[Sequence[str]] | Sequence[str], log_file: Path, *, stdout
                 out = subprocess.PIPE if (not last or stdout) else log_fh
                 with _RUNNING_LOCK:
                     if _STOPPING.is_set():
-                        raise ToolError(f"{Path(cmd[0]).name} not started: BACoN is stopping")
+                        raise ToolError(f"{Path(cmd[0]).name} not started: RASHER is stopping")
                     procs.append(subprocess.Popen(cmd, stdin=prev, stdout=out, stderr=log_fh, cwd=cwd,
                                                   env=full_env, start_new_session=True))
                     _RUNNING.add(procs[-1])

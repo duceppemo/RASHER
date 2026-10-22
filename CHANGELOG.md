@@ -1,6 +1,19 @@
 # Changelog
 
-## Unreleased
+## 0.1.0 (unreleased)
+
+RASHER begins as a fork of [BACoN](https://github.com/duceppemo/BACoN) 0.4.0 (commit 4fdec16, which includes
+the `samtools consensus -C 20` change below), adapted to Illumina short reads. Everything under "BACoN
+changelog" is the parent tool's history, kept for provenance.
+
+### Changed
+- Renamed throughout: the package, command, log (`rasher.log`) and lock file (`.rasher.lock`) are `rasher`.
+
+---
+
+# BACoN changelog (parent tool)
+
+## Unreleased in BACoN at the time of the fork
 
 ### Changed
 - The templated consensus needs a call quality of at least 20 (`samtools consensus -C 20`; samtools' default 10

@@ -1,6 +1,6 @@
-# BACoN
+# RASHER
 
-**B**ait, **A**ssemble and **Co**mpare **N**anopore reads. BACoN takes Nanopore reads from many samples and a
+**B**ait, **A**ssemble and **Co**mpare **N**anopore reads. RASHER takes Nanopore reads from many samples and a
 reference sequence, typically an organelle genome (chloroplast, mitochondrion) or another region of interest,
 and for each sample:
 
@@ -13,7 +13,7 @@ then **compares** the samples: SNPs (each assembly read along the reference with
 of pairwise SNP distances, a VCF of the SNPs relative to the reference, and a tree (FastTree or IQ-TREE). Everything is summarized in an HTML report, and in
 MultiQC sections.
 
-BACoN was designed for genome skimming: low-coverage sequencing of total DNA, where the organelle reads are
+RASHER was designed for genome skimming: low-coverage sequencing of total DNA, where the organelle reads are
 abundant enough to assemble. Enriching the target (targeted sequencing, adaptive sampling) gives more depth
 and better assemblies.
 

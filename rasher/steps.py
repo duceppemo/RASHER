@@ -9,9 +9,9 @@ import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from bacon import BaconError
-from bacon.samples import Sample
-from bacon.seqio import (
+from rasher import RasherError
+from rasher.samples import Sample
+from rasher.seqio import (
     ReadStats,
     Record,
     acgtn,
@@ -24,12 +24,12 @@ from bacon.seqio import (
     split_extension,
     write_fasta,
 )
-from bacon.tools import ToolError, run, which
+from rasher.tools import ToolError, run, which
 
 log = logging.getLogger(__name__)
 
 
-class SampleFailed(BaconError):
+class SampleFailed(RasherError):
     """This sample cannot go further; the others can. `stats`: what is known about it (e.g. its raw reads)."""
 
     def __init__(self, message: str, stats: dict[str, object] | None = None):
@@ -106,7 +106,7 @@ def _extension(path: Path) -> str:
 
 def _content_extension(path: Path, fmt: str) -> str:
     """'.fastq.gz', '.fasta', ...: the extension telling BBTools (which goes by the extension, case-sensitively)
-    what a reads file holds, from its content (as BACoN reads it), whatever its own name says."""
+    what a reads file holds, from its content (as RASHER reads it), whatever its own name says."""
     with open(path, "rb") as fh:
         gzipped = fh.read(2) == b"\x1f\x8b"
     return f".{fmt}{'.gz' if gzipped else ''}"
@@ -290,7 +290,7 @@ def _publish_graph(name: str, gfa: Path, dirs: AssemblyDirs, log_file: Path) -> 
         try:  # A picture of the graph is nice to have; its failure does not fail the sample
             run(["Bandage", "image", str(target), str(target.with_suffix(".png"))], log_file,
                 env={"QT_QPA_PLATFORM": "offscreen"})
-        except BaconError as exc:
+        except RasherError as exc:
             log.warning("Bandage could not draw the graph of %s: %s", name, str(exc).splitlines()[0])
 
 
@@ -321,7 +321,7 @@ def assemble_flye(name: str, reads: Path, dirs: AssemblyDirs, log_dir: Path, *, 
     log_file = log_dir / f"{name}.log"
     # Flye refuses reads whose path has a space, and runs some programs through a shell (a space in its output
     # folder breaks them): with such paths, it reads and writes through links in a temporary folder.
-    link_dir = Path(tempfile.mkdtemp(prefix="bacon_flye_")) if not _shell_safe(reads, work) else None
+    link_dir = Path(tempfile.mkdtemp(prefix="rasher_flye_")) if not _shell_safe(reads, work) else None
     try:
         if link_dir is not None:
             if not _shell_safe(link_dir):
@@ -364,7 +364,7 @@ def off_reference(contigs: Path, reference: Path, log_file: Path, threads: int) 
     total = sum(lengths.values())
     if not total:
         return 0.0
-    with tempfile.TemporaryDirectory(prefix="bacon_offref_") as tmp:
+    with tempfile.TemporaryDirectory(prefix="rasher_offref_") as tmp:
         paf = Path(tmp) / "contigs.paf"
         run(["minimap2", "-x", "asm20", "-t", str(threads), str(reference), str(contigs)], log_file, stdout=paf,
             what="(aligning the contigs to the reference)")

@@ -1,13 +1,13 @@
 # Validation
 
-Simulated datasets with a known truth, the scripts that run BACoN on them and score the results, and the
+Simulated datasets with a known truth, the scripts that run RASHER on them and score the results, and the
 dated records of every validation.
 
 | File | Purpose |
 |---|---|
 | `simulate.py` | Generates the scenarios (reference, reads, true genomes, `truth.json`). Deterministic: the same seed gives byte-identical files. Standard library only |
-| `run_validation.sh` | Runs BACoN on every scenario with every assembler and SNP method, then `score.py` (`new`: the heteroplasmy and NUPT scenarios, templated and Flye, compared with SKA2 and minimap2) |
-| `score.py` | Scores BACoN output folders against the truth: assembly completeness and consensus errors (minimap2), SNP distances; for the new scenarios, the alleles called at minor-haplotype or NUPT sites and the origin of the baited reads |
+| `run_validation.sh` | Runs RASHER on every scenario with every assembler and SNP method, then `score.py` (`new`: the heteroplasmy and NUPT scenarios, templated and Flye, compared with SKA2 and minimap2) |
+| `score.py` | Scores RASHER output folders against the truth: assembly completeness and consensus errors (minimap2), SNP distances; for the new scenarios, the alleles called at minor-haplotype or NUPT sites and the origin of the baited reads |
 | `compare_runs.py` | For real data without a truth: agreement between runs (assemblers, SNP methods) |
 | `results/<date>_<version>/` | Records: summary, scores, program versions |
 
@@ -28,7 +28,7 @@ are more systematic than these; the real-data comparisons in the records complem
 
 In `heteroplasmy` and `numt` each read name ends with its origin (`_major`, `_minor` or `_offtarget`;
 `_organelle`, `_nupt<insert>` for a nuclear read covering at least 100 bp of an insert, or `_nuclear`), which
-`score.py` counts among the reads BACoN baited (`1_extracted/`) and filtered (`2_filtered/`). The truth genome
+`score.py` counts among the reads RASHER baited (`1_extracted/`) and filtered (`2_filtered/`). The truth genome
 of a heteroplasmy sample is its major haplotype (the minor one is in `truth/minor/`); `truth.json` lists each
 sample's minor fraction and minor sites, and, for `numt`, the copied segments and every insert with its
 substitutions in plastome coordinates (the nuclear sequences are in `truth/nuclear/`). These two scenarios
@@ -42,9 +42,9 @@ inverted repeat or in every copy of a tandem unit is one event), `sites` (each c
 ## Running
 
 ```bash
-conda activate BACoN
-bash validation/run_validation.sh /tmp/bacon_validation 16          # plastid, linear, rdna
-bash validation/run_validation.sh /tmp/bacon_validation_new 16 new  # heteroplasmy, numt
+conda activate RASHER
+bash validation/run_validation.sh /tmp/rasher_validation 16          # plastid, linear, rdna
+bash validation/run_validation.sh /tmp/rasher_validation_new 16 new  # heteroplasmy, numt
 ```
 
 Each takes a few minutes (the second about 10: Flye on the mixtures, and generating about 170 Mb of reads).

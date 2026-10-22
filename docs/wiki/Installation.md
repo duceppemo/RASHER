@@ -1,33 +1,33 @@
 # Installation
 
-BACoN is a Python package (standard library only) that runs command-line programs, which are installed with
+RASHER is a Python package (standard library only) that runs command-line programs, which are installed with
 conda.
 
 ## bioconda (recommended)
 
 ```bash
-conda create -n bacon -c conda-forge -c bioconda bacon-nanopore
-conda activate bacon
-bacon --version
+conda create -n rasher -c conda-forge -c bioconda rasher
+conda activate rasher
+rasher --version
 ```
 
-The package is named `bacon-nanopore` because conda-forge already has an unrelated package called `bacon`; the
-command is `bacon`. It installs BACoN with every program below except Bandage.
+The package is named `rasher` because conda-forge already has an unrelated package called `rasher`; the
+command is `rasher`. It installs RASHER with every program below except Bandage.
 
 ## From the source code
 
 For development, or the latest code:
 
 ```bash
-git clone https://github.com/duceppemo/BACoN
-cd BACoN
+git clone https://github.com/duceppemo/RASHER
+cd RASHER
 conda env create -f environment.yml
-conda activate BACoN
+conda activate RASHER
 pip install .
-bacon --version
+rasher --version
 ```
 
-[`environment.yml`](https://github.com/duceppemo/BACoN/blob/main/environment.yml) lists the programs and their
+[`environment.yml`](https://github.com/duceppemo/RASHER/blob/main/environment.yml) lists the programs and their
 minimum versions:
 
 | Program | Used for | Minimum |
@@ -45,7 +45,7 @@ minimum versions:
 | Bandage | optional: pictures of the assembly graphs | |
 | python-isal | optional: faster reading of gzipped reads | |
 
-BACoN checks at start-up that the programs needed by the chosen options are on the `PATH`, and lists the
+RASHER checks at start-up that the programs needed by the chosen options are on the `PATH`, and lists the
 missing ones with the command to install them.
 
 ## Checking the installation
@@ -54,26 +54,26 @@ The example is in the repository (`example/`), not in the conda package. From a 
 example folder of the release:
 
 ```bash
-curl -sL https://github.com/duceppemo/BACoN/archive/refs/tags/v0.4.0.tar.gz | tar -xz --strip-components=1 BACoN-0.4.0/example
+curl -sL https://github.com/duceppemo/RASHER/archive/refs/tags/v0.1.0.tar.gz | tar -xz --strip-components=1 RASHER-0.1.0/example
 bash example/run_example.sh
 ```
 
 generates a small simulated dataset (an annotated 30 kb circular reference, four samples with known SNPs and
-their metadata), runs BACoN with the default settings and checks the results against the truth: every pairwise
+their metadata), runs RASHER with the default settings and checks the results against the truth: every pairwise
 SNP distance, the region, gene, context and effect of every SNP, and the report's annotation and metadata
 ([Example](Example)); it prints one `OK` line per check. It takes a few seconds.
 
 ## pip only
 
-If the programs are already installed (for example in an HPC module system), BACoN itself installs with
-`pip install https://github.com/duceppemo/BACoN/archive/refs/tags/v0.4.0.tar.gz` (or
-`pip install git+https://github.com/duceppemo/BACoN` for the latest code).
+If the programs are already installed (for example in an HPC module system), RASHER itself installs with
+`pip install https://github.com/duceppemo/RASHER/archive/refs/tags/v0.1.0.tar.gz` (or
+`pip install git+https://github.com/duceppemo/RASHER` for the latest code).
 
 ## Troubleshooting
 
 - **The environment takes long to solve, or mamba reports "nothing provides ..." for packages that exist**:
   some mamba 2.x versions misreport conflicts; `conda env create` (with the libmamba solver) solves it.
 - **`samtools consensus: unrecognised option -X`**: samtools is older than 1.17 (which added `-X`); update
-  it. BACoN is tested with samtools 1.21 and later.
-- **Upgrading from BACoN 0.2**: create a new environment; the old `requirements.txt` environment pinned
+  it. RASHER is tested with samtools 1.21 and later.
+- **Upgrading from RASHER 0.2**: create a new environment; the old `requirements.txt` environment pinned
   programs that are no longer used (Porechop, Shasta, Rebaler, Snippy, PhaME, RAxML, ete3).

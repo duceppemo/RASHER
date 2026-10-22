@@ -13,7 +13,7 @@ body:
     id: command
     attributes:
       label: Command and output
-      description: The exact command, and `bacon.log` (add `--debug`). Paste as text, not a screenshot.
+      description: The exact command, and `rasher.log` (add `--debug`). Paste as text, not a screenshot.
       render: shell
     validations:
       required: true
@@ -21,7 +21,7 @@ body:
     id: version
     attributes:
       label: Versions
-      description: Output of `bacon --version`, and your OS. The tool versions are in `run_info.json`.
-      placeholder: BACoN 0.3.0, Ubuntu 24.04
+      description: Output of `rasher --version`, and your OS. The tool versions are in `run_info.json`.
+      placeholder: RASHER 0.3.0, Ubuntu 24.04
     validations:
       required: true

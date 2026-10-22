@@ -1,6 +1,6 @@
-"""A self-contained HTML report of a BACoN output folder (standard library only).
+"""A self-contained HTML report of a RASHER output folder (standard library only).
 
-Written at the end of every run as `report.html`; `python -m bacon.report OUTPUT` rebuilds it from the files of an
+Written at the end of every run as `report.html`; `python -m rasher.report OUTPUT` rebuilds it from the files of an
 output folder (`run_info.json`, `summary.tsv`, `reference.fasta`, `metadata.tsv`, the assemblies and the
 comparison's distances, tree and VCF). Every figure is inline SVG drawn here; a missing or unreadable file only
 removes its figure.
@@ -18,8 +18,8 @@ from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 
-from bacon import BaconError
-from bacon.annotation import (
+from rasher import RasherError
+from rasher.annotation import (
     MAX_DETECTION_LENGTH,
     Annotation,
     Gene,
@@ -31,7 +31,7 @@ from bacon.annotation import (
     find_regions,
     load_annotation,
 )
-from bacon.metadata import (
+from rasher.metadata import (
     COPY_NAME,
     MAX_VALUE_LENGTH,
     PALETTE_COLOURS,
@@ -43,8 +43,8 @@ from bacon.metadata import (
     sort_key,
     unusable_reason,
 )
-from bacon.newick import Node, depths, heights, ladderize, parse, preorder, walk
-from bacon.seqio import read_records, split_extension
+from rasher.newick import Node, depths, heights, ladderize, parse, preorder, walk
+from rasher.seqio import read_records, split_extension
 
 LOW_DEPTH = 20  # Same thresholds as the notes in summary.tsv
 LENGTH_RANGE = (0.8, 1.2)
@@ -357,7 +357,7 @@ def report_metadata(output: Path, info: dict) -> tuple[Metadata | None, Colourin
         return None, None, ""
     try:
         metadata = read_metadata(path)
-    except BaconError as exc:
+    except RasherError as exc:
         return None, None, f"No metadata: {exc}"
     recorded = info.get("metadata")
     if isinstance(recorded, dict) and "color_by" in recorded:
@@ -1264,7 +1264,7 @@ def methods_text(info: dict, rows: list[dict[str, str]] | None = None,
     fastq_text = (f"reads shorter than {min_length:g} bp were discarded and the best "
                   f"{_num(s.get('keep_percent'), 95):g}% were kept, up to {depth:g}x of {size}, with "
                   f"Filtlong{_tool(info, 'filtlong')}{ranked}")
-    fasta_text = (f"reads without qualities (fasta files) were filtered by BACoN: the longest reads of at "
+    fasta_text = (f"reads without qualities (fasta files) were filtered by RASHER: the longest reads of at "
                   f"least {min_length:g} bp, up to {depth:g}x of {size}")
     fasta, total = _fasta_samples(info)
     if fasta == 0:
@@ -1343,8 +1343,8 @@ def methods_text(info: dict, rows: list[dict[str, str]] | None = None,
         tables = [str(t) for t in genes.tables or annotation.get("transl_tables") or []] or ["11"]
         table_text = tables[0] if len(tables) == 1 else f"{', '.join(tables[:-1])} and {tables[-1]}"
         effects = ("; the effect of each SNP on the coding sequences (codon and amino-acid change) was derived "
-                   f"by BACoN with translation table{'s' if len(tables) > 1 else ''} {table_text}" if genes.effects
-                   else "")
+                   f"by RASHER with translation table{'s' if len(tables) > 1 else ''} {table_text}"
+                   if genes.effects else "")
         parts.append(f"Genes were read from the annotation {name}{effects}.")
     regions = _regions_methods(bands)
     if regions:
@@ -1352,8 +1352,8 @@ def methods_text(info: dict, rows: list[dict[str, str]] | None = None,
                                 "of its reverse complement, chaining the matches and extending them base by base "
                                 "(each copy at least 5 kb, at least 99% identical)."
                                 if "detected" in regions else ""))
-    parts.append(f"The analysis was run with BACoN {html.escape(str(info.get('bacon_version', '')))} "
-                 "(https://github.com/duceppemo/BACoN).")
+    parts.append(f"The analysis was run with RASHER {html.escape(str(info.get('rasher_version', '')))} "
+                 "(https://github.com/duceppemo/RASHER).")
     return " ".join(parts)
 
 
@@ -1625,10 +1625,10 @@ def build_report(output: Path) -> str:
     out = ["<!DOCTYPE html><html lang=\"en\"><head><meta charset=\"utf-8\">",
            '<meta name="viewport" content="width=device-width,initial-scale=1">',
            '<meta name="color-scheme" content="light dark">',  # Its own dark theme: no forced darkening
-           f"<title>BACoN report</title><style>{CSS}</style></head><body><main>",
-           "<h1><b>BACoN</b> report</h1>",
+           f"<title>RASHER report</title><style>{CSS}</style></head><body><main>",
+           "<h1><b>RASHER</b> report</h1>",
            f'<p class="meta">{esc(Path(str(output)).name)} · {esc(str(info.get("started", "")))} · '
-           f'BACoN {esc(str(info.get("bacon_version", "")))}{_built_with(info)} · {_last_run(info)}</p>']
+           f'RASHER {esc(str(info.get("rasher_version", "")))}{_built_with(info)} · {_last_run(info)}</p>']
 
     # Overview
     tiles = [tile(f"{ok}/{len(rows)}", "samples assembled", f"{failed} failed" if failed else ""),
@@ -1830,7 +1830,7 @@ def build_report(output: Path) -> str:
             ("Output", str(output)), ("Python", f"{info.get('python', '')} on {info.get('platform', '')}")]
     annotation = info.get("annotation")
     if isinstance(annotation, dict) and annotation.get("file"):
-        # The file given (--annotation, or the GenBank reference itself), BACoN's copy and the given file's MD5
+        # The file given (--annotation, or the GenBank reference itself), RASHER's copy and the given file's MD5
         what = ["the reference's own annotation"] if annotation["file"] == ref.get("file") else []
         if isinstance(annotation.get("genes"), int):
             what.append(f"{annotation['genes']} genes on {annotation.get('sequences', '?')} sequence(s)")
@@ -1862,10 +1862,10 @@ def _last_run(info: dict) -> str:
 
 
 def _built_with(info: dict) -> str:
-    """' (report built with BACoN X)' when this BACoN is not the one that ran the analysis."""
-    from bacon import __version__
-    run = str(info.get("bacon_version") or "")
-    return f" (report built with BACoN {esc(__version__)})" if run and run != __version__ else ""
+    """' (report built with RASHER X)' when this RASHER is not the one that ran the analysis."""
+    from rasher import __version__
+    run = str(info.get("rasher_version") or "")
+    return f" (report built with RASHER {esc(__version__)})" if run and run != __version__ else ""
 
 
 def _assembled_samples(info: dict, rows: list[dict[str, str]]) -> set[str] | None:
@@ -2155,10 +2155,10 @@ def write_report(output: Path) -> Path:
 
 if __name__ == "__main__":
     if len(sys.argv) != 2:
-        sys.exit("Usage: python -m bacon.report OUTPUT_FOLDER")
+        sys.exit("Usage: python -m rasher.report OUTPUT_FOLDER")
     folder = Path(sys.argv[1])
     if not (folder / "run_info.json").is_file():
-        if (folder / "bacon.log").is_file() or (folder / ".checkpoints").is_dir():  # run_info.json ends a run
+        if (folder / "rasher.log").is_file() or (folder / ".checkpoints").is_dir():  # run_info.json ends a run
             sys.exit(f"{sys.argv[1]}: the run did not finish: resume it to get a report")
-        sys.exit(f"{sys.argv[1]}: no run_info.json (not a BACoN output folder)")
+        sys.exit(f"{sys.argv[1]}: no run_info.json (not a RASHER output folder)")
     print(write_report(folder))

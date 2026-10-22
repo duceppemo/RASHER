@@ -4,10 +4,10 @@
 OUTPUT/
 ├── report.html                 the report: samples, tree, distances, methods, provenance
 ├── summary.tsv                 one line per sample: reads, depth, assembly, status, notes
-├── bacon_*_mqc.json            MultiQC sections (samples table, bases, SNP distances)
+├── rasher_*_mqc.json            MultiQC sections (samples table, bases, SNP distances)
 ├── run_info.json               version, command, settings, program versions, samples, comparison
-├── bacon.log                   the log of every run in this folder
-├── .bacon.lock                 held by the run using this folder (see Usage)
+├── rasher.log                   the log of every run in this folder
+├── .rasher.lock                 held by the run using this folder (see Usage)
 ├── reference.fasta             the reference used: upper case, ambiguity codes as N
 ├── annotation.gb / .gff3       the annotation of the reference (--annotation, or the GenBank reference), as given
 ├── metadata.tsv                the sample metadata (--metadata, and the sample sheet's extra columns), one row per sample and added genome
@@ -122,24 +122,24 @@ colours of the heatmap and of the highlighted cells are kept when printing):
   annotated inverted repeats, or the one detected in the reference sequence, with the copies' size and
   identity), ready to adapt for a paper.
 - **Run**: command, reference (with the MD5 of the file as given), the annotation when there is one (the file as
-  given, `--annotation` or the GenBank reference, with its MD5 and BACoN's copy), output folder, the metadata file
+  given, `--annotation` or the GenBank reference, with its MD5 and RASHER's copy), output folder, the metadata file
   and the colour column when there are any (`not applied` when the folder's `metadata.tsv` was edited since and
   can no longer colour the figures; a note says why), and the version and path of every program.
 
-It is written at the end of every run, from the files of the output folder; `python -m bacon.report OUTPUT`
+It is written at the end of every run, from the files of the output folder; `python -m rasher.report OUTPUT`
 rebuilds it, also after the folder was moved. Examples: the
-[bundled example](https://duceppemo.github.io/BACoN/reports/example_report.html) and the
-[tutorial](https://duceppemo.github.io/BACoN/reports/tutorial_potato_report.html).
+[bundled example](https://duceppemo.github.io/RASHER/reports/example_report.html) and the
+[tutorial](https://duceppemo.github.io/RASHER/reports/tutorial_potato_report.html).
 
-![The samples section of the report of the tutorial](https://raw.githubusercontent.com/duceppemo/BACoN/main/docs/images/report_samples.png)
+![The samples section of the report of the tutorial](https://raw.githubusercontent.com/duceppemo/RASHER/main/docs/images/report_samples.png)
 
-![The depth and N bases of the samples of the tutorial](https://raw.githubusercontent.com/duceppemo/BACoN/main/docs/images/report_bars.png)
+![The depth and N bases of the samples of the tutorial](https://raw.githubusercontent.com/duceppemo/RASHER/main/docs/images/report_bars.png)
 
-![The tree of the tutorial in the report, with the lineages as metadata](https://raw.githubusercontent.com/duceppemo/BACoN/main/docs/images/report_tree.png)
+![The tree of the tutorial in the report, with the lineages as metadata](https://raw.githubusercontent.com/duceppemo/RASHER/main/docs/images/report_tree.png)
 
-![The SNP distances of the tutorial in the report, with the lineages as metadata](https://raw.githubusercontent.com/duceppemo/BACoN/main/docs/images/report_distances.png)
+![The SNP distances of the tutorial in the report, with the lineages as metadata](https://raw.githubusercontent.com/duceppemo/RASHER/main/docs/images/report_distances.png)
 
-![The genome map of the tutorial](https://raw.githubusercontent.com/duceppemo/BACoN/main/docs/images/report_map.png)
+![The genome map of the tutorial](https://raw.githubusercontent.com/duceppemo/RASHER/main/docs/images/report_map.png)
 
 ## MultiQC
 
@@ -148,19 +148,19 @@ Three [MultiQC custom-content](https://docs.seqera.io/multiqc/custom_content) fi
 
 | File | MultiQC section |
 |---|---|
-| `bacon_samples_mqc.json` | table: the metadata columns (as text), status, baited reads and share, read N50, depth, contigs, circular contigs, length, length vs reference, `N` bases, note |
-| `bacon_reads_mqc.json` | bar graph: the bases of each sample kept for the assembly, baited but filtered out, and off-target |
-| `bacon_distances_mqc.json` | heatmap of the SNP distances in tree order (recent MultiQC versions also offer a clustered view); absent when the samples were not compared |
+| `rasher_samples_mqc.json` | table: the metadata columns (as text), status, baited reads and share, read N50, depth, contigs, circular contigs, length, length vs reference, `N` bases, note |
+| `rasher_reads_mqc.json` | bar graph: the bases of each sample kept for the assembly, baited but filtered out, and off-target |
+| `rasher_distances_mqc.json` | heatmap of the SNP distances in tree order (recent MultiQC versions also offer a clustered view); absent when the samples were not compared |
 
 ```bash
 multiqc OUTPUT/ --ignore "*/logs/*"
 ```
 
-- The sections are named after the output folder ("BACoN *folder*: samples"), so the files of several BACoN runs
+- The sections are named after the output folder ("RASHER *folder*: samples"), so the files of several RASHER runs
   in one MultiQC search path give separate sections, as long as the output folders have different names. The
   section ids keep a name of letters, digits and underscores as it is; any other name gets a short hash of
   itself, so that names differing only in punctuation (`run-1`, `run_1`, `run 1`) do not merge.
-- `--ignore "*/logs/*"` keeps MultiQC away from the programs' logs in `logs/`: MultiQC 1.19 mistakes BACoN's
+- `--ignore "*/logs/*"` keeps MultiQC away from the programs' logs in `logs/`: MultiQC 1.19 mistakes RASHER's
   Filtlong logs for its own module's input and shows an error box (harmless; 1.35 does not).
 - MultiQC shortens sample names ending with usual file suffixes (such as `.trimmed`) in the table and bar graph,
   but not in the heatmap.
@@ -177,7 +177,7 @@ Tested with MultiQC 1.19 and 1.35.
 | `Status` | `ok`, or `failed (step)` with the reason in `Note` |
 | `Raw_reads`, `Raw_bases` | Input reads and bases (`NA` with `-b bbduk` when BBDuk does not report them) |
 | `Baited_reads`, `Baited_bases`, `Baited_pct` | Reads matching the reference, and their share of the input bases (%) |
-| `Filtered_reads`, `Filtered_bases`, `Filtered_N50` | Reads kept by Filtlong (fasta reads: by BACoN's length filter, `--min-read-length`) |
+| `Filtered_reads`, `Filtered_bases`, `Filtered_N50` | Reads kept by Filtlong (fasta reads: by RASHER's length filter, `--min-read-length`) |
 | `Est_depth` | Filtered bases / genome size (`-s`, or the reference length) |
 | `Contigs` | Number of contigs |
 | `Circular_contigs` | Contigs the assembler reports as circular (Flye, myloasm; `NA` for the templated assembly) |
@@ -251,7 +251,7 @@ report says so).
 
 ## run_info.json
 
-The provenance of the last run: BACoN version, command line, start time and duration, all settings, the path
+The provenance of the last run: RASHER version, command line, start time and duration, all settings, the path
 and version of every program used, the reference as given (path, number of sequences, length and the MD5 of the
 file itself, fasta or GenBank, and for each of its sequences the LSC/IRb/SSC/IRa regions with their source,
 `annotation` or `sequence`, and for the latter the detected copies' coordinates, lengths, differences and

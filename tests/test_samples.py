@@ -1,7 +1,7 @@
 import pytest
 
-from bacon import BaconError
-from bacon.samples import discover, read_sample_sheet
+from rasher import RasherError
+from rasher.samples import discover, read_sample_sheet
 
 
 def test_single_file(fastq):
@@ -30,7 +30,7 @@ def test_duplicate_names_rejected(tmp_path, fastq):
     (tmp_path / "in").mkdir()
     fastq("in/s1.fastq.gz", [("a", "ACGT")])
     fastq("in/s1.fq", [("a", "ACGT")], gz=False)
-    with pytest.raises(BaconError, match="same sample name"):
+    with pytest.raises(RasherError, match="same sample name"):
         discover(tmp_path / "in")
 
 
@@ -38,21 +38,21 @@ def test_mixed_formats_rejected(tmp_path, fastq, fasta):
     (tmp_path / "in" / "s").mkdir(parents=True)
     fastq("in/s/a.fastq.gz", [("a", "ACGT")])
     fasta("in/s/b.fasta", [("b", "ACGT")])
-    with pytest.raises(BaconError, match="mixes fasta and fastq"):
+    with pytest.raises(RasherError, match="mixes fasta and fastq"):
         discover(tmp_path / "in")
 
 
 def test_empty_files_skipped_and_nothing_left_is_an_error(tmp_path):
     (tmp_path / "in").mkdir()
     (tmp_path / "in" / "empty.fastq").write_text("")
-    with pytest.raises(BaconError, match="No fasta/fastq"):
+    with pytest.raises(RasherError, match="No fasta/fastq"):
         discover(tmp_path / "in")
 
 
 @pytest.mark.parametrize("name", ["bad name", "Reference", "all_assemblies", "s1\n"])
 def test_invalid_or_reserved_names(tmp_path, fastq, name):
     fastq(f"{name}.fastq.gz", [("a", "ACGT")])
-    with pytest.raises(BaconError, match="Invalid sample name|reserved"):
+    with pytest.raises(RasherError, match="Invalid sample name|reserved"):
         discover(tmp_path / f"{name}.fastq.gz")
 
 
@@ -79,15 +79,15 @@ def test_sample_sheet_paths_keep_their_inner_spaces(tmp_path, fastq):
 def test_sample_sheet_errors(tmp_path):
     sheet = tmp_path / "s.tsv"
     sheet.write_text("name\tpath\nA\tx.fq\n")
-    with pytest.raises(BaconError, match="needs the columns"):
+    with pytest.raises(RasherError, match="needs the columns"):
         read_sample_sheet(sheet)
     sheet.write_text("sample\tfile\nA\tmissing.fq\n")
-    with pytest.raises(BaconError, match="file not found"):
+    with pytest.raises(RasherError, match="file not found"):
         read_sample_sheet(sheet)
 
 
 def test_files_in_hidden_subfolders_are_ignored(tmp_path, fastq):
-    from bacon.samples import discover
+    from rasher.samples import discover
     (tmp_path / "in" / "barcode01" / ".hidden").mkdir(parents=True)
     for path in ("in/barcode01/a.fastq", "in/barcode01/.hidden/b.fastq"):
         (tmp_path / path).write_text("@r\nACGT\n+\nIIII\n")
@@ -96,7 +96,7 @@ def test_files_in_hidden_subfolders_are_ignored(tmp_path, fastq):
 
 
 def test_sheets_are_read_as_0_3_5_read_them(tmp_path):
-    from bacon.metadata import sheet_metadata
+    from rasher.metadata import sheet_metadata
     for name in ("a.fastq", "a b.fastq"):
         (tmp_path / name).write_text("@r\nACGT\n+\nIIII\n")
     sheet = tmp_path / "s.tsv"
@@ -110,7 +110,7 @@ def test_sheets_are_read_as_0_3_5_read_them(tmp_path):
     sheet.write_text("sample\tfile\na\ta.fastq\n# b\ta b.fastq\n")
     assert [s.name for s in read_sample_sheet(sheet)] == ["a"]
     sheet.write_text("sample\tfile\tnote\tnote\na\ta.fastq\tx\ty\n")  # Still an error, saying what to do
-    with pytest.raises(BaconError, match="column name 'note' is used more than once .* give each column"):
+    with pytest.raises(RasherError, match="column name 'note' is used more than once .* give each column"):
         read_sample_sheet(sheet)
 
 
@@ -123,7 +123,7 @@ def test_csv_sheets_are_read_as_0_3_5_read_them(tmp_path):
     assert [(s.name, [f.name for f in s.files]) for s in read_sample_sheet(sheet)] == [
         ("s1", ["s1.fastq"]), ("s2", ["a b.fastq"])]
     sheet.write_text('sample,file\ns1,"s1.fastq\ns2,s2.fastq\n')  # 0.3.5 swallowed s2 into s1's file name
-    with pytest.raises(BaconError, match="line 2: an unclosed quote"):
+    with pytest.raises(RasherError, match="line 2: an unclosed quote"):
         read_sample_sheet(sheet)
 
 
@@ -141,10 +141,10 @@ def test_sample_names_cannot_start_with_a_dot(tmp_path, fastq, name):
     fastq("a.fastq.gz", [("a", "ACGT")])
     sheet = tmp_path / "s.tsv"
     sheet.write_text(f"sample\tfile\n{name}\ta.fastq.gz\n")
-    with pytest.raises(BaconError, match=f"Invalid sample name '{name}' .*not starting with a dot"):
+    with pytest.raises(RasherError, match=f"Invalid sample name '{name}' .*not starting with a dot"):
         read_sample_sheet(sheet)
     if name == ".x":  # A file in a folder with such a name is hidden (skipped); a single file is checked
-        with pytest.raises(BaconError, match="Invalid sample name '.x'"):
+        with pytest.raises(RasherError, match="Invalid sample name '.x'"):
             discover(fastq(".x.fastq.gz", [("a", "ACGT")]))
 
 
@@ -162,7 +162,7 @@ def test_linked_subfolders_are_followed_and_folders_without_reads_are_reported(t
     (d / "barcode02").mkdir()
     (d / "barcode02" / "notes.txt").write_text("no reads")
     (d / "barcode03").symlink_to(tmp_path / "elsewhere")  # A linked sample folder
-    with caplog.at_level(logging.INFO, logger="bacon"):
+    with caplog.at_level(logging.INFO, logger="rasher"):
         samples = {s.name: s for s in discover(d)}
     assert sorted(samples) == ["barcode01", "barcode03"]
     assert [f.name for f in samples["barcode01"].files] == ["chunk_0.fastq.gz", "chunk_1.fastq.gz",

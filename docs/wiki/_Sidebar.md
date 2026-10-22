@@ -1,4 +1,4 @@
-**[BACoN](Home)**
+**[RASHER](Home)**
 
 - [Installation](Installation)
 - [Usage](Usage)
@@ -10,4 +10,4 @@
 - [FAQ](FAQ)
 - [Development](Development)
 
-[Releases](https://github.com/duceppemo/BACoN/releases) · [Changelog](https://github.com/duceppemo/BACoN/blob/main/CHANGELOG.md) · [Issues](https://github.com/duceppemo/BACoN/issues)
+[Releases](https://github.com/duceppemo/RASHER/releases) · [Changelog](https://github.com/duceppemo/RASHER/blob/main/CHANGELOG.md) · [Issues](https://github.com/duceppemo/RASHER/issues)

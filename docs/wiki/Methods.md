@@ -38,7 +38,7 @@ Filtlong discards reads shorter than `--min-read-length` (500 bp), keeps the bes
 the bases by length and quality, and caps the depth at `--target-depth` (100x the reference length). Capping
 keeps assemblies fast on highly enriched samples without losing accuracy.
 
-Filtlong needs base qualities: reads given as fasta are filtered by BACoN instead, keeping the longest reads of
+Filtlong needs base qualities: reads given as fasta are filtered by RASHER instead, keeping the longest reads of
 at least `--min-read-length` up to the target depth.
 
 ### Ranking the reads by the reference (`--filter-by-reference`)
@@ -67,7 +67,7 @@ the same distances). On the simulated scenarios, the templated assemblies were u
 When to use it: for mitogenomes, and for any target baited from whole-genome reads where the estimated depth looks
 high but the templated assembly has many `N`. Fastq reads only (fasta reads are filtered by length).
 
-Adapters are not trimmed: Dorado and Guppy already trim them, and Porechop, used by BACoN 0.2, is no longer
+Adapters are not trimmed: Dorado and Guppy already trim them, and Porechop, used by RASHER 0.2, is no longer
 maintained.
 
 ## 3. Assembly
@@ -84,7 +84,7 @@ maintained.
 | Assembly time, 28 potato plastomes (`-t 48 -p 12`) | 13 s | 10 min | 35 s |
 
 **Which one?** For comparing samples of one species against a good reference, which is the usual aim of
-BACoN, use the templated assembly (the default): in every test it gave SNP distances as good as or better than
+RASHER, use the templated assembly (the default): in every test it gave SNP distances as good as or better than
 the de novo assemblies, and it is the fastest ([Validation](Validation)). Use a de novo assembler to look at
 the structure of the genomes, when the reference is distant, or to check the templated results
 independently: on the tutorial data, Flye and the templated assembly gave identical SNP distances for all
@@ -100,7 +100,7 @@ Limits of the templated assembly:
 - Where fewer than three reads align, or the reads disagree, the consensus has `N` (`N_bases`, and a note in
   `summary.tsv`). A call needs a quality of at least 20 (`samtools consensus -C 20`; samtools' default, 10,
   before 0.4.1): with few reads, a base called from a mixture of bases is `N` rather than a SNP
-  ([validation](https://github.com/duceppemo/BACoN/blob/main/validation/results/2026-10-16_v0.4.0/SUMMARY.md)).
+  ([validation](https://github.com/duceppemo/RASHER/blob/main/validation/results/2026-10-16_v0.4.0/SUMMARY.md)).
   This is `--template-gaps n`, the default; with `--template-gaps reference`, uncovered positions at the ends of
   each sequence get the reference's bases instead (inner gaps stay `N`).
 - Long runs of one base come out one or two bases short in places, a bias of Nanopore reads: 15–23 indels per
@@ -130,7 +130,7 @@ A sample with two organelle haplotypes gives one consensus. In the validation sc
 templated assembly reported the major allele at every site up to a minor fraction of 0.2; from 0.3 the sites
 became `N` (17% at 0.3, 73% at an even mixture), and it never reported the minor allele. Flye reported the major
 allele up to 0.3; from 0.4 some sites came out with the minor allele or with both alleles in different contigs,
-which added false SNPs (5 at an even mixture). BACoN does not detect heteroplasmy: `N` bases in a templated
+which added false SNPs (5 at an even mixture). RASHER does not detect heteroplasmy: `N` bases in a templated
 assembly with good depth are a hint of a mixture.
 
 ## 4. Comparison
@@ -141,7 +141,7 @@ assembly with good depth are a hint of a mixture.
   base) and aligns the middle bases of the split k-mers found in the genomes; it needs no reference and no
   alignment. `--ska-min-freq 1` (default) keeps SNPs whose context is in every genome: core SNPs.
   Lower values keep SNPs missing from some genomes (a pan-genome SNP alignment with gaps, like kSNP, which
-  BACoN 0.1 used). A SNP in an inverted repeat is counted once. Before SKA2, circular contigs are extended by
+  RASHER 0.1 used). A SNP in an inverted repeat is counted once. Before SKA2, circular contigs are extended by
   their first 30 bases so that SNPs next to the start of the sequence are not lost, and so is the reference
   and the genomes of `--add-genomes`
   when more than half of the assemblies of the samples have a circular contig (Flye and myloasm report them; templated
@@ -169,10 +169,10 @@ assembly with good depth are a hint of a mixture.
   human mitogenomes (R10.4.1), SKA2's core kept 174 of 452 variable positions and its distances were 31 SNPs too
   low; minimap2 kept 447 and was within 1 SNP for most pairs. De novo assemblies are compared with SKA2 by
   default, so that their uncorrected errors are skipped. Results in [Validation](Validation#snp-methods-ska2-and-minimap2).
-- **Parsnp** (`--snp-method parsnp`) aligns the core genome of the assemblies to the reference. BACoN runs it
+- **Parsnp** (`--snp-method parsnp`) aligns the core genome of the assemblies to the reference. RASHER runs it
   with `-c`, which turns off Parsnp's divergence (MUMi) filter: by default Parsnp drops genomes it finds too
   divergent, which in the validation removed a low-depth sample. A genome much shorter than the reference can
-  still make Parsnp fail, or be kept and reduce the core genome of every genome to what it covers: BACoN warns
+  still make Parsnp fail, or be kept and reduce the core genome of every genome to what it covers: RASHER warns
   when the core genome is less than half of the reference. SNPs inside inverted repeats are missed, and SNPs
   next to large deletions may be. SNPs within about 30 bases of the ends of the reference are not compared
   either: Parsnp's locally collinear blocks end at their last maximal unique match. HarvestTools writes to
@@ -186,7 +186,7 @@ assembly with good depth are a hint of a mixture.
 the genomes (the reference and the genomes of `--add-genomes` included) has its split k-mer: the same 15 bases on
 either side of it. At 1 (default), every genome must have it: a core-SNP alignment, with a nucleotide for every
 genome in every column. Below 1 (0.5: at least half of the genomes), the sites missing from some genomes are kept,
-with a gap (`-`) for those genomes: a pan-genome SNP alignment, the role kSNP3 had in BACoN 0.1. The results go
+with a gap (`-`) for those genomes: a pan-genome SNP alignment, the role kSNP3 had in RASHER 0.1. The results go
 to `4_compared/ska_<value>/` instead of `4_compared/ska/`.
 
 A genome lacks the split k-mer of a site when:
@@ -214,7 +214,7 @@ that must have a nucleotide at a position (results in `4_compared/minimap2_<valu
 both have a nucleotide and they differ.
 
 **Tree.** FastTree (GTR, SH-like local supports from 100 resamples; default) or IQ-TREE (`--tree iqtree`: ModelFinder and 1000
-ultrafast bootstraps; IQ-TREE keeps two of each set of identical sequences, and when it keeps fewer than four, BACoN asks
+ultrafast bootstraps; IQ-TREE keeps two of each set of identical sequences, and when it keeps fewer than four, RASHER asks
 for no bootstrap and its maximum-likelihood tree is shown without supports), built on the SKA2 or minimap2 SNP alignment or the Parsnp core-genome alignment. The tree is rooted
 at the midpoint of its longest path, ladderized, and drawn as SVG. With SKA2 and minimap2, branch lengths are in
 substitutions per variable site.
@@ -226,7 +226,7 @@ written but no tree is built.
 ## 5. SNP effects
 
 With an annotation of the reference (`--annotation`, or a GenBank reference), the report places each SNP of
-`snps.vcf` on the reference's genes. BACoN reads GenBank feature tables (`gene`, `CDS`, `tRNA`, `rRNA`, their
+`snps.vcf` on the reference's genes. RASHER reads GenBank feature tables (`gene`, `CDS`, `tRNA`, `rRNA`, their
 locations with `join`, `complement`, `order`, partial ends and trans-splicing, `/codon_start`,
 `/transl_table`, `/transl_except`, `/pseudo`, quoted values spanning lines with `""` for a quote) and GFF3
 (features linked by `ID` and `Parent`, the phase column, `pseudogene` features and the `pseudo`, `gene_biotype`
@@ -274,7 +274,7 @@ feature across the origin (or trans-spliced) without a gene feature is a gene ma
 whole sequence between them. A CDS with a part on another sequence (`join(X12345.1:1..100,201..500)`) keeps
 its parts on this one, but its frame there is unknown: it gives no effects, with a warning.
 
-For a SNP inside a coding sequence, BACoN rebuilds the coding sequence from the reference (the exons in the
+For a SNP inside a coding sequence, RASHER rebuilds the coding sequence from the reference (the exons in the
 order of translation, reverse-complemented on the − strand, from the base given by `codon_start`), finds the
 codon containing the SNP, substitutes the alternate allele (complemented on the − strand) and translates both
 codons with the CDS's translation table (`/transl_table`, otherwise table 11, the bacterial and plastid code,
@@ -310,10 +310,10 @@ copies), when there are two of at least 500 bp: the single-copy regions
 are the gaps between them, the larger one being the LSC, and the repeat following the LSC is IRb unless the
 annotation names them; one region may span the origin, a repeat too (`join(x..length,1..y)`, or two features
 named alike meeting at the origin). A repeat annotated twice (a `repeat_region` and a `misc_feature` over the
-same stretch) counts once; with more than two repeats annotated, BACoN takes the two `repeat_region` with
+same stretch) counts once; with more than two repeats annotated, RASHER takes the two `repeat_region` with
 `/rpt_type=inverted`, else the pair named IRa and IRb, else the two longest.
 
-Most older RefSeq plastomes do not annotate their inverted repeats, so BACoN also looks for the large inverted
+Most older RefSeq plastomes do not annotate their inverted repeats, so RASHER also looks for the large inverted
 repeat in each reference sequence itself, with or without an annotation (standard library only, linear in the
 length: about 0.1 s for a plastome, 1 s for 2 Mb; sequences longer than 2 Mb, bacterial chromosomes, are not
 searched). Every fourth 32-mer of the sequence is indexed (a 32-mer at several indexed positions, or with a
@@ -380,9 +380,9 @@ the copies minimap2 aligns.
 | Rebaler | samtools consensus | Rebaler is unmaintained (2019); samtools consensus was far more accurate in every test |
 | Snippy | SKA2 | Snippy (2020) can no longer be installed with current assemblers; it misses SNPs in inverted repeats and was the noisiest on real data |
 | PhaME | removed | its dependency check compares versions as decimals and rejects samtools 1.10 to 1.29 (1.21 reads as older than 1.3; observed with 1.16 and 1.21) |
-| Parsnp without `-c` | Parsnp with `-c` | no longer drops divergent genomes (a genome much shorter than the reference can still make Parsnp fail, or shrink the core genome; BACoN warns) |
+| Parsnp without `-c` | Parsnp with `-c` | no longer drops divergent genomes (a genome much shorter than the reference can still make Parsnp fail, or shrink the core genome; RASHER warns) |
 | RAxML 8 | IQ-TREE | maintained; model selection |
-| ete3 PDF | SVG, drawn by BACoN | ete3 needs Qt and a display |
+| ete3 PDF | SVG, drawn by RASHER | ete3 needs Qt and a display |
 
 The evidence is in [Validation](Validation).
 

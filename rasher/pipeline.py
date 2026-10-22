@@ -1,4 +1,4 @@
-"""The BACoN pipeline: bait, filter, assemble, compare; with checkpoints to resume."""
+"""The RASHER pipeline: bait, filter, assemble, compare; with checkpoints to resume."""
 
 from __future__ import annotations
 
@@ -20,13 +20,13 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
-from bacon import BaconError, __version__, compare, steps, tools
-from bacon import metadata as md
-from bacon.annotation import Annotation, annotation_format, find_regions, genbank_fasta_records, load_annotation
-from bacon.multiqc import write_multiqc
-from bacon.report import write_report
-from bacon.samples import NAME_RULE, VALID_NAME, Sample, discover, read_sample_sheet
-from bacon.seqio import (
+from rasher import RasherError, __version__, compare, steps, tools
+from rasher import metadata as md
+from rasher.annotation import Annotation, annotation_format, find_regions, genbank_fasta_records, load_annotation
+from rasher.multiqc import write_multiqc
+from rasher.report import write_report
+from rasher.samples import NAME_RULE, VALID_NAME, Sample, discover, read_sample_sheet
+from rasher.seqio import (
     Record,
     acgtn,
     check_reference,
@@ -35,7 +35,7 @@ from bacon.seqio import (
     split_extension,
     write_fasta,
 )
-from bacon.tools import require, version
+from rasher.tools import require, version
 
 log = logging.getLogger(__name__)
 
@@ -140,7 +140,7 @@ class Checkpoints:
         return data
 
     def save(self, step: str, fingerprint: str, results: dict) -> None:
-        """Save a step's checkpoint; a failure (a full disk) is a BaconError, which stops the run (the programs
+        """Save a step's checkpoint; a failure (a full disk) is a RasherError, which stops the run (the programs
         still running are killed): the progress could not be recorded."""
         tmp = self.path(step).with_suffix(".tmp")
         try:
@@ -151,8 +151,8 @@ class Checkpoints:
         except OSError as exc:
             tmp.unlink(missing_ok=True)
             full = exc.errno in (errno.ENOSPC, errno.EDQUOT)  # Not for a permission or another error
-            raise BaconError(f"Could not save the checkpoint {self.path(step)}: {exc.strerror or exc}"
-                             f"{' (is the disk full?)' if full else ''}; BACoN stopped") from None
+            raise RasherError(f"Could not save the checkpoint {self.path(step)}: {exc.strerror or exc}"
+                             f"{' (is the disk full?)' if full else ''}; RASHER stopped") from None
 
     def clear(self, step: str) -> None:
         self.path(step).unlink(missing_ok=True)
@@ -160,11 +160,11 @@ class Checkpoints:
 
 def _guess_root(results: dict | None) -> str | None:
     """The output folder of a checkpoint's results, from the path of an output (not of an input, which can be in
-    another BACoN folder) and the names of BACoN's folders."""
+    another RASHER folder) and the names of RASHER's folders."""
     results = results or {}
     outputs = [results.get("distances")] + [r.get("output") for r in results.values() if isinstance(r, dict)]
     for path in (p for p in outputs if isinstance(p, str)):  # "distances" can also be a sample's name
-        # The last folder name in the path: a parent folder may have the name of one of BACoN's folders
+        # The last folder name in the path: a parent folder may have the name of one of RASHER's folders
         at = max(path.rfind(f"{os.sep}{name}{os.sep}") for name in FOLDERS.values())
         if at > 0:
             return path[:at]
@@ -185,7 +185,7 @@ def _moved(data: object, old: str, new: str) -> object:
 def _same_input(res: dict, upstream: object, reads: Path | None, relocated: bool = False) -> bool:
     """Whether a sample's saved result was made from its current input (`upstream`: the signature of the
     previous step's output; in a moved or copied folder, `relocated`, the sizes alone: a copy may not keep the
-    files' times). A result of BACoN < 0.3.5 may have no signature: it must then be newer than its input (an
+    files' times). A result of RASHER < 0.3.5 may have no signature: it must then be newer than its input (an
     input made again after it, by a run interrupted before this step, is newer)."""
     if "upstream" in res:
         return res["upstream"] == upstream or (relocated and _size_only(res["upstream"]) == _size_only(upstream))
@@ -280,7 +280,7 @@ def _run_parallel(states: list[SampleState], fn: Callable[[SampleState, int], st
         start = time.monotonic()
         try:
             res = fn(st, threads)
-        except (steps.SampleFailed, BaconError) as exc:
+        except (steps.SampleFailed, RasherError) as exc:
             message = str(exc).splitlines()[0]
             if tools.stopping():  # Killed by the interruption: not a failure of the sample (and not saved)
                 log.debug("  %s: %s", st.sample.name, message)
@@ -291,7 +291,7 @@ def _run_parallel(states: list[SampleState], fn: Callable[[SampleState, int], st
             log_file = log_dir / f"{st.sample.name}.log"
             log_file.parent.mkdir(parents=True, exist_ok=True)
             with open(log_file, "a") as fh:  # The traceback, for a bug report
-                fh.write("Unexpected error in BACoN:\n" + traceback.format_exc())
+                fh.write("Unexpected error in RASHER:\n" + traceback.format_exc())
             message = f"unexpected error: {type(exc).__name__}: {exc}".splitlines()[0] + f"; see {log_file}"
             log.warning("  %s: %s", st.sample.name, message)
             return st.sample.name, {"failed": message}
@@ -349,16 +349,16 @@ def _reference_records(reference: Path) -> list[Record]:
     """The sequences of the reference: a fasta file, or the ORIGIN of a GenBank file (named after the record's
     VERSION, as NCBI's fasta of the same record)."""
     if not reference.is_file():
-        raise BaconError(f"Reference file not found: {reference}")
+        raise RasherError(f"Reference file not found: {reference}")
     fmt = annotation_format(reference)
     if fmt == "gff3":
-        raise BaconError(f"The reference must be a fasta or GenBank file, not GFF3: {reference} (give the GFF3 "
+        raise RasherError(f"The reference must be a fasta or GenBank file, not GFF3: {reference} (give the GFF3 "
                          "with --annotation)")
     if fmt == "genbank":
         records = genbank_fasta_records(reference)
         names = [r.name for r in records]
         if len(set(names)) != len(names):
-            raise BaconError(f"The reference has duplicate sequence names: {reference}")
+            raise RasherError(f"The reference has duplicate sequence names: {reference}")
         return records
     check_reference(reference)
     return list(read_records(reference))
@@ -383,13 +383,13 @@ def _prepare_reference(s: Settings) -> tuple[Path, int]:
 
 
 ANNOTATION_COPIES = ("annotation.gb", "annotation.gff3")
-# The files BACoN writes at the top of the output folder, and the temporary files they are written to
+# The files RASHER writes at the top of the output folder, and the temporary files they are written to
 OUTPUT_FILES = ("reference.fasta", "reference.tmp", *ANNOTATION_COPIES,
                 "annotation.tmp", md.COPY_NAME, "metadata.tmp", "summary.tsv", "summary.tsv.tmp", "run_info.json",
-                "run_info.json.tmp", "report.html", "report.html.tmp", "bacon.log", ".bacon.lock",
-                *(f"bacon_{name}_mqc.json{tmp}" for name in ("samples", "reads", "distances")
+                "run_info.json.tmp", "report.html", "report.html.tmp", "rasher.log", ".rasher.lock",
+                *(f"rasher_{name}_mqc.json{tmp}" for name in ("samples", "reads", "distances")
                   for tmp in ("", ".tmp")))
-# The copies BACoN makes of an input, which may be that input itself when they leave it as it is (e.g. -r
+# The copies RASHER makes of an input, which may be that input itself when they leave it as it is (e.g. -r
 # OUTPUT/reference.fasta of an earlier run): checked again before they are written.
 OWN_COPIES = {"-r/--reference": ("reference.fasta", "annotation.gb"),
               "--annotation": ANNOTATION_COPIES, "--metadata": (md.COPY_NAME,)}
@@ -415,10 +415,10 @@ def _given_as(s: Settings, path: Path) -> str | None:
     return next((option for option, given in _inputs(s) if _same_file(path, given)), None)
 
 
-def _overwritten(s: Settings, option: str, path: Path) -> BaconError:
-    return BaconError(f"{option} {_input_path(s, option, path)} is the file {path.name} that BACoN writes in the "
-                      f"output folder, and would be overwritten: move it out of {s.output}, or use another output "
-                      "folder")
+def _overwritten(s: Settings, option: str, path: Path) -> RasherError:
+    return RasherError(f"{option} {_input_path(s, option, path)} is the file {path.name} that RASHER writes in "
+                      f"the output folder, and would be overwritten: move it out of {s.output}, or use another "
+                      "output folder")
 
 
 def _input_path(s: Settings, option: str, path: Path) -> Path:
@@ -427,18 +427,18 @@ def _input_path(s: Settings, option: str, path: Path) -> Path:
 
 
 def _check_inputs_kept(s: Settings) -> None:
-    """Refuse, before anything is written, an input that BACoN would overwrite or delete: one of the files it
+    """Refuse, before anything is written, an input that RASHER would overwrite or delete: one of the files it
     writes at the top of the output folder (but the copy it makes of that input, OWN_COPIES), or the copy of an
     added genome."""
     for option, path in _inputs(s):
         for name in OUTPUT_FILES:
             if name not in OWN_COPIES.get(option, ()) and _same_file(path, s.output / name):
-                raise BaconError(f"{option} {path} is a file BACoN writes in the output folder ({name}): move it "
-                                 f"out of {s.output}, or use another output folder")
+                raise RasherError(f"{option} {path} is a file RASHER writes in the output folder ({name}): move "
+                                 f"it out of {s.output}, or use another output folder")
     for path in s.add_genomes:
         parts = split_extension(path.name)
         if parts and _same_file(path, s.output / FOLDERS["compare"] / "added_genomes" / f"{parts[0]}.fasta"):
-            raise BaconError(f"--add-genomes {path} is BACoN's copy of an added genome (its sequences renamed), "
+            raise RasherError(f"--add-genomes {path} is RASHER's copy of an added genome (its sequences renamed), "
                              "rewritten by each run: give the original file")
 
 
@@ -452,7 +452,7 @@ def _open_bytes(path: Path):
 def _record_copy(s: Settings, key: str, name: str | None) -> None:
     """Record in .checkpoints/copies.json the copy (of the annotation or of the metadata) this run writes, or
     None when it has none, as soon as it is written: run_info.json records it too, but only at the end of the
-    run, and an interrupted first run would leave BACoN's own copies looking hand-made."""
+    run, and an interrupted first run would leave RASHER's own copies looking hand-made."""
     path = s.output / ".checkpoints" / "copies.json"
     try:
         data = json.loads(path.read_text())
@@ -468,7 +468,7 @@ def _record_copy(s: Settings, key: str, name: str | None) -> None:
 def _recorded_copy(s: Settings, key: str) -> str | None:
     """The name of the copy (of the annotation or of the metadata) that the previous run of this folder recorded
     as its own, in .checkpoints/copies.json or, for a folder of an earlier version, in run_info.json; None when
-    there is none: a file BACoN did not write (hand-made, or from another tool) is kept."""
+    there is none: a file RASHER did not write (hand-made, or from another tool) is kept."""
     for file in (s.output / ".checkpoints" / "copies.json", s.output / "run_info.json"):
         try:
             info = json.loads(file.read_text())
@@ -484,7 +484,7 @@ def _recorded_copy(s: Settings, key: str) -> str | None:
 
 
 def _remove_copy(s: Settings, path: Path, recorded: str | None, what: str) -> None:
-    """Remove the copy of an earlier run when it was BACoN's (and is not an input of this run); otherwise leave it
+    """Remove the copy of an earlier run when it was RASHER's (and is not an input of this run); otherwise leave it
     and say so."""
     if not path.exists():
         return
@@ -493,7 +493,8 @@ def _remove_copy(s: Settings, path: Path, recorded: str | None, what: str) -> No
     elif path.name == recorded:
         path.unlink()
     else:
-        log.info("%s %s was not written by BACoN: kept (the report uses it; delete it if it is stale)", what, path)
+        log.info("%s %s was not written by RASHER: kept (the report uses it; delete it if it is stale)",
+                 what, path)
 
 
 def _reference_regions(records: list[Record], annotation: Annotation | None) -> dict[str, object]:
@@ -517,7 +518,7 @@ def _reference_regions(records: list[Record], annotation: Annotation | None) -> 
 def _prepare_annotation(s: Settings, reference: Path) -> tuple[dict[str, object] | None, dict[str, object]]:
     """Validate the annotation (--annotation, or the GenBank reference itself) against the reference's sequences
     and copy it, uncompressed, to OUTPUT/annotation.gb or annotation.gff3 for the report; the copy left by an
-    earlier run is removed when this run has no annotation (a file BACoN did not write is kept). Also the
+    earlier run is removed when this run has no annotation (a file RASHER did not write is kept). Also the
     regions of each reference sequence (_reference_regions), annotation or not."""
     source = s.annotation or (s.reference if annotation_format(s.reference) == "genbank" else None)
     recorded = _recorded_copy(s, "annotation")
@@ -547,7 +548,7 @@ def _prepare_annotation(s: Settings, reference: Path) -> tuple[dict[str, object]
         raise _overwritten(s, given, copy)
     else:
         tmp.replace(copy)
-    _record_copy(s, "annotation", None if given else copy.name)  # None: not to be removed as BACoN's
+    _record_copy(s, "annotation", None if given else copy.name)  # None: not to be removed as RASHER's
     log.info("Annotation %s: %d gene(s) on %d of the reference's %d sequence(s)", source.name, annotation.genes,
              len(annotation.sequences), len(sequences))
     return ({"file": str(source), "format": annotation.format, "copy": copy.name, "genes": annotation.genes,
@@ -560,7 +561,7 @@ def _prepare_metadata(s: Settings, samples: list[Sample]) -> dict[str, object] |
     """Read the metadata (--metadata, and the extra columns of the sample sheet, which --metadata overrides column
     by column), match it to the samples and to the added genomes, choose the column that colours the report, and
     write the normalised copy OUTPUT/metadata.tsv for the report; the copy left by an earlier run is removed when
-    this run has no metadata (a metadata.tsv BACoN did not write is kept). Fails before any step on an unreadable
+    this run has no metadata (a metadata.tsv RASHER did not write is kept). Fails before any step on an unreadable
     file, a missing 'sample' column or an unknown --color-by column."""
     given = md.read_metadata(s.metadata) if s.metadata else None
     sheet = md.sheet_metadata(s.sample_sheet) if s.sample_sheet else None
@@ -568,7 +569,7 @@ def _prepare_metadata(s: Settings, samples: list[Sample]) -> dict[str, object] |
     copy = s.output / md.COPY_NAME
     if merged is None:
         if s.color_by is not None and s.color_by.lower() != "none":
-            raise BaconError(f"--color-by {s.color_by!r}: no metadata (give --metadata, or a sample sheet with "
+            raise RasherError(f"--color-by {s.color_by!r}: no metadata (give --metadata, or a sample sheet with "
                              "columns besides 'sample' and 'file')")
         _remove_copy(s, copy, _recorded_copy(s, "metadata"), "Metadata")
         _record_copy(s, "metadata", None)
@@ -582,7 +583,7 @@ def _prepare_metadata(s: Settings, samples: list[Sample]) -> dict[str, object] |
     if unmatched:
         log.warning("Metadata: %d row(s) match no sample: %s%s", len(unmatched), ", ".join(unmatched[:5]),
                     " …" if len(unmatched) > 5 else "")
-    column, why_not = md.choose_colour_column(metadata, s.color_by)  # BaconError on an unknown column
+    column, why_not = md.choose_colour_column(metadata, s.color_by)  # RasherError on an unknown column
     if why_not:
         log.warning("Metadata: %s", why_not)
     given = _given_as(s, copy)  # An input that is the copy itself: the user's file, kept if it would not change
@@ -596,7 +597,7 @@ def _prepare_metadata(s: Settings, samples: list[Sample]) -> dict[str, object] |
         probe.unlink()
         if changed:
             raise _overwritten(s, given, copy)
-    _record_copy(s, "metadata", None if given else copy.name)  # None: not to be removed as BACoN's
+    _record_copy(s, "metadata", None if given else copy.name)  # None: not to be removed as RASHER's
     with_row = sum(1 for n in names if n in merged.rows)
     added_with_row = sum(1 for n in added if n in merged.rows)
     log.info("Metadata: %d column(s) (%s); %d of %d samples have a row%s; %s", len(metadata.columns),
@@ -630,7 +631,7 @@ def _off_reference(name: str, assembly: Path, reference: Path, log_dir: Path, th
     so that it is not tried again on every resume; --redo assemble tries again)."""
     try:
         pct = steps.off_reference(assembly, reference, log_dir / f"{name}.log", threads)
-    except BaconError as exc:
+    except RasherError as exc:
         if tools.stopping():  # Interrupted: not a failure of the alignment
             raise
         log.warning("Could not align the contigs of %s to the reference: %s", name, str(exc).splitlines()[0])
@@ -690,39 +691,39 @@ def run(s: Settings) -> int:
     s.add_genomes = [_resolved_folder(p) for p in s.add_genomes]
     if s.input and s.input.is_dir() and (s.output == s.input or s.output.is_relative_to(s.input)):
         # Its files would be taken for a sample's reads on the next run
-        raise BaconError(f"The output folder {s.output} cannot be the input folder or inside it")
+        raise RasherError(f"The output folder {s.output} cannot be the input folder or inside it")
     if s.output.exists() and not s.output.is_dir():
-        raise BaconError(f"The output folder {s.output} is a file")
+        raise RasherError(f"The output folder {s.output} is a file")
     _check_inputs_kept(s)
     try:
         s.output.mkdir(parents=True, exist_ok=True)
-        lock = open(s.output / ".bacon.lock", "w")  # noqa: SIM115 - held until the end of the run
+        lock = open(s.output / ".rasher.lock", "w")  # noqa: SIM115 - held until the end of the run
     except OSError as exc:
-        raise BaconError(f"Cannot write to the output folder {s.output}: {exc.strerror or exc}") from None
+        raise RasherError(f"Cannot write to the output folder {s.output}: {exc.strerror or exc}") from None
     tools.allow_programs()  # After an interruption of an earlier run in this process
     try:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
     except OSError as exc:
         if exc.errno not in (errno.EAGAIN, errno.EACCES):  # A file system without locks (some NFS, SMB mounts)
-            log.warning("Could not lock %s (%s): make sure no other BACoN run uses it", s.output, exc.strerror)
+            log.warning("Could not lock %s (%s): make sure no other RASHER run uses it", s.output, exc.strerror)
         else:
             lock.close()
-            raise BaconError(f"Another BACoN run is using {s.output}; wait for it to end, or use another output "
+            raise RasherError(f"Another RASHER run is using {s.output}; wait for it to end, or use another output "
                              "folder") from None
-    file_handler = logging.FileHandler(s.output / "bacon.log")
+    file_handler = logging.FileHandler(s.output / "rasher.log")
     file_handler.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(message)s", "%Y-%m-%d %H:%M:%S"))
-    logger = logging.getLogger("bacon")
+    logger = logging.getLogger("rasher")
     logger.addHandler(file_handler)
     level = logger.level
     if logger.getEffectiveLevel() > logging.INFO:  # The file log always records progress
         logger.setLevel(logging.INFO)
     try:
         return _run(s, started)
-    except BaconError as exc:  # Logged here, while bacon.log still records
+    except RasherError as exc:  # Logged here, while rasher.log still records
         log.error("%s", exc)
         exc.logged = True  # type: ignore[attr-defined]
         raise
-    except OSError as exc:  # A file BACoN may not read or write (permissions): a message, not a traceback
+    except OSError as exc:  # A file RASHER may not read or write (permissions): a message, not a traceback
         log.error("%s", os_error_message(exc))
         exc.logged = True  # type: ignore[attr-defined]
         raise
@@ -738,7 +739,7 @@ def run(s: Settings) -> int:
 
 
 def _run(s: Settings, started: float) -> int:
-    log.info("BACoN %s", __version__)
+    log.info("RASHER %s", __version__)
     if s.snp_method == "auto":  # Resolved once: checkpoints, folders, run_info.json and the report see the method
         s.snp_method = resolve_snp_method(s.snp_method, s.assembler)
         log.info("Comparison method: %s (the default for %s assemblies)",
@@ -787,7 +788,7 @@ def _run(s: Settings, started: float) -> int:
                      **({"consensus_cutoff": s.consensus_cutoff} if s.assembler == "samtools" else {}),
                      **(flye_options if s.assembler == "flye" else {})},
     }
-    # BACoN <= 0.3.7 also recorded --keep-bam and Flye's options whatever the assembler (as 0.3.2 for minimap2):
+    # RASHER <= 0.3.7 also recorded --keep-bam and Flye's options whatever the assembler (as 0.3.2 for minimap2):
     # the checkpoints of a folder it made are reused when nothing else changed, made with --keep-bam or without.
     older = {keep_bam: {"bait": {**params["bait"], "keep_bam": keep_bam}, "filter": params["filter"],
                         "assemble": {**params["assemble"], **flye_options}} for keep_bam in (False, True)}
@@ -839,7 +840,7 @@ def _run(s: Settings, started: float) -> int:
         saved = None if i >= redo_from else checkpoints.load(step, fingerprint, *older_fingerprints.values())
         relocated = bool(saved and saved.get("relocated"))  # A moved or copied folder: sizes alone are compared
         # With --keep-bam (minimap2), a sample's baiting is reused only if it left its BAM: recorded in its result,
-        # or by the fingerprint of a checkpoint of BACoN <= 0.3.7 made with --keep-bam.
+        # or by the fingerprint of a checkpoint of RASHER <= 0.3.7 made with --keep-bam.
         bam = step == "bait" and s.keep_bam and s.baiting == "minimap2"
         made_with_bam = saved is not None and saved["fingerprint"] == older_fingerprints[True]
         if step == "bait" and s.baiting == "minimap2" and made_with_bam:
@@ -896,9 +897,9 @@ def _run(s: Settings, started: float) -> int:
         _apply(states, results, step)
         if all(st.failed for st in states):
             _finish(s, states, tools, None, started, annotation, metadata, regions)
-            raise BaconError(f"All samples failed at the {step} step; see the logs in {logs}")
+            raise RasherError(f"All samples failed at the {step} step; see the logs in {logs}")
 
-    if s.assembler != "samtools":  # Assemblies of BACoN <= 0.3.9, whose checkpoints lack it: added to them
+    if s.assembler != "samtools":  # Assemblies of RASHER <= 0.3.9, whose checkpoints lack it: added to them
         late = [st for st in states if not st.failed and st.assembly and st.assembly.is_file()
                 and "Off_reference_pct" not in st.stats and st.sample.name in results]
         for st in late:
@@ -916,11 +917,11 @@ def _run(s: Settings, started: float) -> int:
                               [fingerprint, *older_fingerprints.values()],
                               bool(refreshed) or redo_from <= STEPS.index("compare"))
     except Exception as exc:  # The assemblies are still worth reporting
-        message = str(exc).splitlines()[0] if isinstance(exc, BaconError) else f"{type(exc).__name__}: {exc}"
+        message = str(exc).splitlines()[0] if isinstance(exc, RasherError) else f"{type(exc).__name__}: {exc}"
         _finish(s, states, tools, {"failed": message}, started, annotation, metadata, regions)
-        if isinstance(exc, BaconError):
+        if isinstance(exc, RasherError):
             raise
-        raise BaconError(f"The comparison failed unexpectedly: {message}") from exc
+        raise RasherError(f"The comparison failed unexpectedly: {message}") from exc
     _finish(s, states, tools, comparison, started, annotation, metadata, regions)
     return 0
 
@@ -952,7 +953,7 @@ def _compare(s: Settings, states: list[SampleState], reference: Path, root: Path
         result = saved["results"]
         checkpoints.save("compare", fingerprint, {**result, "inputs": signatures})  # Signatures of this version
         if not result.get("vcf") or not Path(result["vcf"]).is_file() or _vcf_outdated(Path(result["vcf"])):
-            # A comparison from BACoN < 0.3.2, whose VCF failed, or whose VCF predates the fixes of 0.3.3: the VCF
+            # A comparison from RASHER < 0.3.2, whose VCF failed, or whose VCF predates the fixes of 0.3.3: the VCF
             # is made from the comparison's files.
             out = Path(result["distances"]).parent
             paths = {k: v for k, v in assemblies.items() if v is not None}
@@ -1009,7 +1010,7 @@ def _comparison_files_exist(result: dict) -> bool:
 def _same_assemblies(saved: dict | None, signatures: dict, assemblies: dict[str, Path | None],
                      distances: str | None, relocated: bool = False) -> bool:
     """Whether a saved comparison was made from the current assemblies (in a moved or copied folder,
-    `relocated`, by their sizes alone). A comparison of BACoN < 0.3.4 has no signatures: it must then be newer
+    `relocated`, by their sizes alone). A comparison of RASHER < 0.3.4 has no signatures: it must then be newer
     than every assembly."""
     if saved is not None:
         return saved == signatures or (relocated and {k: _size_only(v) for k, v in saved.items()}
@@ -1021,19 +1022,19 @@ def _same_assemblies(saved: dict | None, signatures: dict, assemblies: dict[str,
         return False
 
 
-# VCFs written by earlier versions are rewritten on resume: 0.3.3 fixed N alleles, SNPs next to the ends of
-# circular genomes and Parsnp's INFO values.
-VCF_REWRITE_BEFORE = (0, 3, 3)
+# VCFs written by earlier versions are rewritten on resume (bump when a release fixes the VCF): every RASHER
+# version writes correct VCFs so far. A VCF without "##source=RASHER" (e.g. BACoN's) is always rewritten.
+VCF_REWRITE_BEFORE = (0, 1, 0)
 
 
 def _vcf_outdated(vcf: Path) -> bool:
-    """True if the VCF was written by a BACoN older than VCF_REWRITE_BEFORE (or does not say)."""
+    """True if the VCF was written by a RASHER older than VCF_REWRITE_BEFORE (or does not say)."""
     with open(vcf, encoding="ascii", errors="replace") as fh:
         for line in fh:
             if not line.startswith("##"):
                 break
-            if line.startswith("##source=BACoN "):
-                numbers = [int(n) for n in re.findall(r"\d+", line[len("##source=BACoN "):])[:3]]
+            if line.startswith("##source=RASHER "):
+                numbers = [int(n) for n in re.findall(r"\d+", line[len("##source=RASHER "):])[:3]]
                 return tuple(numbers) < VCF_REWRITE_BEFORE  # () if no version
     return True
 
@@ -1043,7 +1044,7 @@ def _write_vcf(s: Settings, reference: Path, out: Path, log_dir: Path, paths: di
     """snps.vcf of the comparison; an extra output, whose failure is logged and does not fail the comparison."""
     try:
         vcf_path, records = compare.write_vcf(s.snp_method, reference, out, log_dir, threads=s.threads,
-                                              assemblies=paths, source=f"BACoN {__version__}", added=added)
+                                              assemblies=paths, source=f"RASHER {__version__}", added=added)
     except Exception as exc:  # noqa: BLE001
         log.warning("Could not write the VCF: %s", str(exc).splitlines()[0] if str(exc) else repr(exc))
         return None
@@ -1057,15 +1058,15 @@ def _check_added_genomes(s: Settings, samples: set[str]) -> dict[str, Path]:
     added: dict[str, Path] = {}
     for path in s.add_genomes:
         if not path.exists():
-            raise BaconError(f"--add-genomes: file not found: {path}")
+            raise RasherError(f"--add-genomes: file not found: {path}")
         parts = split_extension(path.name)
         if not parts or not path.is_file() or sniff_format(path) != "fasta":
-            raise BaconError(f"--add-genomes: not a fasta file: {path}")
+            raise RasherError(f"--add-genomes: not a fasta file: {path}")
         name = parts[0]
         if not VALID_NAME.fullmatch(name):
-            raise BaconError(f"--add-genomes: invalid name {name!r} (from {path}): {NAME_RULE}; rename the file")
+            raise RasherError(f"--add-genomes: invalid name {name!r} (from {path}): {NAME_RULE}; rename the file")
         if name.lower() == "reference" or name in samples or name in added:
-            raise BaconError(f"--add-genomes: the name {name!r} (from {path}) is reserved or already used; "
+            raise RasherError(f"--add-genomes: the name {name!r} (from {path}) is reserved or already used; "
                              "rename the file")
         added[name] = path
     return added
@@ -1104,7 +1105,7 @@ def _finish(s: Settings, states: list[SampleState], tools: dict[str, str], compa
              "Note"]
     log.info("Summary (%s):\n%s", s.output / "summary.tsv", format_table(shown, rows))
     info = {
-        "bacon_version": __version__,
+        "rasher_version": __version__,
         "command_line": s.command_line,
         "started": time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime(started)),
         "duration_s": round(time.time() - started, 1),
@@ -1141,7 +1142,7 @@ def _finish(s: Settings, states: list[SampleState], tools: dict[str, str], compa
 
 def _reference_info(s: Settings, regions: dict[str, object] | None = None) -> dict[str, object]:
     """The reference as given: its path, number of sequences, total length, the MD5 of the file itself (fasta or
-    GenBank; not of BACoN's normalized copy, reference.fasta), and the regions of each sequence (or "none")."""
+    GenBank; not of RASHER's normalized copy, reference.fasta), and the regions of each sequence (or "none")."""
     local = s.output / "reference.fasta"
     lengths = [len(r.seq) for r in read_records(local)] if local.exists() else []
     return {"file": str(s.reference), "sequences": len(lengths), "length": sum(lengths),
@@ -1214,7 +1215,7 @@ def _cgroup_cpu_limit(proc: str = PROC_CGROUP, root: str = CGROUP_ROOT) -> int |
 
 
 def default_memory_gb() -> int:
-    """85% of the memory BACoN may use: the physical memory, or less under a job scheduler or in a container."""
+    """85% of the memory RASHER may use: the physical memory, or less under a job scheduler or in a container."""
     try:
         total = os.sysconf("SC_PAGE_SIZE") * os.sysconf("SC_PHYS_PAGES")
     except (ValueError, OSError, AttributeError):  # pragma: no cover
@@ -1224,7 +1225,7 @@ def default_memory_gb() -> int:
 
 
 def usable_cpus() -> int:
-    """The CPUs BACoN may use: all of them, or those a job scheduler or `taskset` gave it (its CPU affinity), or
+    """The CPUs RASHER may use: all of them, or those a job scheduler or `taskset` gave it (its CPU affinity), or
     fewer under a CPU quota (a job scheduler's or a container's control group)."""
     affinity = getattr(os, "sched_getaffinity", None)  # Not on macOS
     cpus = (len(affinity(0)) if affinity else os.cpu_count()) or 1

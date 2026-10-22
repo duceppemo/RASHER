@@ -2,8 +2,8 @@ import xml.etree.ElementTree as ET
 
 import pytest
 
-from bacon import BaconError
-from bacon.newick import depths, ladderize, midpoint_root, parse, to_newick, to_svg
+from rasher import RasherError
+from rasher.newick import depths, ladderize, midpoint_root, parse, to_newick, to_svg
 
 
 def leaves(node):
@@ -37,7 +37,7 @@ def test_parse_lengths_supports_and_quotes():
 
 @pytest.mark.parametrize("bad", ["(A,B)", "(A,B;", "(A,B));", "(A:x,B);"])
 def test_parse_errors(bad):
-    with pytest.raises(BaconError):
+    with pytest.raises(RasherError):
         parse(bad)
 
 
@@ -101,8 +101,8 @@ def test_midpoint_keeps_the_support_of_the_split_edge():
 def test_unterminated_quoted_label():
     import pytest
 
-    from bacon import BaconError
-    with pytest.raises(BaconError):
+    from rasher import RasherError
+    with pytest.raises(RasherError):
         parse("('A:1,B:1);")
 
 
@@ -146,7 +146,7 @@ def test_nodes_are_equal_only_to_themselves():
 @pytest.mark.parametrize("bad", ["(A:inf,B:1);", "(A:1,B:nan);", "(A:1,B:1e999);", "((A:1,B:1):-inf,C:1);",
                                  "((A:1,B:1)inf:1,C:1);", "((A:1,B:1)1e999:1,C:1);", "(A:1,B:1)nan;"])
 def test_parse_rejects_non_finite_lengths_and_supports(bad):
-    with pytest.raises(BaconError, match="not a finite number"):
+    with pytest.raises(RasherError, match="not a finite number"):
         parse(bad)
 
 

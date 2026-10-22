@@ -1,4 +1,4 @@
-"""Command-line interface for BACoN."""
+"""Command-line interface for RASHER."""
 
 from __future__ import annotations
 
@@ -9,11 +9,11 @@ import sys
 import threading
 from pathlib import Path
 
-from bacon import BaconError, __version__, tools
-from bacon.metadata import MAX_COLOUR_VALUES
-from bacon.pipeline import STEPS, Settings, default_memory_gb, os_error_message, run, usable_cpus
+from rasher import RasherError, __version__, tools
+from rasher.metadata import MAX_COLOUR_VALUES
+from rasher.pipeline import STEPS, Settings, default_memory_gb, os_error_message, run, usable_cpus
 
-log = logging.getLogger("bacon")
+log = logging.getLogger("rasher")
 
 
 def _positive_int(value: str) -> int:
@@ -57,7 +57,7 @@ def build_parser() -> argparse.ArgumentParser:
     max_cpu = usable_cpus()
     max_mem = default_memory_gb()
     parser = argparse.ArgumentParser(
-        prog="bacon",
+        prog="rasher",
         description="Bait, Assemble and Compare Nanopore reads matching a reference sequence "
                     "(for example an organelle genome).",
     )
@@ -168,7 +168,7 @@ def build_parser() -> argparse.ArgumentParser:
                            help="Total memory in GB for BBDuk, divided between the samples processed in "
                                 "parallel (-p). Default: 85%% of the total (%(default)s)")
     parser.add_argument("--debug", action="store_true", help="Verbose logging.")
-    parser.add_argument("-v", "--version", action="version", version=f"BACoN {__version__}")
+    parser.add_argument("-v", "--version", action="version", version=f"RASHER {__version__}")
     return parser
 
 
@@ -226,7 +226,7 @@ def main(argv: list[str] | None = None) -> int:
         parallel=args.parallel,
         memory_gb=args.memory,
         redo=args.redo,
-        command_line=list(sys.argv if argv is None else ["bacon", *argv]),
+        command_line=list(sys.argv if argv is None else ["rasher", *argv]),
     )
     received = [signal.SIGINT]
 
@@ -234,7 +234,7 @@ def main(argv: list[str] | None = None) -> int:
         received[0] = signum
         raise KeyboardInterrupt  # The programs still running are killed, as with Ctrl-C
 
-    # SIGTERM and SIGHUP (`kill`, a job scheduler's time limit, a closed terminal) stop BACoN like Ctrl-C, unless
+    # SIGTERM and SIGHUP (`kill`, a job scheduler's time limit, a closed terminal) stop RASHER like Ctrl-C, unless
     # they are ignored (`nohup` ignores SIGHUP). Signal handlers can only be set from the main thread.
     previous = {}
     if threading.current_thread() is threading.main_thread():
@@ -243,11 +243,11 @@ def main(argv: list[str] | None = None) -> int:
                 previous[sig] = signal.signal(sig, stop)
     try:
         return run(settings)
-    except BaconError as exc:
-        if not getattr(exc, "logged", False):  # run() logs the errors of a started run (in bacon.log too)
+    except RasherError as exc:
+        if not getattr(exc, "logged", False):  # run() logs the errors of a started run (in rasher.log too)
             log.error("%s", exc)
         return 1
-    except OSError as exc:  # A path BACoN may not read or write (permissions)
+    except OSError as exc:  # A path RASHER may not read or write (permissions)
         if not getattr(exc, "logged", False):
             log.error("%s", os_error_message(exc))
         return 1
@@ -260,7 +260,7 @@ def main(argv: list[str] | None = None) -> int:
         for sig, handler in previous.items():
             signal.signal(sig, handler)
         if argv is None and threading.current_thread() is threading.main_thread():
-            # BACoN run as a program is over: a Ctrl-C while Python exits ends it at once (status 130), without
+            # RASHER run as a program is over: a Ctrl-C while Python exits ends it at once (status 130), without
             # the traceback Python would print from the exit's wait for the threads
             signal.signal(signal.SIGINT, signal.SIG_DFL)
 

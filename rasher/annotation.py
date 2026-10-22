@@ -19,8 +19,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from urllib.parse import unquote
 
-from bacon import BaconError
-from bacon.seqio import DECOMPRESSION_ERRORS, Record, open_text
+from rasher import RasherError
+from rasher.seqio import DECOMPRESSION_ERRORS, Record, open_text
 
 log = logging.getLogger(__name__)
 
@@ -214,7 +214,7 @@ def read_genbank(path: Path) -> list[GenBankRecord]:
         with open_text(path) as fh:
             return list(_genbank_records(fh))
     except DECOMPRESSION_ERRORS as exc:
-        raise BaconError(f"{path}: truncated or corrupt compressed file ({exc})") from None
+        raise RasherError(f"{path}: truncated or corrupt compressed file ({exc})") from None
 
 
 @dataclass
@@ -325,11 +325,11 @@ def genbank_fasta_records(path: Path) -> list[Record]:
     """The sequences of a GenBank file, named as NCBI's fasta of the same records (for `-r file.gb`)."""
     records = read_genbank(path)
     if not records:
-        raise BaconError(f"{path}: no GenBank record (no LOCUS line)")
+        raise RasherError(f"{path}: no GenBank record (no LOCUS line)")
     missing = [r.name for r in records if not r.seq]
     if missing:
-        raise BaconError(f"{path}: no sequence (ORIGIN) for {', '.join(missing[:3])}: give the reference as fasta "
-                         "and this file with --annotation")
+        raise RasherError(f"{path}: no sequence (ORIGIN) for {', '.join(missing[:3])}: give the reference as "
+                         "fasta and this file with --annotation")
     return [Record(r.header, r.seq) for r in records]
 
 
@@ -461,7 +461,7 @@ def read_gff3(path: Path, known_lengths: dict[str, int] | None = None
                     written[key] = as_written
                 order.append(feature)
     except DECOMPRESSION_ERRORS as exc:
-        raise BaconError(f"{path}: truncated or corrupt compressed file ({exc})") from None
+        raise RasherError(f"{path}: truncated or corrupt compressed file ({exc})") from None
     multi = [key for key, numbers in part_numbers.items() if len({line for _, line in numbers}) > 1]
     # Whether the file lists parts 5' to 3': those of a reverse-strand feature by descending coordinate
     five_to_three = False
@@ -1606,7 +1606,7 @@ def _internal_stop(cds: Cds, seq: str) -> bool:
     """Whether the coding sequence read from `seq` has a stop codon before its last codon, other than one with a
     translational exception (/transl_except: selenocysteine): parts in a wrong order, or a wrong frame. Not looked
     for in a coding sequence edited at the RNA level (U-to-C editing removes stop codons: hornworts, ferns) or
-    translated with a table BACoN does not know."""
+    translated with a table RASHER does not know."""
     if cds.edited or cds.transl_table not in TABLES:
         return False
     coding = cds.coding_sequence(seq)
@@ -1618,24 +1618,24 @@ def _internal_stop(cds: Cds, seq: str) -> bool:
 def load_annotation(path: Path, sequences: list[tuple[str, int]], default_table: int = DEFAULT_TABLE,
                     seqs: dict[str, str] | None = None) -> Annotation:
     """Read a GenBank or GFF3 annotation and match it to the reference sequences (name, length). An unreadable
-    file or an unknown format is a BaconError; annotated sequences that match no reference sequence, and
+    file or an unknown format is a RasherError; annotated sequences that match no reference sequence, and
     features beyond the end of their sequence, are left out with a warning (in `warnings`). A single annotated
     sequence is taken for a single reference sequence of the same length, whatever its name. With the reference
     sequences themselves (`seqs`, by name), the regions of an annotated sequence without annotated inverted
     repeats come from the inverted repeat detected in its sequence (find_regions), and a coding sequence with a
     stop codon inside it (_internal_stop) gives no effects."""
     if not path.is_file():
-        raise BaconError(f"Annotation file not found: {path}")
+        raise RasherError(f"Annotation file not found: {path}")
     fmt = annotation_format(path)
     if fmt is None:
-        raise BaconError(f"{path}: not a GenBank (.gb, .gbk) or GFF3 (.gff, .gff3) annotation")
+        raise RasherError(f"{path}: not a GenBank (.gb, .gbk) or GFF3 (.gff, .gff3) annotation")
     lengths: dict[str, int] = {}
     circular: set[str] = set()
     skipped = 0
     if fmt == "genbank":
         records = read_genbank(path)
         if not records:
-            raise BaconError(f"{path}: no GenBank record (no LOCUS line)")
+            raise RasherError(f"{path}: no GenBank record (no LOCUS line)")
         features = [f for r in records for f in r.features]
         lengths = {r.name: r.length for r in records}
         circular = {r.name for r in records if r.circular}
@@ -1643,7 +1643,7 @@ def load_annotation(path: Path, sequences: list[tuple[str, int]], default_table:
     else:
         features, lengths, circular = read_gff3(path, dict(sequences))
         if not features:
-            raise BaconError(f"{path}: no feature (not a GFF3 file?)")
+            raise RasherError(f"{path}: no feature (not a GFF3 file?)")
     annotated = list(dict.fromkeys([*lengths, *(f.seq for f in features)]))
     reference = dict(sequences)
     rename: dict[str, str] = {name: name for name in annotated if name in reference}
@@ -1703,7 +1703,7 @@ def load_annotation(path: Path, sequences: list[tuple[str, int]], default_table:
                         f"({'; '.join(reasons)}): {', '.join(unreadable[:5])}{more}")
     unknown = [table for table in annotation.tables if table not in TABLES]
     if unknown:
-        warnings.append(f"{path.name}: translation table(s) {', '.join(map(str, unknown))} not known to BACoN: "
+        warnings.append(f"{path.name}: translation table(s) {', '.join(map(str, unknown))} not known to RASHER: "
                         "their coding sequences are translated with the standard code and the start codons of "
                         f"table {DEFAULT_TABLE}")
     return annotation

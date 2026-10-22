@@ -11,9 +11,9 @@ from pathlib import Path
 
 import pytest
 
-from bacon import BaconError, __version__
-from bacon.pipeline import Settings, run
-from bacon.seqio import read_records
+from rasher import RasherError, __version__
+from rasher.pipeline import Settings, run
+from rasher.seqio import read_records
 
 STUBS = {
     # Reads whose name starts with "on" align; writes PAF lines. Samples named "bad*" crash.
@@ -263,7 +263,7 @@ def test_minimap2_comparison(stubs, dataset, tmp_path):
 @pytest.mark.parametrize(("assembler", "method"), [("samtools", "minimap2"), ("flye", "ska")])
 def test_auto_snp_method_follows_the_assembler(stubs, dataset, tmp_path, assembler, method):
     """The default comparison: minimap2 for templated assemblies, SKA2 for de novo ones, recorded as resolved."""
-    from bacon.pipeline import resolve_snp_method
+    from rasher.pipeline import resolve_snp_method
     assert resolve_snp_method("parsnp", "samtools") == "parsnp" and resolve_snp_method("auto", "myloasm") == "ska"
     ref, reads = dataset
     out = tmp_path / "out"
@@ -274,7 +274,7 @@ def test_auto_snp_method_follows_the_assembler(stubs, dataset, tmp_path, assembl
     assert info["comparison"]["method"] == method and info["settings"]["snp_method"] == method
     # Naming the method it resolved to is the same comparison: kept, not made again
     assert run(settings(ref, reads, out, assembler=assembler, snp_method=method)) == 0
-    assert f"Comparison with {method}: already done" in (out / "bacon.log").read_text()
+    assert f"Comparison with {method}: already done" in (out / "rasher.log").read_text()
 
 
 def test_consensus_cutoff_is_recorded_and_reported(stubs, dataset, tmp_path):
@@ -288,7 +288,7 @@ def test_consensus_cutoff_is_recorded_and_reported(stubs, dataset, tmp_path):
 
 
 def test_needed_tools_follow_the_default_comparison(tmp_path):
-    from bacon.pipeline import needed_tools
+    from rasher.pipeline import needed_tools
     base = {"reference": tmp_path / "r.fasta", "output": tmp_path / "o"}
     assert needed_tools(Settings(**base)) == ["minimap2", "filtlong", "samtools", "FastTree"]
     for assembler in ("flye", "myloasm"):
@@ -339,7 +339,7 @@ def test_full_run(stubs, dataset, tmp_path):
     assert info["samples"]["none"]["status"] == "failed (bait)"
     assert info["comparison"]["method"] == "ska"
     assert "flye" in info["tools"]
-    assert "Baiting reads matching the reference" in (out / "bacon.log").read_text()  # INFO, not only warnings
+    assert "Baiting reads matching the reference" in (out / "rasher.log").read_text()  # INFO, not only warnings
     vcf = (out / "4_compared" / "ska" / "snps.vcf").read_text().splitlines()
     assert vcf[0] == "##fileformat=VCFv4.2" and "##contig=<ID=ref,length=1000>" in vcf
     assert vcf[-2].split("\t")[9:] == ["s1", "s2", "s3"] and vcf[-1].split("\t")[9:] == ["1", "1", "1"]
@@ -349,9 +349,9 @@ def test_full_run(stubs, dataset, tmp_path):
     assert info["reference"]["md5"] != hashlib.md5((out / "reference.fasta").read_bytes()).hexdigest()
     report = (out / "report.html").read_text()
     assert all(name in report for name in ("s1", "s2", "s3", "none", "SKA2", "SNP distances", "4 genomes, 4 distinct"))
-    for name in ("bacon_samples_mqc.json", "bacon_reads_mqc.json", "bacon_distances_mqc.json"):
+    for name in ("rasher_samples_mqc.json", "rasher_reads_mqc.json", "rasher_distances_mqc.json"):
         json.loads((out / name).read_text())
-    assert set(json.loads((out / "bacon_samples_mqc.json").read_text())["data"]) == {"s1", "s2", "s3", "none"}
+    assert set(json.loads((out / "rasher_samples_mqc.json").read_text())["data"]) == {"s1", "s2", "s3", "none"}
 
 
 def test_resume_skips_finished_steps(stubs, dataset, tmp_path):
@@ -452,14 +452,14 @@ def test_all_samples_failing_is_an_error(stubs, dataset, tmp_path):
     ref, reads = dataset
     for s in ("s1", "s2", "s3"):
         (reads / f"{s}.fastq.gz").unlink()
-    with pytest.raises(BaconError, match="All samples failed at the bait step"):
+    with pytest.raises(RasherError, match="All samples failed at the bait step"):
         run(settings(ref, reads, tmp_path / "out"))
 
 
 def test_missing_tool_is_reported(dataset, tmp_path, monkeypatch):
     ref, reads = dataset
     monkeypatch.setenv("PATH", str(tmp_path / "empty"))
-    with pytest.raises(BaconError, match="Required program.*minimap2.*conda install"):
+    with pytest.raises(RasherError, match="Required program.*minimap2.*conda install"):
         run(settings(ref, reads, tmp_path / "out"))
 
 
@@ -487,7 +487,7 @@ def test_failed_comparison_still_writes_the_summary(stubs, dataset, tmp_path):
     ref, reads = dataset
     (Path(os.environ["PATH"].split(os.pathsep)[0]) / "FastTree").write_text("#!/bin/sh\nexit 3\n")
     out = tmp_path / "out"
-    with pytest.raises(BaconError, match="FastTree failed"):
+    with pytest.raises(RasherError, match="FastTree failed"):
         run(settings(ref, reads, out))
     assert summary(out)["s1"]["Status"] == "ok"
     assert "FastTree failed" in json.loads((out / "run_info.json").read_text())["comparison"]["failed"]
@@ -556,7 +556,7 @@ def test_add_genomes(stubs, dataset, tmp_path):
     assert (out / "4_compared" / "added_genomes" / "published.fasta").read_text().startswith(">published_chr\nACGT")
     clash = tmp_path / "s1.fasta"
     clash.write_text(">x\nACGT\n")
-    with pytest.raises(BaconError, match="already used"):
+    with pytest.raises(RasherError, match="already used"):
         run(settings(ref, reads, out, add_genomes=[clash]))
 
 
@@ -573,17 +573,17 @@ def test_fasta_reads_are_filtered_without_filtlong(stubs, dataset, tmp_path):
 
 
 def test_report_failure_does_not_fail_the_run(stubs, dataset, tmp_path, monkeypatch, caplog):
-    import bacon.pipeline
+    import rasher.pipeline
 
     def broken(output):
         raise RuntimeError("boom")
 
-    monkeypatch.setattr(bacon.pipeline, "write_report", broken)
+    monkeypatch.setattr(rasher.pipeline, "write_report", broken)
     ref, reads = dataset
     out = tmp_path / "out"
     assert run(settings(ref, reads, out, snp_method="none")) == 0
     assert "Could not write the HTML report: boom" in caplog.text
-    assert (out / "summary.tsv").exists() and not (out / "bacon_distances_mqc.json").exists()
+    assert (out / "summary.tsv").exists() and not (out / "rasher_distances_mqc.json").exists()
 
 
 def test_tree_keeps_names_the_tree_programs_would_change(stubs, dataset, tmp_path):
@@ -598,8 +598,8 @@ def test_tree_keeps_names_the_tree_programs_would_change(stubs, dataset, tmp_pat
 
 
 def test_notes_with_tabs_or_line_breaks_keep_the_summary_rectangular(tmp_path):
-    from bacon.pipeline import SampleState, summary_row
-    from bacon.samples import Sample
+    from rasher.pipeline import SampleState, summary_row
+    from rasher.samples import Sample
     st = SampleState(Sample("x", [tmp_path / "x.fq"]), failed="failed (bait)",
                      notes=["error:\tbad\ninput", "second"])
     assert summary_row(st)["Note"] == "error: bad input; second"
@@ -630,7 +630,7 @@ def test_comparison_from_before_the_vcf_gets_one(stubs, dataset, tmp_path):
     (ska_dir / "snps.vcf").unlink()
     checkpoint = out / ".checkpoints" / "compare.json"
     data = json.loads(checkpoint.read_text())
-    del data["results"]["vcf"]  # As written by BACoN 0.3.1, which kept no ska_reference.fasta either
+    del data["results"]["vcf"]  # As written by RASHER 0.3.1, which kept no ska_reference.fasta either
     checkpoint.write_text(json.dumps(data))
     (ska_dir / "ska_reference.fasta").unlink()
     run(settings(ref, reads, out))
@@ -638,13 +638,14 @@ def test_comparison_from_before_the_vcf_gets_one(stubs, dataset, tmp_path):
     assert "vcf" in json.loads(checkpoint.read_text())["results"]
 
 
-def test_vcf_from_before_0_3_3_is_rewritten_on_resume(stubs, dataset, tmp_path):
+def test_vcf_from_an_older_tool_is_rewritten_on_resume(stubs, dataset, tmp_path):
+    # A VCF of a version before VCF_REWRITE_BEFORE, or of the parent tool BACoN, is rewritten on resume
     ref, reads = dataset
     out = tmp_path / "out"
     run(settings(ref, reads, out))
     vcf = out / "4_compared" / "ska" / "snps.vcf"
     current = vcf.read_text()
-    vcf.write_text(current.replace(f"##source=BACoN {__version__}", "##source=BACoN 0.3.2"))
+    vcf.write_text(current.replace(f"##source=RASHER {__version__}", "##source=BACoN 0.4.0"))
     stubs.unlink()
     run(settings(ref, reads, out))
     assert vcf.read_text() == current  # Rewritten from the comparison's files, without redoing the comparison
@@ -684,15 +685,15 @@ def test_added_genomes_do_not_redo_the_comparison(stubs, dataset, tmp_path):
 
 
 def test_unexpected_error_fails_one_sample_not_the_run(stubs, dataset, tmp_path, monkeypatch):
-    import bacon.steps
-    real = bacon.steps.filter_filtlong
+    import rasher.steps
+    real = rasher.steps.filter_filtlong
 
     def flaky(name, *args, **kwargs):
         if name == "s2":
             raise UnicodeEncodeError("ascii", "x", 0, 1, "boom")
         return real(name, *args, **kwargs)
 
-    monkeypatch.setattr(bacon.steps, "filter_filtlong", flaky)
+    monkeypatch.setattr(rasher.steps, "filter_filtlong", flaky)
     out = tmp_path / "out"
     assert run(settings(*dataset, out, snp_method="none")) == 0
     rows = summary(out)
@@ -703,14 +704,14 @@ def test_unexpected_error_fails_one_sample_not_the_run(stubs, dataset, tmp_path,
 
 
 def test_unexpected_error_in_the_comparison_keeps_the_summary(stubs, dataset, tmp_path, monkeypatch):
-    import bacon.compare
+    import rasher.compare
 
     def broken(*args, **kwargs):
         raise FileNotFoundError("missing.contree")
 
-    monkeypatch.setattr(bacon.compare, "run_ska", broken)
+    monkeypatch.setattr(rasher.compare, "run_ska", broken)
     out = tmp_path / "out"
-    with pytest.raises(BaconError, match="comparison failed unexpectedly"):
+    with pytest.raises(RasherError, match="comparison failed unexpectedly"):
         run(settings(*dataset, out))
     assert summary(out)["s1"]["Status"] == "ok"
     assert "FileNotFoundError" in json.loads((out / "run_info.json").read_text())["comparison"]["failed"]
@@ -730,18 +731,18 @@ def test_an_interruption_loses_only_the_samples_still_running(stubs, dataset, tm
     out = tmp_path / "out"
     run(settings(ref, reads, out, snp_method="none"))
     _reads(reads / "s4.fastq.gz", [("on1", 900), ("on2", 850)])
-    import bacon.steps
-    real = bacon.steps.assemble_flye
+    import rasher.steps
+    real = rasher.steps.assemble_flye
 
     def interrupted(name, *args, **kwargs):
         if name == "s4":
             raise KeyboardInterrupt
         return real(name, *args, **kwargs)
 
-    monkeypatch.setattr(bacon.steps, "assemble_flye", interrupted)
+    monkeypatch.setattr(rasher.steps, "assemble_flye", interrupted)
     with pytest.raises(KeyboardInterrupt):
         run(settings(ref, reads, out, snp_method="none"))
-    monkeypatch.setattr(bacon.steps, "assemble_flye", real)
+    monkeypatch.setattr(rasher.steps, "assemble_flye", real)
     stubs.unlink()
     run(settings(ref, reads, out, snp_method="none"))
     assert calls(stubs).count("flye") == 1  # Only s4: the assemblies of s1-s3 were kept
@@ -755,13 +756,13 @@ def test_bbduk_counts_hdist_and_out_of_memory(stubs, dataset, tmp_path, monkeypa
     assert rows["s1"]["Raw_reads"] == "3" and rows["s1"]["Baited_reads"] == "2"
     assert "hdist=1" in (out / "logs" / "1_bait" / "s1.log").read_text()
     monkeypatch.setenv("STUB_BBDUK_OOM", "1")
-    with pytest.raises(BaconError, match="All samples failed"):
+    with pytest.raises(RasherError, match="All samples failed"):
         run(settings(ref, reads, tmp_path / "oom", baiting="bbduk", hdist=2, memory_gb=4, snp_method="none"))
     note = summary(tmp_path / "oom")["s1"]["Note"]
     assert "ran out of memory with 2 GB" in note and "--hdist 1" in note
     monkeypatch.delenv("STUB_BBDUK_OOM")
     monkeypatch.setenv("STUB_BBDUK_FAIL", "1")  # Its java command line has -XX:+ExitOnOutOfMemoryError
-    with pytest.raises(BaconError, match="All samples failed"):
+    with pytest.raises(RasherError, match="All samples failed"):
         run(settings(ref, reads, tmp_path / "fail", baiting="bbduk", snp_method="none"))
     note = summary(tmp_path / "fail")["s1"]["Note"]
     assert note.startswith("bbduk.sh failed with exit code 1 (baiting s1)") and "memory" not in note
@@ -771,17 +772,17 @@ def test_added_genome_cannot_take_the_name_of_a_failed_sample(stubs, dataset, tm
     ref, reads = dataset
     clash = tmp_path / "none.fasta"  # Sample "none" fails at baiting
     clash.write_text(">x\nACGT\n")
-    with pytest.raises(BaconError, match="already used"):
+    with pytest.raises(RasherError, match="already used"):
         run(settings(ref, reads, tmp_path / "out", add_genomes=[clash]))
 
 
 def test_interruption_kills_the_programs_still_running(tmp_path, caplog):
     import time
 
-    from bacon.pipeline import SampleState, _run_parallel
-    from bacon.samples import Sample
-    from bacon.steps import StepResult
-    from bacon.tools import run as run_tool
+    from rasher.pipeline import SampleState, _run_parallel
+    from rasher.samples import Sample
+    from rasher.steps import StepResult
+    from rasher.tools import run as run_tool
 
     pidfile = tmp_path / "child.pid"
 
@@ -824,9 +825,9 @@ def test_two_runs_cannot_share_an_output_folder(stubs, dataset, tmp_path):
     import fcntl
     out = tmp_path / "out"
     out.mkdir()
-    with open(out / ".bacon.lock", "w") as held:
+    with open(out / ".rasher.lock", "w") as held:
         fcntl.flock(held, fcntl.LOCK_EX | fcntl.LOCK_NB)  # Another run holds it
-        with pytest.raises(BaconError, match="Another BACoN run is using"):
+        with pytest.raises(RasherError, match="Another RASHER run is using"):
             run(settings(*dataset, out))
     assert run(settings(*dataset, out, snp_method="none")) == 0  # Released: this run goes ahead
 
@@ -856,13 +857,13 @@ def _interrupt(monkeypatch, module, function: str, sample: str, after: bool = Fa
 
 
 def test_new_reads_interrupted_after_baiting_are_filtered_again(stubs, dataset, tmp_path, monkeypatch):
-    import bacon.steps
+    import rasher.steps
     ref, reads = dataset
     out = tmp_path / "out"
     run(settings(ref, reads, out, snp_method="none", parallel=1))
     for name in ("s1", "s2"):  # New reads: one read matches
         _reads(reads / f"{name}.fastq.gz", [("on1", 950)])
-    restore = _interrupt(monkeypatch, bacon.steps, "bait_minimap2", "s2")  # After s1 was baited
+    restore = _interrupt(monkeypatch, rasher.steps, "bait_minimap2", "s2")  # After s1 was baited
     with pytest.raises(KeyboardInterrupt):
         run(settings(ref, reads, out, snp_method="none", parallel=1))
     restore()
@@ -873,11 +874,11 @@ def test_new_reads_interrupted_after_baiting_are_filtered_again(stubs, dataset, 
 
 
 def test_output_of_interrupted_parameter_change_is_not_reused(stubs, dataset, tmp_path, monkeypatch):
-    import bacon.steps
+    import rasher.steps
     ref, reads = dataset
     out = tmp_path / "out"
     run(settings(ref, reads, out, snp_method="none", parallel=1))
-    restore = _interrupt(monkeypatch, bacon.steps, "filter_filtlong", "s1", after=True)
+    restore = _interrupt(monkeypatch, rasher.steps, "filter_filtlong", "s1", after=True)
     with pytest.raises(KeyboardInterrupt):  # s1 filtered with 850, interrupted before it was recorded
         run(settings(ref, reads, out, snp_method="none", parallel=1, min_read_length=850))
     restore()
@@ -887,16 +888,16 @@ def test_output_of_interrupted_parameter_change_is_not_reused(stubs, dataset, tm
 
 
 def test_assemblies_changed_before_an_interrupted_comparison_are_compared(stubs, dataset, tmp_path, monkeypatch):
-    import bacon.pipeline
+    import rasher.pipeline
     ref, reads = dataset
     out = tmp_path / "out"
     run(settings(ref, reads, out))
     _reads(reads / "s1.fastq.gz", [("on1", 950)])
-    real = bacon.pipeline._compare
-    monkeypatch.setattr(bacon.pipeline, "_compare", lambda *a, **k: (_ for _ in ()).throw(KeyboardInterrupt))
+    real = rasher.pipeline._compare
+    monkeypatch.setattr(rasher.pipeline, "_compare", lambda *a, **k: (_ for _ in ()).throw(KeyboardInterrupt))
     with pytest.raises(KeyboardInterrupt):  # s1 assembled again, interrupted before the comparison
         run(settings(ref, reads, out))
-    monkeypatch.setattr(bacon.pipeline, "_compare", real)
+    monkeypatch.setattr(rasher.pipeline, "_compare", real)
     stubs.unlink()
     run(settings(ref, reads, out))
     assert "ska" in calls(stubs)
@@ -911,16 +912,16 @@ def test_sigterm_kills_the_programs_still_running(stubs, dataset, tmp_path):
     flye = tmp_path / "bin" / "flye"  # A Flye that starts a program of its own and waits
     flye.write_text(f'#!/bin/sh\n[ "$1" = "--version" ] && exit 0\n'
                     f"sleep 30 & echo $! > {pidfile}.tmp; mv {pidfile}.tmp {pidfile}; wait\n")
-    code = (f"import sys; from bacon.cli import main; sys.exit(main(['-r', {str(ref)!r}, '-i', {str(reads)!r}, "
+    code = (f"import sys; from rasher.cli import main; sys.exit(main(['-r', {str(ref)!r}, '-i', {str(reads)!r}, "
             f"'-o', {str(tmp_path / 'out')!r}, '-a', 'flye', '-t', '1', '-p', '1']))")
-    bacon = subprocess.Popen([sys.executable, "-c", code], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    rasher = subprocess.Popen([sys.executable, "-c", code], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     for _ in range(200):
         if pidfile.exists():
             break
         time.sleep(0.05)
     child = int(pidfile.read_text())
-    bacon.send_signal(signal.SIGTERM)
-    assert bacon.wait(timeout=20) == 128 + signal.SIGTERM
+    rasher.send_signal(signal.SIGTERM)
+    assert rasher.wait(timeout=20) == 128 + signal.SIGTERM
     for _ in range(100):  # The child is gone (or a zombie of init)
         try:
             os.kill(child, 0)
@@ -931,16 +932,16 @@ def test_sigterm_kills_the_programs_still_running(stubs, dataset, tmp_path):
         time.sleep(0.05)
     else:
         os.kill(child, 9)
-        raise AssertionError("the program started by Flye outlived BACoN")
+        raise AssertionError("the program started by Flye outlived RASHER")
 
 
 def _as_0_3_7(out: Path, assembler: str = "flye", keep_bam: bool = False) -> None:
-    """Rewrite the fingerprints of a run's checkpoints (made with the settings of settings()) as BACoN 0.3.7 computed
+    """Rewrite the fingerprints of a run's checkpoints (made with the settings of settings()) as RASHER 0.3.7 computed
     them: --keep-bam in the baiting's parameters (as 0.3.2 for minimap2) and Flye's options in the assembly's,
     whatever the assembler."""
     import hashlib
 
-    from bacon.pipeline import _fingerprint
+    from rasher.pipeline import _fingerprint
     md5 = hashlib.md5((out / "reference.fasta").read_bytes()).hexdigest()
     fingerprints = {"bait": _fingerprint("0", {"reference": md5, "method": "minimap2", "kmer": None,
                                                "keep_bam": keep_bam})}
@@ -1030,16 +1031,16 @@ def test_output_folder_on_a_file_system_without_locks(stubs, dataset, tmp_path, 
 
 
 def test_vcf_version_check(tmp_path):
-    from bacon.pipeline import _vcf_outdated
+    from rasher.pipeline import _vcf_outdated
     vcf = tmp_path / "snps.vcf"
-    for source, outdated in [("BACoN 0.3.2", True), ("BACoN 0.3.3", False), ("BACoN 0.3.10", False),
-                             ("BACoN 1.0", False), ("BACoN ", True), (None, True)]:
+    for source, outdated in [("RASHER 0.0.1", True), ("RASHER 0.1.0", False), ("RASHER 0.1.10", False),
+                             ("RASHER 1.0", False), ("RASHER ", True), ("BACoN 0.4.0", True), (None, True)]:
         vcf.write_text("##fileformat=VCFv4.2\n" + (f"##source={source}\n" if source else "") + "#CHROM\n")
         assert _vcf_outdated(vcf) is outdated, source
 
 
 def test_a_run_after_an_interrupted_one_can_start_programs(stubs, dataset, tmp_path):
-    from bacon import tools
+    from rasher import tools
     ref, reads = dataset
     (reads / "none.fastq.gz").unlink()  # No failed sample: the resumed run only compares
     run(settings(ref, reads, tmp_path / "out", snp_method="none"))
@@ -1053,7 +1054,7 @@ def test_a_moved_folder_of_0_3_3_resumes_with_its_own_files(stubs, dataset, tmp_
     ref, reads = dataset
     out, moved = tmp_path / "out", tmp_path / "moved"
     run(settings(ref, reads, out))
-    for checkpoint in step_checkpoints(out):  # As written by BACoN 0.3.3: no root
+    for checkpoint in step_checkpoints(out):  # As written by RASHER 0.3.3: no root
         data = json.loads(checkpoint.read_text())
         del data["root"]
         checkpoint.write_text(json.dumps(data))
@@ -1065,10 +1066,10 @@ def test_a_moved_folder_of_0_3_3_resumes_with_its_own_files(stubs, dataset, tmp_
     assert info["comparison"]["distances"] == str(moved / "4_compared" / "ska" / "snp_distances.tsv")
 
 
-def _bacon_cli(ref, reads, out, **popen):
-    """Start `bacon` (Flye assembly, one sample at a time) in a separate process."""
+def _rasher_cli(ref, reads, out, **popen):
+    """Start `rasher` (Flye assembly, one sample at a time) in a separate process."""
     import subprocess
-    code = (f"import sys; from bacon.cli import main; sys.exit(main(['-r', {str(ref)!r}, '-i', {str(reads)!r}, "
+    code = (f"import sys; from rasher.cli import main; sys.exit(main(['-r', {str(ref)!r}, '-i', {str(reads)!r}, "
             f"'-o', {str(out)!r}, '-a', 'flye', '-t', '1', '-p', '1']))")
     return subprocess.Popen([sys.executable, "-c", code], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                             **popen)
@@ -1081,24 +1082,24 @@ def test_nohup_runs_survive_a_closed_terminal(stubs, dataset, tmp_path):
     started = tmp_path / "started"
     flye = tmp_path / "bin" / "flye"  # A Flye that takes a while
     flye.write_text(f'#!/bin/sh\n[ "$1" = "--version" ] && exit 0\ntouch {started}\nsleep 30\n')
-    bacon = _bacon_cli(ref, reads, tmp_path / "out",
+    rasher = _rasher_cli(ref, reads, tmp_path / "out",
                        preexec_fn=lambda: signal.signal(signal.SIGHUP, signal.SIG_IGN))  # As nohup starts it
     for _ in range(200):
         if started.exists():
             break
         time.sleep(0.05)
-    bacon.send_signal(signal.SIGHUP)  # The terminal is closed
+    rasher.send_signal(signal.SIGHUP)  # The terminal is closed
     time.sleep(1)
-    assert bacon.poll() is None  # Still running
-    bacon.send_signal(signal.SIGTERM)
-    assert bacon.wait(timeout=20) == 128 + signal.SIGTERM
+    assert rasher.poll() is None  # Still running
+    rasher.send_signal(signal.SIGTERM)
+    assert rasher.wait(timeout=20) == 128 + signal.SIGTERM
 
 
 def test_cli_in_another_thread_and_signal_handlers_restored(stubs, dataset, tmp_path):
     import signal
     import threading
 
-    from bacon.cli import main
+    from rasher.cli import main
     ref, reads = dataset
     args = ["-r", str(ref), "-i", str(reads), "-a", "flye", "-t", "1", "--snp-method", "none"]
     codes = []
@@ -1111,21 +1112,21 @@ def test_cli_in_another_thread_and_signal_handlers_restored(stubs, dataset, tmp_
     assert (signal.getsignal(signal.SIGTERM), signal.getsignal(signal.SIGHUP)) == before
 
 
-def test_errors_and_interruptions_are_in_bacon_log(stubs, dataset, tmp_path, monkeypatch):
-    import bacon.steps
+def test_errors_and_interruptions_are_in_rasher_log(stubs, dataset, tmp_path, monkeypatch):
+    import rasher.steps
     ref, reads = dataset
     out = tmp_path / "out"
-    with pytest.raises(BaconError, match="All samples failed"):
+    with pytest.raises(RasherError, match="All samples failed"):
         run(settings(ref, reads, out, min_read_length=5000))
-    assert "[ERROR] All samples failed at the filter step" in (out / "bacon.log").read_text()
-    _interrupt(monkeypatch, bacon.steps, "filter_filtlong", "s1")
+    assert "[ERROR] All samples failed at the filter step" in (out / "rasher.log").read_text()
+    _interrupt(monkeypatch, rasher.steps, "filter_filtlong", "s1")
     with pytest.raises(KeyboardInterrupt):
         run(settings(ref, reads, out))
-    assert (out / "bacon.log").read_text().rstrip().endswith("[ERROR] Interrupted")
+    assert (out / "rasher.log").read_text().rstrip().endswith("[ERROR] Interrupted")
 
 
-def test_guess_root_takes_the_last_bacon_folder_in_the_path():
-    from bacon.pipeline import _guess_root
+def test_guess_root_takes_the_last_rasher_folder_in_the_path():
+    from rasher.pipeline import _guess_root
     assert _guess_root({"s1": {"output": "/data/1_extracted/out/3_assembled/all_assemblies/s1.fasta"}}) == \
         "/data/1_extracted/out"
     assert _guess_root({"distances": "/x/4_compared/out/4_compared/ska/snp_distances.tsv"}) == "/x/4_compared/out"
@@ -1133,7 +1134,7 @@ def test_guess_root_takes_the_last_bacon_folder_in_the_path():
 
 
 def _as_0_3_3(out: Path) -> None:
-    """Rewrite the checkpoints of a run as BACoN 0.3.3 wrote them: no folder, no input signatures."""
+    """Rewrite the checkpoints of a run as RASHER 0.3.3 wrote them: no folder, no input signatures."""
     for checkpoint in step_checkpoints(out):
         data = json.loads(checkpoint.read_text())
         data.pop("root", None)
@@ -1147,7 +1148,7 @@ def _as_0_3_3(out: Path) -> None:
 def test_new_reads_interrupted_after_baiting_with_checkpoints_of_0_3_3(stubs, dataset, tmp_path, monkeypatch):
     import time
 
-    import bacon.steps
+    import rasher.steps
     ref, reads = dataset
     out = tmp_path / "out"
     run(settings(ref, reads, out, snp_method="none", parallel=1))
@@ -1155,7 +1156,7 @@ def test_new_reads_interrupted_after_baiting_with_checkpoints_of_0_3_3(stubs, da
     time.sleep(0.01)  # The new outputs must be newer than the old ones, whatever the file system's clock
     for name in ("s1", "s2"):
         _reads(reads / f"{name}.fastq.gz", [("on1", 950)])
-    restore = _interrupt(monkeypatch, bacon.steps, "bait_minimap2", "s2")  # After s1 was baited
+    restore = _interrupt(monkeypatch, rasher.steps, "bait_minimap2", "s2")  # After s1 was baited
     with pytest.raises(KeyboardInterrupt):
         run(settings(ref, reads, out, snp_method="none", parallel=1))
     restore()
@@ -1203,14 +1204,14 @@ def test_a_sample_with_no_read_baited_keeps_its_raw_counts(stubs, dataset, tmp_p
 
 def test_output_folder_cannot_be_in_the_input_folder(stubs, dataset, tmp_path):
     ref, reads = dataset
-    for out in (reads, reads / "bacon"):
-        with pytest.raises(BaconError, match="cannot be the input folder or inside it"):
+    for out in (reads, reads / "rasher"):
+        with pytest.raises(RasherError, match="cannot be the input folder or inside it"):
             run(settings(ref, reads, out))
-    assert not (reads / "bacon").exists()
+    assert not (reads / "rasher").exists()
 
 
 def test_guess_root_with_a_sample_named_distances():
-    from bacon.pipeline import _guess_root
+    from rasher.pipeline import _guess_root
     assert _guess_root({"distances": {"output": "/out/1_extracted/distances.fastq.gz"}}) == "/out"
 
 
@@ -1226,7 +1227,7 @@ def _cgroups(tmp_path: Path, proc: str, files: dict[str, str]) -> tuple[str, str
 
 
 def test_cgroup_v2_limits_of_a_job_below_the_root(tmp_path):
-    import bacon.pipeline as pipeline
+    import rasher.pipeline as pipeline
     # systemd/SLURM: the job's group is below the root, which has no limit; the smallest limit on the way counts
     job = "system.slice/slurmstepd.scope/job_42/step_0"
     proc, root = _cgroups(tmp_path, f"0::/{job}\n", {
@@ -1246,7 +1247,7 @@ def test_cgroup_v2_limits_of_a_job_below_the_root(tmp_path):
 
 
 def test_cgroup_v1_limits(tmp_path):
-    import bacon.pipeline as pipeline
+    import rasher.pipeline as pipeline
     proc, root = _cgroups(tmp_path, "12:memory:/slurm/uid_1000/job_42\n4:cpu,cpuacct:/slurm/uid_1000/job_42\n"
                           "1:name=systemd:/user.slice\n0::/user.slice\n", {
                               "memory/slurm/uid_1000/job_42/memory.limit_in_bytes": "9223372036854771712",  # None
@@ -1260,8 +1261,8 @@ def test_cgroup_v1_limits(tmp_path):
 
 
 def test_memory_and_cpus_under_a_job_scheduler(tmp_path, monkeypatch):
-    import bacon.pipeline as pipeline
-    from bacon.cli import build_parser
+    import rasher.pipeline as pipeline
+    from rasher.cli import build_parser
     monkeypatch.setattr(pipeline, "_cgroup_memory_limit", lambda: 4_000_000_000)
     assert pipeline.default_memory_gb() == 3  # 85% of 4 GB
     if hasattr(os, "sched_getaffinity"):
@@ -1284,9 +1285,9 @@ def test_bbduk_memory_is_shared_by_the_samples_baited_in_this_run(stubs, dataset
     assert "-Xmx8g" in (out / "logs" / "1_bait" / "none.log").read_text()  # Only the failed sample is retried
 
 
-def test_run_restores_the_level_of_the_bacon_logger(stubs, dataset, tmp_path):
+def test_run_restores_the_level_of_the_rasher_logger(stubs, dataset, tmp_path):
     import logging
-    logger = logging.getLogger("bacon")
+    logger = logging.getLogger("rasher")
     previous = logger.level
     logger.setLevel(logging.WARNING)
     try:
@@ -1366,7 +1367,7 @@ def test_annotation_option_is_not_in_the_checkpoints(stubs, dataset, tmp_path):
     # A moved folder: the report is rebuilt from the copy
     moved = tmp_path / "moved"
     shutil.move(out, moved)
-    from bacon.report import write_report
+    from rasher.report import write_report
     assert ">Y2S<" in write_report(moved).read_text()
     # A GFF3 annotation replaces the GenBank copy
     gff = tmp_path / "ann.gff3"
@@ -1382,9 +1383,9 @@ def test_annotation_option_is_not_in_the_checkpoints(stubs, dataset, tmp_path):
 def test_annotation_errors_and_warnings(stubs, dataset, tmp_path, caplog):
     ref, reads = dataset
     out = tmp_path / "out"
-    with pytest.raises(BaconError, match="Annotation file not found"):
+    with pytest.raises(RasherError, match="Annotation file not found"):
         run(settings(ref, reads, out, annotation=tmp_path / "missing.gb", snp_method="none"))
-    with pytest.raises(BaconError, match="not a GenBank"):
+    with pytest.raises(RasherError, match="not a GenBank"):
         run(settings(ref, reads, out, annotation=ref, snp_method="none"))
     assert not (out / "1_extracted").exists()  # Failed before any step
     other = tmp_path / "other.gb"
@@ -1402,11 +1403,11 @@ def test_gff3_cannot_be_the_reference(stubs, dataset, tmp_path):
     ref, reads = dataset
     gff = tmp_path / "ref.gff3"
     gff.write_text("##gff-version 3\nref\tt\tgene\t1\t30\t.\t+\t.\tID=g1\n")
-    with pytest.raises(BaconError, match="not GFF3"):
+    with pytest.raises(RasherError, match="not GFF3"):
         run(settings(gff, reads, tmp_path / "out", snp_method="none"))
     empty = tmp_path / "noseq.gb"
     empty.write_text(_genbank_of(ref).split("ORIGIN")[0] + "//\n")
-    with pytest.raises(BaconError, match="no sequence"):
+    with pytest.raises(RasherError, match="no sequence"):
         run(settings(empty, reads, tmp_path / "out", snp_method="none"))
 
 
@@ -1453,13 +1454,13 @@ def test_metadata_is_not_in_the_checkpoints_and_is_copied(stubs, dataset, tmp_pa
     page = (out / "report.html").read_text()
     assert "<th class=\"md\">group</th>" in page and 'class="num md"' in page and "coloured by <b>group</b>" in page
     assert "group:</text>" in page and "A (2)" in page and "no value (1)" in page  # The heatmap legend; Reference
-    mqc = json.loads((out / "bacon_samples_mqc.json").read_text())
+    mqc = json.loads((out / "rasher_samples_mqc.json").read_text())
     assert mqc["headers"]["meta_group"]["title"] == "group" and mqc["data"]["s1"]["meta_group"] == "A"
     assert "meta_group" not in mqc["data"]["none"]  # No value: no entry
     # A moved folder: the report is rebuilt from the copy
     moved = tmp_path / "moved"
     shutil.move(out, moved)
-    from bacon.report import write_report
+    from rasher.report import write_report
     assert "coloured by <b>group</b>" in write_report(moved).read_text()
     # A changed file changes the report, not the steps; without the file, the copy goes
     meta.write_text("sample,group\ns1,X\ns2,Y\ns3,Y\n")
@@ -1478,16 +1479,16 @@ def test_metadata_is_not_in_the_checkpoints_and_is_copied(stubs, dataset, tmp_pa
 def test_metadata_errors_and_warnings(stubs, dataset, tmp_path, caplog):
     ref, reads = dataset
     out = tmp_path / "out"
-    with pytest.raises(BaconError, match="Metadata file not found"):
+    with pytest.raises(RasherError, match="Metadata file not found"):
         run(settings(ref, reads, out, metadata=tmp_path / "missing.tsv", snp_method="none"))
     bad = tmp_path / "bad.csv"
     bad.write_text("name,group\ns1,A\n")
-    with pytest.raises(BaconError, match="needs a 'sample' column"):
+    with pytest.raises(RasherError, match="needs a 'sample' column"):
         run(settings(ref, reads, out, metadata=bad, snp_method="none"))
     meta = _metadata_file(tmp_path)
-    with pytest.raises(BaconError, match="--color-by 'site': no such metadata column"):
+    with pytest.raises(RasherError, match="--color-by 'site': no such metadata column"):
         run(settings(ref, reads, out, metadata=meta, color_by="site", snp_method="none"))
-    with pytest.raises(BaconError, match="--color-by 'group': no metadata"):
+    with pytest.raises(RasherError, match="--color-by 'group': no metadata"):
         run(settings(ref, reads, out, color_by="group", snp_method="none"))
     assert not (out / "1_extracted").exists()  # Failed before any step
     free = tmp_path / "free.tsv"
@@ -1543,7 +1544,7 @@ def test_added_genomes_carry_metadata(stubs, dataset, tmp_path, caplog):
     assert "(the reference has no value)" in page and "added genomes have no value" not in page
 
 
-def test_copies_not_written_by_bacon_are_kept(stubs, dataset, tmp_path, caplog):
+def test_copies_not_written_by_rasher_are_kept(stubs, dataset, tmp_path, caplog):
     ref, reads = dataset
     out = tmp_path / "out"
     assert run(settings(ref, reads, out, snp_method="none")) == 0
@@ -1554,10 +1555,10 @@ def test_copies_not_written_by_bacon_are_kept(stubs, dataset, tmp_path, caplog):
     caplog.clear()
     assert run(settings(ref, reads, out, snp_method="none")) == 0
     assert (out / "metadata.tsv").exists() and (out / "annotation.gff3").exists()
-    assert "Metadata %s was not written by BACoN: kept" % (out / "metadata.tsv") in caplog.text
-    assert "Annotation %s was not written by BACoN: kept" % (out / "annotation.gff3") in caplog.text
+    assert "Metadata %s was not written by RASHER: kept" % (out / "metadata.tsv") in caplog.text
+    assert "Annotation %s was not written by RASHER: kept" % (out / "annotation.gff3") in caplog.text
     assert "coloured by <b>group</b>" in (out / "report.html").read_text()
-    # BACoN's own copies go when the run has no metadata or annotation
+    # RASHER's own copies go when the run has no metadata or annotation
     meta = _metadata_file(tmp_path)
     ann = tmp_path / "ann.gff3"
     ann.write_text(gff)
@@ -1567,7 +1568,7 @@ def test_copies_not_written_by_bacon_are_kept(stubs, dataset, tmp_path, caplog):
     caplog.clear()
     assert run(settings(ref, reads, out, snp_method="none")) == 0
     assert not (out / "metadata.tsv").exists() and not (out / "annotation.gff3").exists()
-    assert "not written by BACoN" not in caplog.text
+    assert "not written by RASHER" not in caplog.text
 
 
 def test_inputs_in_the_output_folder_are_not_overwritten(stubs, dataset, tmp_path):
@@ -1575,46 +1576,46 @@ def test_inputs_in_the_output_folder_are_not_overwritten(stubs, dataset, tmp_pat
     out = tmp_path / "out"
     out.mkdir()
     mine = out / "reference.fasta"
-    mine.write_text(">ref\n" + "acgt" * 250 + "\n")  # BACoN's copy would be upper case
-    with pytest.raises(BaconError, match=r"-r/--reference .*reference\.fasta .* would be overwritten"):
+    mine.write_text(">ref\n" + "acgt" * 250 + "\n")  # RASHER's copy would be upper case
+    with pytest.raises(RasherError, match=r"-r/--reference .*reference\.fasta .* would be overwritten"):
         run(settings(mine, reads, out))
     assert mine.read_text() == ">ref\n" + "acgt" * 250 + "\n"
     meta = out / "metadata.tsv"
-    meta.write_text("sample\tgroup\ns1\tA\nzz\tB\n")  # BACoN's copy would leave out zz, which matches no sample
-    with pytest.raises(BaconError, match=r"--metadata .*metadata\.tsv .* would be overwritten"):
+    meta.write_text("sample\tgroup\ns1\tA\nzz\tB\n")  # RASHER's copy would leave out zz, which matches no sample
+    with pytest.raises(RasherError, match=r"--metadata .*metadata\.tsv .* would be overwritten"):
         run(settings(ref, reads, out, metadata=meta))
     assert meta.read_text() == "sample\tgroup\ns1\tA\nzz\tB\n"
     ann = out / "annotation.gff3"
     ann.write_bytes(gzip.compress(b"##gff-version 3\nref\t.\tgene\t10\t300\t.\t+\t.\tID=g1\n"))  # Copied unzipped
-    with pytest.raises(BaconError, match=r"--annotation .*annotation\.gff3 .* would be overwritten"):
+    with pytest.raises(RasherError, match=r"--annotation .*annotation\.gff3 .* would be overwritten"):
         run(settings(ref, reads, out, annotation=ann))
     assert gzip.decompress(ann.read_bytes()).startswith(b"##gff-version 3")
     added = out / "4_compared" / "added_genomes" / "x.fasta"
     added.parent.mkdir(parents=True)
     added.write_text(">x_contig\nACGT\n")
-    with pytest.raises(BaconError, match="is BACoN's copy of an added genome"):
+    with pytest.raises(RasherError, match="is RASHER's copy of an added genome"):
         run(settings(ref, reads, out, add_genomes=[added]))
     sheet = out / "summary.tsv"
     sheet.write_text(f"sample\tfile\ns1\t{reads / 's1.fastq.gz'}\n")
-    for option, path in (("sample_sheet", sheet), ("reference", out / "bacon.log"), ("annotation", out / "report.html")):
+    for option, path in (("sample_sheet", sheet), ("reference", out / "rasher.log"), ("annotation", out / "report.html")):
         path.touch()
         before = path.read_bytes()
         kw = {"input": None, option: path} if option == "sample_sheet" else {option: path}
-        with pytest.raises(BaconError, match=f"is a file BACoN writes in the output folder \\({path.name}\\)"):
+        with pytest.raises(RasherError, match=f"is a file RASHER writes in the output folder \\({path.name}\\)"):
             run(settings(ref, reads, out, **kw))
         assert path.read_bytes() == before
     assert not (out / "run_info.json").exists() and not step_checkpoints(out)  # Before any step
 
 
-def test_inputs_that_are_bacons_copies_are_kept(stubs, dataset, tmp_path, caplog):
+def test_inputs_that_are_rashers_copies_are_kept(stubs, dataset, tmp_path, caplog):
     ref, reads = dataset
     out = tmp_path / "out"
     assert run(settings(ref, reads, out, snp_method="none")) == 0
     stubs.unlink()
-    # BACoN's normalised copy of the reference, given as the reference: it would not change, nothing reruns
+    # RASHER's normalised copy of the reference, given as the reference: it would not change, nothing reruns
     assert run(settings(out / "reference.fasta", reads, out, snp_method="none")) == 0
     assert calls(stubs) == ["minimap2"]
-    # An annotation and a metadata file of the user's, already as BACoN would copy them: kept as they are ...
+    # An annotation and a metadata file of the user's, already as RASHER would copy them: kept as they are ...
     gff = "##gff-version 3\nref\t.\tgene\t10\t300\t.\t+\t.\tID=g1;Name=geneA\n"
     (out / "annotation.gff3").write_text(gff)
     table = "sample\tgroup\nnone\t\ns1\tA\ns2\tB\ns3\t\n"  # Every sample, in order
@@ -1622,11 +1623,11 @@ def test_inputs_that_are_bacons_copies_are_kept(stubs, dataset, tmp_path, caplog
     assert run(settings(ref, reads, out, snp_method="none", annotation=out / "annotation.gff3",
                         metadata=out / "metadata.tsv")) == 0
     assert "coloured by <b>group</b>" in (out / "report.html").read_text()
-    # ... and not deleted as BACoN's copies by a run without them
+    # ... and not deleted as RASHER's copies by a run without them
     assert run(settings(ref, reads, out, snp_method="none")) == 0
     assert (out / "annotation.gff3").read_text() == gff
     assert (out / "metadata.tsv").read_text() == table
-    # BACoN's copy of a GenBank reference, given as the reference with another annotation, is not removed as a
+    # RASHER's copy of a GenBank reference, given as the reference with another annotation, is not removed as a
     # stale copy
     gb, ann = tmp_path / "ref.gb", tmp_path / "ann.gff3"
     gb.write_text(_genbank_of(ref))
@@ -1658,20 +1659,20 @@ def test_a_copied_output_folder_without_the_files_times_resumes(stubs, dataset, 
     assert made.count("filtlong") == 1 and made.count("flye") == 1 and "ska" in made
 
 
-def test_copies_of_an_interrupted_first_run_are_known_as_bacons(stubs, dataset, tmp_path, monkeypatch):
-    import bacon.steps
+def test_copies_of_an_interrupted_first_run_are_known_as_rashers(stubs, dataset, tmp_path, monkeypatch):
+    import rasher.steps
     ref, reads = dataset
     out = tmp_path / "out"
     gb = tmp_path / "ann.gb"
     gb.write_text(_genbank_of(ref))
     meta = _metadata_file(tmp_path)
-    restore = _interrupt(monkeypatch, bacon.steps, "bait_minimap2", "s2")  # Before any run_info.json
+    restore = _interrupt(monkeypatch, rasher.steps, "bait_minimap2", "s2")  # Before any run_info.json
     with pytest.raises(KeyboardInterrupt):
         run(settings(ref, reads, out, annotation=gb, metadata=meta, parallel=1))
     restore()
     assert (out / "annotation.gb").exists() and (out / "metadata.tsv").exists()
     assert not (out / "run_info.json").exists()
-    assert run(settings(ref, reads, out)) == 0  # Resumed without them: BACoN's copies go, as hand-made ones would not
+    assert run(settings(ref, reads, out)) == 0  # Resumed without them: RASHER's copies go, as hand-made ones would not
     assert not (out / "annotation.gb").exists() and not (out / "metadata.tsv").exists()
     info = json.loads((out / "run_info.json").read_text())
     assert info["annotation"] is None and info["metadata"] is None
@@ -1708,7 +1709,7 @@ def test_run_info_records_the_regions_detected_in_the_reference(stubs, dataset, 
     assert regions["repeat"] == {"copies": [[9001, 15000], [19001, 25000]], "lengths": [6000, 6000],
                                  "differences": 0, "identity": 1.0}
     assert "Regions of plastid: LSC/IRb/SSC/IRa, from the inverted repeat detected in the reference sequence " \
-           "(two copies of 6,000 bp, 100% identical)" in (out / "bacon.log").read_text()
+           "(two copies of 6,000 bp, 100% identical)" in (out / "rasher.log").read_text()
     # Without a comparison there is no genome map, so no band: the Methods do not describe regions the report
     # does not show (run_info.json has them)
     assert "LSC/IRb/SSC/IRa" not in (out / "report.html").read_text()
@@ -1728,7 +1729,7 @@ def test_run_info_regions_from_the_sequence_when_the_annotation_has_no_repeats(s
     assert info["annotation"]["regions"] is True and regions["source"] == "sequence"
     assert regions["repeat"]["lengths"] == [6000, 6000]
     assert "Regions of plastid: LSC/IRb/SSC/IRa, from the inverted repeat detected in the reference sequence" \
-        in (out / "bacon.log").read_text()
+        in (out / "rasher.log").read_text()
 
 
 def test_regions_are_in_no_checkpoint_fingerprint(stubs, dataset, tmp_path):
@@ -1763,7 +1764,7 @@ def test_regions_are_in_no_checkpoint_fingerprint(stubs, dataset, tmp_path):
 def test_run_info_records_a_repeat_that_gives_no_band(stubs, dataset, tmp_path):
     import random
 
-    from bacon.annotation import reverse_complement
+    from rasher.annotation import reverse_complement
     _, reads = dataset
     rng = random.Random(4)
     x = "".join(rng.choices("ACGT", k=5500))
@@ -1777,7 +1778,7 @@ def test_run_info_records_a_repeat_that_gives_no_band(stubs, dataset, tmp_path):
                        "repeat": {"copies": [[1, 5500], [25501, 31000]], "lengths": [5500, 5500], "differences": 0,
                                   "identity": 1.0}}
     assert "Regions of ref: none (inverted repeat found but not a plastome layout (the copies abut))" \
-        in (out / "bacon.log").read_text()
+        in (out / "rasher.log").read_text()
     assert "LSC/IRb/SSC/IRa" not in (out / "report.html").read_text()
 
 
@@ -1827,18 +1828,18 @@ def test_a_moved_project_reruns_nothing(stubs, dataset, tmp_path):
 def test_added_genomes_are_checked_before_any_step(stubs, dataset, tmp_path, caplog):
     ref, reads = dataset
     out = tmp_path / "out"
-    with pytest.raises(BaconError, match=r"--add-genomes: file not found: .*typo\.fasta"):
+    with pytest.raises(RasherError, match=r"--add-genomes: file not found: .*typo\.fasta"):
         run(settings(ref, reads, out, add_genomes=[tmp_path / "typo.fasta"]))
     (tmp_path / "notes.txt").write_text("not a genome\n")
-    with pytest.raises(BaconError, match="--add-genomes: not a fasta file"):
+    with pytest.raises(RasherError, match="--add-genomes: not a fasta file"):
         run(settings(ref, reads, out, add_genomes=[tmp_path / "notes.txt"]))
     for name in ("s1.fasta", "none.fasta", "reference.fasta"):  # A sample's name (failed or not), reserved
         (tmp_path / name).write_text(">x\nACGT\n")
-        with pytest.raises(BaconError, match="reserved or already used"):
+        with pytest.raises(RasherError, match="reserved or already used"):
             run(settings(ref, reads, out, add_genomes=[tmp_path / name]))
     for name in ("pub\n", ".", "..", ".x"):  # Invalid names; '.' and '..' would be folders
         (tmp_path / f"{name}.fasta").write_text(">x\nACGT\n")
-        with pytest.raises(BaconError, match="(?s)" + re.escape(f"invalid name {name!r}") + ".*not starting with a dot"):
+        with pytest.raises(RasherError, match="(?s)" + re.escape(f"invalid name {name!r}") + ".*not starting with a dot"):
             run(settings(ref, reads, out, add_genomes=[tmp_path / f"{name}.fasta"]))
     assert calls(stubs) == [] and not (out / "1_extracted").exists()  # Before any step
     assert run(settings(ref, reads, out, add_genomes=[tmp_path / "typo.fasta"], snp_method="none")) == 0
@@ -1848,16 +1849,16 @@ def test_added_genomes_are_checked_before_any_step(stubs, dataset, tmp_path, cap
 def test_an_output_folder_that_cannot_be_made_is_an_error(stubs, dataset, tmp_path):
     ref, reads = dataset
     (tmp_path / "file").write_text("x")
-    with pytest.raises(BaconError, match="is a file"):
+    with pytest.raises(RasherError, match="is a file"):
         run(settings(ref, reads, tmp_path / "file"))
-    with pytest.raises(BaconError, match="Cannot write to the output folder"):
+    with pytest.raises(RasherError, match="Cannot write to the output folder"):
         run(settings(ref, reads, tmp_path / "file" / "out"))  # Its parent is a file
     if os.geteuid() != 0:  # root writes anywhere
         locked = tmp_path / "locked"
         locked.mkdir()
         locked.chmod(0o500)
         try:
-            with pytest.raises(BaconError, match="Cannot write to the output folder .*Permission denied"):
+            with pytest.raises(RasherError, match="Cannot write to the output folder .*Permission denied"):
                 run(settings(ref, reads, locked / "out"))
         finally:
             locked.chmod(0o700)
@@ -1902,25 +1903,25 @@ def test_a_checkpoint_that_cannot_be_saved_stops_the_run_cleanly(stubs, dataset,
                 raise OSError(errno.ENOSPC, "No space left on device")
         return real(self, *args, **kwargs)
 
-    import bacon.tools
-    real_kill = bacon.tools.kill_running
-    monkeypatch.setattr(bacon.tools, "kill_running", lambda: max(1, real_kill()))  # A program still running
+    import rasher.tools
+    real_kill = rasher.tools.kill_running
+    monkeypatch.setattr(rasher.tools, "kill_running", lambda: max(1, real_kill()))  # A program still running
     monkeypatch.setattr(Path, "write_text", full_disk)
-    with pytest.raises(BaconError, match=r"Could not save the checkpoint .*bait\.json: No space left on device "
-                                         r"\(is the disk full\?\); BACoN stopped"):
+    with pytest.raises(RasherError, match=r"Could not save the checkpoint .*bait\.json: No space left on device "
+                                         r"\(is the disk full\?\); RASHER stopped"):
         run(settings(ref, reads, tmp_path / "out"))
     assert not (tmp_path / "out" / ".checkpoints" / "bait.tmp").exists()
-    assert "Interrupted" not in (tmp_path / "out" / "bacon.log").read_text()  # It was not
+    assert "Interrupted" not in (tmp_path / "out" / "rasher.log").read_text()  # It was not
     saves.clear()
     error = OSError(errno.EACCES, "Permission denied")
     monkeypatch.setattr(Path, "write_text", lambda self, *a, **k: (_ for _ in ()).throw(error)
                         if self.name == "bait.tmp" else real(self, *a, **k))
-    with pytest.raises(BaconError, match=r"bait\.json: Permission denied; BACoN stopped"):  # Not a full disk
+    with pytest.raises(RasherError, match=r"bait\.json: Permission denied; RASHER stopped"):  # Not a full disk
         run(settings(ref, reads, tmp_path / "out2"))
 
 
 def test_failed_baiting_leaves_no_partial_or_temporary_files(stubs, dataset, tmp_path, monkeypatch):
-    import bacon.steps
+    import rasher.steps
     ref, reads = dataset
     _reads(reads / "bad.fastq.gz", [("on1", 900)])  # minimap2 (the stub) crashes on it
     out = tmp_path / "out"
@@ -1929,37 +1930,37 @@ def test_failed_baiting_leaves_no_partial_or_temporary_files(stubs, dataset, tmp
     left = sorted(p.name for p in (out / "1_extracted").iterdir())
     assert left == ["s1.fastq.gz", "s2.fastq.gz", "s3.fastq.gz"]  # No .bad.paf, no reads of "none" or "bad"
     (reads / "bad.fastq.gz").unlink()
-    real = bacon.steps.extract_reads
+    real = rasher.steps.extract_reads
 
     def disk_full(inputs, names, output):  # Fails while writing the reads
         output.write_bytes(b"partial")
         raise OSError(28, "No space left on device")
 
-    monkeypatch.setattr(bacon.steps, "extract_reads", disk_full)
+    monkeypatch.setattr(rasher.steps, "extract_reads", disk_full)
     out = tmp_path / "bam"
-    with pytest.raises(BaconError, match="All samples failed"):
+    with pytest.raises(RasherError, match="All samples failed"):
         run(settings(ref, reads, out, keep_bam=True, snp_method="none"))
     assert not [p.name for p in (out / "1_extracted").iterdir() if not p.name.endswith((".bam", ".bai"))]
-    monkeypatch.setattr(bacon.steps, "extract_reads", real)
+    monkeypatch.setattr(rasher.steps, "extract_reads", real)
     # BBDuk: several files of a sample are merged first; the merged file is removed whatever fails
     (reads / "s4").mkdir()
     for i in (1, 2):
         _reads(reads / "s4" / f"part{i}.fastq.gz", [("on1", 900)])
-    real_concatenate = bacon.steps.concatenate
+    real_concatenate = rasher.steps.concatenate
 
     def interrupted(inputs, output):
         real_concatenate(inputs, output)
         raise KeyboardInterrupt
 
-    monkeypatch.setattr(bacon.steps, "concatenate", interrupted)
+    monkeypatch.setattr(rasher.steps, "concatenate", interrupted)
     out = tmp_path / "bbduk"
     with pytest.raises(KeyboardInterrupt):
         run(settings(ref, reads, out, baiting="bbduk", snp_method="none", parallel=1))
     assert not [p.name for p in (out / "1_extracted").iterdir() if p.name.startswith(".")]
-    monkeypatch.setattr(bacon.steps, "concatenate", real_concatenate)
+    monkeypatch.setattr(rasher.steps, "concatenate", real_concatenate)
     monkeypatch.setenv("STUB_BBDUK_FAIL", "1")
     out = tmp_path / "bbduk_failed"
-    with pytest.raises(BaconError, match="All samples failed"):
+    with pytest.raises(RasherError, match="All samples failed"):
         run(settings(ref, reads, out, baiting="bbduk", snp_method="none"))
     assert not list((out / "1_extracted").iterdir())
 
@@ -2000,8 +2001,8 @@ def test_off_reference_assemblies_get_a_note(stubs, dataset, tmp_path):
     assert run(settings(ref, reads, out)) == 0
     assert summary(out)["s1"]["Off_reference_pct"] == "0.0" and "aligns nowhere" not in summary(out)["s1"]["Note"]
     assert "Off ref %" in (out / "report.html").read_text()
-    from bacon.pipeline import SampleState, _add_notes
-    from bacon.samples import Sample
+    from rasher.pipeline import SampleState, _add_notes
+    from rasher.samples import Sample
     st = SampleState(Sample("x", [ref]), stats={"Off_reference_pct": "35.2"})
     _add_notes(st, 1000)
     assert st.notes == ["35% of the assembly aligns nowhere on the reference (contigs of another origin?)"]
@@ -2060,7 +2061,7 @@ def test_off_reference_note_reaches_the_summary_and_the_report(stubs, dataset, t
     row = summary(out)["nuc"]
     assert row["Off_reference_pct"] == "100.0" and "100% of the assembly aligns nowhere" in row["Note"]
     assert re.search(r'<td class="warn num" data-v="100.0">100.0</td>', (out / "report.html").read_text())
-    mqc = json.loads((out / "bacon_samples_mqc.json").read_text())
+    mqc = json.loads((out / "rasher_samples_mqc.json").read_text())
     assert mqc["data"]["nuc"]["Off_reference_pct"] == 100.0 and "Off_reference_pct" in mqc["headers"]
 
 
@@ -2070,7 +2071,7 @@ def test_off_reference_share_is_added_to_older_assemblies_once(stubs, dataset, t
     run(settings(ref, reads, out))
     checkpoint = out / ".checkpoints" / "assemble.json"
     data = json.loads(checkpoint.read_text())
-    for res in data["results"].values():  # As BACoN <= 0.3.9 left them
+    for res in data["results"].values():  # As RASHER <= 0.3.9 left them
         res.get("stats", {}).pop("Off_reference_pct", None)
     checkpoint.write_text(json.dumps(data))
     stubs.unlink()

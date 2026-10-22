@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Simulate validation datasets with a known truth for BACoN.
+"""Simulate validation datasets with a known truth for RASHER.
 
 Scenarios
 ---------

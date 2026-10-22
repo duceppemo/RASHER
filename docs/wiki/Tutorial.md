@@ -1,11 +1,11 @@
 # Tutorial: plastomes of 28 potato cultivars
 
-This tutorial runs BACoN on public data: whole-genome Nanopore reads of 28 potato (*Solanum tuberosum*)
+This tutorial runs RASHER on public data: whole-genome Nanopore reads of 28 potato (*Solanum tuberosum*)
 cultivars from the Ural region, sequenced to compare their plastomes (NCBI BioProject
 [PRJNA807056](https://www.ncbi.nlm.nih.gov/bioproject/PRJNA807056); MinION, reads longer than 6 kb, 100–700 Mb
 per sample). Potato cultivars carry a few types of plastome ("cytoplasm types"); T-type plastomes carry a 241 bp
 deletion between the *ndhC* and *trnV-UAC* genes that the other types lack (Kawagoe & Kikuta 1991; Hosaka 2002).
-Let's see what BACoN finds.
+Let's see what RASHER finds.
 
 ## 1. Download the reads and the reference
 
@@ -32,10 +32,10 @@ curl -s "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore&id
 
 If an MD5 check fails, run the loop again: `curl -C -` resumes interrupted downloads.
 
-## 2. Run BACoN
+## 2. Run RASHER
 
 ```bash
-bacon -r NC_008096.2.fasta -i reads/ -o bacon_potato -t 32 -p 8 --annotation NC_008096.2.gb
+rasher -r NC_008096.2.fasta -i reads/ -o rasher_potato -t 32 -p 8 --annotation NC_008096.2.gb
 ```
 
 The defaults: baiting with minimap2, Filtlong capping each sample at 100x, templated assembly with samtools,
@@ -45,10 +45,10 @@ finished run (nothing is redone). `-r NC_008096.2.gb` alone does the same: the s
 the reference and its features the annotation, and `reference.fasta` is identical to the one made from the
 fasta.
 
-Open `bacon_potato/report.html` in a browser for everything below on one page. The report of this run is
+Open `rasher_potato/report.html` in a browser for everything below on one page. The report of this run is
 online:
-[view it](https://duceppemo.github.io/BACoN/reports/tutorial_potato_report.html)
-or [download it](https://raw.githubusercontent.com/duceppemo/BACoN/main/docs/reports/tutorial_potato_report.html)
+[view it](https://duceppemo.github.io/RASHER/reports/tutorial_potato_report.html)
+or [download it](https://raw.githubusercontent.com/duceppemo/RASHER/main/docs/reports/tutorial_potato_report.html)
 (local paths removed). The next sections look at the files behind it.
 
 ## 3. Reads and assemblies: `summary.tsv`
@@ -107,7 +107,7 @@ position 2,669 (C>T, carried by the 16 cultivars of lineage B) changes codon 333
 (D333N), and the one at 883 (T>C, in 15-27-1; Legenda has no call there) codon 243 of *psbA* from GAA to GGA
 (E243G).
 
-![Tree of the 28 potato plastomes](https://raw.githubusercontent.com/duceppemo/BACoN/main/docs/images/tutorial_potato_tree.svg)
+![Tree of the 28 potato plastomes](https://raw.githubusercontent.com/duceppemo/RASHER/main/docs/images/tutorial_potato_tree.svg)
 
 The T-type group shares the reference's plastome but for one SNP. Lineages A and B are not T-type (next
 section); which of the other cytoplasm types they are is not determined here.
@@ -137,7 +137,7 @@ The `N` bases of lineages A and B sit in the *ndhC*–*trnV-UAC* spacer (referen
 52,696). Aligning an assembly of each group to the reference shows why:
 
 ```bash
-minimap2 -cx asm5 --cs NC_008096.2.fasta bacon_potato/3_assembled/all_assemblies/Alaska.fasta
+minimap2 -cx asm5 --cs NC_008096.2.fasta rasher_potato/3_assembled/all_assemblies/Alaska.fasta
 ```
 
 the plastomes of lineages A and B have an insertion of about 240 bp at position 52,578 relative to the T-type reference:
@@ -145,7 +145,7 @@ the known T-type deletion, seen from the other side. The templated assembly plac
 agree on all of its bases, hence the `N`. A de novo assembly resolves it completely:
 
 ```bash
-bacon -r NC_008096.2.fasta -i reads/ -o bacon_potato -a flye -t 48 -p 12
+rasher -r NC_008096.2.fasta -i reads/ -o rasher_potato -a flye -t 48 -p 12
 ```
 
 reuses the baited and filtered reads and assembles each sample with Flye (about 10 minutes). The Flye

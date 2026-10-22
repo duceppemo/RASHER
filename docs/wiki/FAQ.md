@@ -2,7 +2,7 @@
 
 **A sample failed. Where do I look?**
 `summary.tsv` gives the step (`failed (assemble)`) and the reason in `Note`; `logs/<step>/<sample>.log` has
-the commands and the programs' messages. A failed sample does not stop the others, and is retried when BACoN
+the commands and the programs' messages. A failed sample does not stop the others, and is retried when RASHER
 runs again in the same output folder.
 
 **"no reads matched the reference"**
@@ -90,7 +90,7 @@ Give its fasta file with `--add-genomes`: finished genomes (published plastomes,
 the comparison as they are, named after their file, without baiting or assembly.
 
 ```bash
-bacon -r ref.fasta -i reads/ -o out/ --add-genomes published/*.fasta
+rasher -r ref.fasta -i reads/ -o out/ --add-genomes published/*.fasta
 ```
 
 **How do I resume, or change one parameter?**
@@ -98,5 +98,5 @@ Run the same command again; see [Usage](Usage#resuming-and-changing-parameters).
 
 **Where did Porechop, Shasta, Rebaler, Snippy and PhaME go?**
 They were removed in 0.3, with the evidence in [Methods](Methods#choices-that-changed-in-03) and
-[Validation](Validation). BACoN 0.2 is still available from the
-[releases](https://github.com/duceppemo/BACoN/releases).
+[Validation](Validation). RASHER 0.2 is still available from the
+[releases](https://github.com/duceppemo/RASHER/releases).

@@ -3,9 +3,9 @@ import re
 
 import pytest
 
-from bacon.multiqc import distance_heatmap, reads_bargraph, sample_table
-from bacon.newick import ladderize, parse
-from bacon.report import (
+from rasher.multiqc import distance_heatmap, reads_bargraph, sample_table
+from rasher.newick import ladderize, parse
+from rasher.report import (
     MAX_LABELLED_CELLS,
     Bar,
     Snp,
@@ -164,7 +164,7 @@ def test_genome_map_tracks_and_several_sequences(tmp_path):
 
 
 def test_genome_map_bins_dense_snps():
-    from bacon.report import Snp
+    from rasher.report import Snp
     snps = [Snp("c", p, "A", "G", 1, 1 if p % 2 else 0) for p in range(1, 2001)]
     out = genome_map([("c", 2_000_000)], snps, 4)
     assert out.count("<line") < 100 and " SNPs at c:1–" in out and " with a missing call. 1 A&gt;G (1 alt, 1 missing)" in out
@@ -192,7 +192,7 @@ def test_tool_version_number_only():
 SETTINGS = {"baiting": "minimap2", "min_read_length": 500, "keep_percent": 95.0, "target_depth": 100,
             "assembler": "samtools", "snp_method": "ska", "ska_min_freq": 1.0, "tree": "fasttree",
             "template_gaps": "n", "read_type": "nano-hq", "flye_iterations": 3, "kmer": 31}
-BASE = {"bacon_version": "0.3.1", "reference": {"file": "/x/ref.fasta", "length": 1000},
+BASE = {"rasher_version": "0.3.1", "reference": {"file": "/x/ref.fasta", "length": 1000},
         "samples": {"s": {"files": ["s.fastq.gz"]}},
         "comparison": {"tree": "t.nwk", "distances": "d.tsv", "method": "ska", "core_snps": 3}}
 
@@ -216,7 +216,7 @@ def test_methods_text_settings_combinations():
     text = _methods(samples={"s": {"files": ["s.fa.gz"]}}, settings={"baiting": "bbduk", "assembler": "flye",
                     "ska_min_freq": 0.5, "tree": "iqtree", "min_size": 3000, "genome_size": 150000})
     assert "BBDuk" in text and "Flye" in text and "at least 50% of the genomes" in text
-    assert "best 95%" not in text and "filtered by BACoN" in text  # Fasta reads: no Filtlong, no quality cut
+    assert "best 95%" not in text and "filtered by RASHER" in text  # Fasta reads: no Filtlong, no quality cut
     assert "minimum overlap 3000 bp" in text and "genome size as given" in text
     assert "bootstrap consensus tree" in text and "circular contigs" not in text  # None circular
     text = _methods(rows=[{"Circular_contigs": "1"}], settings={"assembler": "myloasm", "ska_min_freq": 0.999})
@@ -275,7 +275,7 @@ def test_report_survives_incomplete_run_info(tmp_path):
     info["settings"] = {"keep_percent": None}
     (out / "run_info.json").write_text(json.dumps(info))
     page = build_report(out)
-    assert "BACoN" in page and "in the order of the distance table" in page
+    assert "RASHER" in page and "in the order of the distance table" in page
 
 
 ROWS = [
@@ -289,12 +289,12 @@ ROWS = [
 def test_multiqc_table_and_bargraph():
     table = sample_table(ROWS, "run1")
     assert table["plot_type"] == "table" and table["data"]["s1"]["Est_depth"] == 12.5
-    assert table["id"] == "bacon_samples_run1" and table["section_name"] == "BACoN run1: samples"
+    assert table["id"] == "rasher_samples_run1" and table["section_name"] == "RASHER run1: samples"
     assert table["data"]["s1"]["Contigs"] == 1 and "Raw_reads" not in table["data"]["s1"]
     assert table["data"]["s2"] == {"Status": "failed (bait)", "Note": "no reads matched the reference"}
     bars = reads_bargraph(ROWS, "run1")
     assert bars["data"] == {"s1": {"Kept": 500, "Baited, filtered out": 100, "Off-target": 400}}
-    assert bars["id"] == "bacon_reads_run1"
+    assert bars["id"] == "rasher_reads_run1"
     assert reads_bargraph(ROWS[1:]) is None
     bbduk = [{"Sample": "s3", "Raw_bases": "NA", "Baited_bases": "700", "Filtered_bases": "NA"}]
     assert reads_bargraph(bbduk)["data"] == {"s3": {"Baited": 700}}
@@ -309,7 +309,7 @@ def test_multiqc_heatmap_in_tree_order(tmp_path):
     hm = distance_heatmap(dist, tree, "my run")
     assert hm["xcats"] == ["b", "a", "Reference"] == hm["ycats"]
     assert hm["data"] == [[0, 4, 5], [4, 0, 1], [5, 1, 0]]
-    assert re.fullmatch(r"bacon_distances_my_run_[0-9a-f]{6}", hm["id"])  # A space: the name's hash added
+    assert re.fullmatch(r"rasher_distances_my_run_[0-9a-f]{6}", hm["id"])  # A space: the name's hash added
     assert "in tree order" in hm["description"]
     assert distance_heatmap(dist)["xcats"] == ["Reference", "a", "b"]
     assert "the order of the distance table" in distance_heatmap(dist)["description"]
@@ -318,7 +318,7 @@ def test_multiqc_heatmap_in_tree_order(tmp_path):
 
 
 def test_multiqc_ids_differ_between_runs_and_stale_files_go(tmp_path):
-    from bacon.multiqc import write_multiqc
+    from rasher.multiqc import write_multiqc
     dist = tmp_path / "d.tsv"
     dist.write_text("snp-dists\tReference\ta\nReference\t0\t1\na\t1\t0\n")
     ids = set()
@@ -329,7 +329,7 @@ def test_multiqc_ids_differ_between_runs_and_stale_files_go(tmp_path):
         ids |= {json.loads(p.read_text())["id"] for p in out.glob("*_mqc.json")}
     assert len(ids) == 6
     write_multiqc(tmp_path / "run A", ROWS, None)
-    assert not (tmp_path / "run A" / "bacon_distances_mqc.json").exists()
+    assert not (tmp_path / "run A" / "rasher_distances_mqc.json").exists()
 
 
 def test_no_inline_heatmap_for_hundreds_of_genomes(tmp_path):
@@ -343,7 +343,7 @@ def test_no_inline_heatmap_for_hundreds_of_genomes(tmp_path):
 
 
 def test_methods_text_gives_bbduk_mismatches():
-    from bacon.report import methods_text
+    from rasher.report import methods_text
     for hdist, text in [(0, "no mismatch"), (1, "up to one mismatch"), (2, "up to 2 mismatches"),
                         (None, "up to 2 mismatches")]:
         settings = {"baiting": "bbduk", "kmer": 31, **({"hdist": hdist} if hdist is not None else {})}
@@ -361,13 +361,13 @@ def test_report_escapes_the_reference_name_and_names_the_parsnp_tree(tmp_path):
     assert '<meta name="color-scheme" content="light dark">' in page
 
 
-def test_report_command_on_a_folder_that_is_not_bacon(tmp_path):
+def test_report_command_on_a_folder_that_is_not_rasher(tmp_path):
     import subprocess
     import sys
-    done = subprocess.run([sys.executable, "-m", "bacon.report", str(tmp_path)], capture_output=True, text=True)
-    assert done.returncode == 1 and "not a BACoN output folder" in done.stderr and "Traceback" not in done.stderr
-    (tmp_path / "bacon.log").write_text("2026-10-07 [INFO] BACoN\n")  # A run that did not finish (no run_info)
-    done = subprocess.run([sys.executable, "-m", "bacon.report", str(tmp_path)], capture_output=True, text=True)
+    done = subprocess.run([sys.executable, "-m", "rasher.report", str(tmp_path)], capture_output=True, text=True)
+    assert done.returncode == 1 and "not a RASHER output folder" in done.stderr and "Traceback" not in done.stderr
+    (tmp_path / "rasher.log").write_text("2026-10-07 [INFO] RASHER\n")  # A run that did not finish (no run_info)
+    done = subprocess.run([sys.executable, "-m", "rasher.report", str(tmp_path)], capture_output=True, text=True)
     assert done.returncode == 1 and "the run did not finish: resume it to get a report" in done.stderr
 
 
@@ -453,7 +453,7 @@ def test_report_escapes_names_in_every_figure(tmp_path):
 
 
 def test_genome_map_without_any_n_base(tmp_path):
-    from bacon.report import _Figures, _genome_map_section
+    from rasher.report import _Figures, _genome_map_section
     out = tmp_path / "out"
     (out / "3_assembled" / "all_assemblies").mkdir(parents=True)
     (out / "3_assembled" / "all_assemblies" / "a.fasta").write_text(">a_chr\nACGTACGTAC\n")
@@ -508,7 +508,7 @@ def test_report_with_annotation_draws_genes_regions_and_the_snp_table(tmp_path):
     assert 'class="gene-cds"' in page and 'class="gene-rna"' in page and 'class="band-ir"' in page
     assert "LSC 2,000 bp" in page and "IRb 600 bp" in page and "SSC 800 bp" in page and "IRa 600 bp" in page
     assert "<b>Figure 5.</b>" in page and "<b>Figure 6.</b>" not in page  # The map is still one figure
-    assert "Genes from <b>NC_1.gb</b> (2)" in page  # The file as given, not BACoN's copy
+    assert "Genes from <b>NC_1.gb</b> (2)" in page  # The file as given, not RASHER's copy
     assert "The band above the genes shows the LSC/IRb/SSC/IRa regions from the annotated inverted repeats." in page
     assert "The LSC/IRb/SSC/IRa regions were derived from the annotated inverted repeats." in page  # Methods
     # The SNP at 101 (A>G) is in the CDS: codon 34 is TAC (positions 100..102), so A>G gives TGC: Y34C
@@ -548,7 +548,7 @@ def test_report_with_a_broken_annotation_keeps_the_map(tmp_path):
 
 
 def test_report_finds_the_annotation_copy_without_run_info(tmp_path):
-    from bacon.report import annotation_file
+    from rasher.report import annotation_file
     out = _annotated_run(tmp_path)
     assert annotation_file(out, {}) == out / "annotation.gb"
     assert annotation_file(out, {"annotation": {"copy": "annotation.gff3"}}) == out / "annotation.gb"
@@ -562,8 +562,8 @@ def test_annotation_warnings_are_shown(tmp_path):
 
 
 def test_genome_map_merges_genes_when_there_are_too_many(tmp_path, monkeypatch):
-    import bacon.report as report
-    from bacon.annotation import load_annotation
+    import rasher.report as report
+    from rasher.annotation import load_annotation
     gb = tmp_path / "a.gb"
     gb.write_text(_genbank())
     annotation = load_annotation(gb, [("c1", 4000)])
@@ -576,8 +576,8 @@ def test_genome_map_merges_genes_when_there_are_too_many(tmp_path, monkeypatch):
 
 
 def test_place_labels_alternates_rows_and_caps():
-    from bacon.annotation import Gene
-    from bacon.report import MAX_GENE_LABELS, place_labels
+    from rasher.annotation import Gene
+    from rasher.report import MAX_GENE_LABELS, place_labels
     genes = [Gene("c", f"gene{i:03d}", "CDS", 1, [(i * 10 + 1, i * 10 + 10)], snps=2) for i in range(100)]
     genes[50].snps = 1  # Not labelled
     placed, rows = place_labels(genes, 100, 1100, 1.0)  # 10 px per gene: labels overlap on one row
@@ -588,8 +588,8 @@ def test_place_labels_alternates_rows_and_caps():
 
 
 def test_snp_table_caps_rows(tmp_path, monkeypatch):
-    import bacon.report as report
-    from bacon.report import Snp, snp_table
+    import rasher.report as report
+    from rasher.report import Snp, snp_table
     monkeypatch.setattr(report, "MAX_SNP_ROWS", 2)
     snps = [Snp("c1", p, "A", "G", 1, 0) for p in (1, 2, 3)]
     out = snp_table(snps, {}, 2)
@@ -600,7 +600,7 @@ def test_snp_table_caps_rows(tmp_path, monkeypatch):
 def test_snp_summary_says_when_overlapping_genes_count_a_snp_twice():
     from types import SimpleNamespace
 
-    from bacon.report import Snp, snp_summary
+    from rasher.report import Snp, snp_summary
     snps = [Snp("c", 5, "A", "G", 1, 0), Snp("c", 9, "A", "G", 1, 0)]
     info = {("c", 5): SimpleNamespace(region="", context="pseudogene / CDS", effects=[], genes=[]),
             ("c", 9): SimpleNamespace(region="", context="CDS", effects=[], genes=[])}
@@ -615,8 +615,8 @@ def test_snp_summary_says_when_overlapping_genes_count_a_snp_twice():
 # ---------------------------------------------------------------------------------------------------------------
 
 def _colouring(values: dict[str, str], column="group"):
-    from bacon.metadata import Metadata
-    from bacon.report import colouring
+    from rasher.metadata import Metadata
+    from rasher.report import colouring
     return colouring(Metadata([column], {k: {column: v} for k, v in values.items()}), column)
 
 
@@ -665,7 +665,7 @@ def test_tree_svg_with_values():
 
 
 def test_cross_table_counts():
-    from bacon.report import cross_table
+    from rasher.report import cross_table
     names = ["Reference", "a", "b", "c", "d", "<e>"]
     groups = [["Reference", "a", "b"], ["c", "d"]]
     colours = _colouring({"a": "x", "b": "y", "c": "x", "d": "x", "<e>": "<y>"}, column="g")
@@ -743,7 +743,7 @@ def test_report_without_metadata_is_unchanged(tmp_path):
 
 
 def test_multiqc_table_with_metadata():
-    from bacon.metadata import Metadata
+    from rasher.metadata import Metadata
     metadata = Metadata(["Group", "Site name", "Status"], {"s1": {"Group": "A", "Site name": "n", "Status": "x"}})
     table = sample_table(ROWS, "run", metadata)
     keys = list(table["headers"])
@@ -755,7 +755,7 @@ def test_multiqc_table_with_metadata():
 
 
 def test_with_a_colour_column_colour_means_the_metadata_only():
-    from bacon.report import Colouring, heatmap, tree_svg
+    from rasher.report import Colouring, heatmap, tree_svg
     colours = Colouring("group", ["A", "B"], {"a": "A", "b": "B", "c": "A"})
     root = parse("((a:0.01,b:0.01)0.95:0.02,(Reference:0.005,c:0.005)0.80:0.03);")
     tree = tree_svg(root, {"a": 0, "b": 0}, "ref.fa", 100, colours)
@@ -769,7 +769,7 @@ def test_with_a_colour_column_colour_means_the_metadata_only():
 
 
 def test_grey_group_bands_alternate_along_the_axes():
-    from bacon.report import Colouring, heatmap
+    from rasher.report import Colouring, heatmap
     names = ["a", "b", "c", "d"]
     matrix = {x: {y: (0 if (x in "ab") == (y in "ab") else 4) for y in names} for x in names}
     colours = Colouring("group", ["A"], {n: "A" for n in names})
@@ -779,7 +779,7 @@ def test_grey_group_bands_alternate_along_the_axes():
 
 
 def test_grey_group_bands_alternate_per_run_along_the_axes():
-    from bacon.report import Colouring, heatmap
+    from rasher.report import Colouring, heatmap
     names = ["a", "b", "c", "d", "e", "f"]
     groups = [["a", "c"], ["b", "e"], ["d", "f"]]  # Every group is split by the order of the axes
     matrix = {x: {y: (0 if any({x, y} <= set(g) for g in groups) or x == y else 4) for y in names} for x in names}
@@ -792,7 +792,7 @@ def test_grey_group_bands_alternate_per_run_along_the_axes():
 
 
 def test_cross_table_columns_only_for_values_of_the_genomes_shown():
-    from bacon.report import cross_table
+    from rasher.report import cross_table
     colours = _colouring({"a": "A", "b": "B", "z": "Z"})  # z failed: it is in no figure
     out = cross_table([["a", "b"]], ["Reference", "a", "b"], colours)
     head = out.split("</thead>")[0]
@@ -810,7 +810,7 @@ def test_metadata_columns_named_like_the_tables_own_are_marked(tmp_path):
     assert re.findall(r"<th[^>]*>([^<]*)</th>", head)[:5] == ["Sample", "Status (metadata)", "note (metadata)",
                                                               "site", "Status"]
     assert "Metadata from <b>meta &lt;m&gt;.tsv</b>: 3 columns (Status, note, site)" in page  # The file's names
-    from bacon.metadata import Metadata
+    from rasher.metadata import Metadata
     table = sample_table(ROWS, "run", Metadata(["Status", "Depth", "sample", "site"], {}))
     assert [h["title"] for h in list(table["headers"].values())[:4]] == \
         ["Status (metadata)", "Depth (metadata)", "sample (metadata)", "site"]
@@ -818,15 +818,15 @@ def test_metadata_columns_named_like_the_tables_own_are_marked(tmp_path):
 
 def test_print_stylesheet_unrolls_tall_tables_and_wraps_cells(tmp_path):
     assert '<div class="tablewrap tall"><table class="snps' in build_report(_annotated_run(tmp_path))
-    from bacon.report import CSS
+    from rasher.report import CSS
     print_css = CSS.split("@media print{", 1)[1]
     assert ".tablewrap.tall{max-height:none;overflow:visible}" in print_css  # Every SNP row is printed
     assert "th,td{white-space:normal" in print_css and "th{position:static}" in print_css  # Wide tables wrap
 
 
 def test_tree_svg_keeps_the_support_of_a_root_child_inside():
-    from bacon.newick import midpoint_root
-    from bacon.report import _text_px
+    from rasher.newick import midpoint_root
+    from rasher.report import _text_px
     out = tree_svg(midpoint_root(parse("(((A:1,B:1)0.9:1,C:1)0.8:1,D:1,E:1);")), {}, "", None)
     supports = re.findall(r'<text x="([-\d.]+)" y="[-\d.]+" text-anchor="end" class="t-tiny t-muted">([^<]+)<', out)
     assert {s for _, s in supports} == {"0.9", "0.8"}
@@ -846,7 +846,7 @@ def _blocky_matrix():
 
 
 def test_heatmap_labels_only_the_tall_blocks_and_fits_the_longest_label():
-    from bacon.report import _text_px
+    from rasher.report import _text_px
     names, matrix = _blocky_matrix()
     groups = identical_groups(names, matrix)
     assert len(groups) == 11 and groups[10][0] == "n120"
@@ -868,7 +868,7 @@ def test_bar_chart_cuts_long_names_and_keeps_them_on_hover():
 
 @pytest.mark.parametrize("marks", [False, True])
 def test_bar_chart_never_cuts_a_name_that_fits_the_gutter(marks):
-    from bacon.report import MAX_NAME_GUTTER
+    from rasher.report import MAX_NAME_GUTTER
     for length in range(1, 41):  # The room sized from the longest name must fit it (4, 8, 16 or 17 characters failed)
         names = ["s" * length, "t" * max(1, length - 1)]
         out = bar_chart([Bar(n, 3 - i, "h") for i, n in enumerate(names)], "t",
@@ -920,7 +920,7 @@ def test_read_vcf_classes_every_genotype_form(tmp_path):
         return ("missing" if all(x in (".", "") for x in alleles)
                 else "alt" if any(x.isdigit() and int(x) > 0 for x in alleles) else "ref")
 
-    from bacon.report import _call_kind
+    from rasher.report import _call_kind
     assert [_call_kind(gt) for gt in forms] == [slow(gt) for gt in forms]
 
 
@@ -947,7 +947,7 @@ def _wcag(a, b):
 
 
 def test_small_text_and_in_cell_text_reach_wcag_contrast():
-    from bacon.report import MISSING_COLOUR, TOKENS_DARK, TOKENS_LIGHT
+    from rasher.report import MISSING_COLOUR, TOKENS_DARK, TOKENS_LIGHT
     missing = re.fullmatch(r"var\(--(\w+)\)", MISSING_COLOUR).group(1)
     for tokens in (TOKENS_LIGHT, TOKENS_DARK):
         t = dict(re.findall(r"--([\w-]+):(#[0-9a-fA-F]{3,6})", tokens))
@@ -957,8 +957,8 @@ def test_small_text_and_in_cell_text_reach_wcag_contrast():
 
 
 def test_gene_title_map_and_labels_use_the_ranges_of_a_gene_in_pieces():
-    from bacon.annotation import Gene, SequenceAnnotation
-    from bacon.report import _gene_rows, _gene_title, place_labels
+    from rasher.annotation import Gene, SequenceAnnotation
+    from rasher.report import _gene_rows, _gene_title, place_labels
     wrapped = Gene("c", "psbA", "CDS", 1, [(1, 33), (1990, 2000)], snps=2)  # join(1990..2000,1..33), 2,000 bp
     spliced = Gene("c", "rps12", "CDS", -1, [(100, 130), (1500, 1600)], snps=2)  # Trans-spliced
     assert "1–33 + 1,990–2,000 (44 bp)" in _gene_title(wrapped) and "1–2,000" not in _gene_title(wrapped)
@@ -975,7 +975,7 @@ def test_gene_title_map_and_labels_use_the_ranges_of_a_gene_in_pieces():
 def test_heatmap_classes_at_the_upper_edge_of_each_bin():
     import re
 
-    from bacon.report import distance_bins, heatmap
+    from rasher.report import distance_bins, heatmap
     bins = distance_bins(118)
     assert bins == [(0, 0), (1, 3), (4, 10), (11, 30), (31, 118)]
     names = ["Reference", "a", "b", "c", "d"]
@@ -1024,7 +1024,7 @@ def test_report_of_a_copied_folder_reads_its_own_files(tmp_path):
 
 
 def test_read_vcf_classes_each_genotype_once_whatever_the_other_fields(tmp_path, monkeypatch):
-    import bacon.report as report_module
+    import rasher.report as report_module
     classed = []
     real = report_module._call_kind
     monkeypatch.setattr(report_module, "_call_kind", lambda gt: classed.append(gt) or real(gt))
@@ -1130,8 +1130,8 @@ def test_report_labels_genes_without_a_symbol_by_locus_tag_and_product(tmp_path)
 
 
 def test_methods_text_describes_the_regions_only_when_the_report_shows_a_band():
-    from bacon.annotation import Region, RegionBand
-    from bacon.report import methods_text
+    from rasher.annotation import Region, RegionBand
+    from rasher.report import methods_text
     base = {"settings": {}, "reference": {"file": "/x/ref.fa"}}
     assert "LSC/IRb/SSC/IRa" not in methods_text(base)
     # The regions recorded in run_info.json are not described when no map (no band) is in the report
@@ -1143,7 +1143,7 @@ def test_methods_text_describes_the_regions_only_when_the_report_shows_a_band():
     # The bands of the map are described, one text when they all have the same source, else per sequence
     band = RegionBand([Region("LSC", 1, 9000, 9000)], "annotation")
     assert "derived from the annotated inverted repeats." in methods_text(info, None, {"c1": band})
-    from bacon.annotation import InvertedRepeat
+    from rasher.annotation import InvertedRepeat
     found = RegionBand([Region("LSC", 1, 9000, 9000)], "sequence",
                        InvertedRepeat((9001, 15000), (19001, 25000), (6000, 6000), 0))
     text = methods_text(info, None, {"c1": found, "c2": band, "c3": RegionBand([], "none")})
@@ -1152,8 +1152,8 @@ def test_methods_text_describes_the_regions_only_when_the_report_shows_a_band():
 
 
 def test_dense_gene_titles_use_the_labels(tmp_path, monkeypatch):
-    import bacon.report as report
-    from bacon.annotation import load_annotation
+    import rasher.report as report
+    from rasher.annotation import load_annotation
     gb = tmp_path / "a.gb"
     gb.write_text(_plastid_genbank("ACGT" * 1000, (
         "     gene            1..300\n                     /locus_tag=\"LK299_pgr007\"\n"
@@ -1169,8 +1169,8 @@ def test_dense_gene_titles_use_the_labels(tmp_path, monkeypatch):
 
 
 def test_label_widths_follow_the_map_label():
-    from bacon.annotation import Gene
-    from bacon.report import _text_px, place_labels
+    from rasher.annotation import Gene
+    from rasher.report import _text_px, place_labels
     left, right = 118, 1100
     scale = (right - left) / 4000
 
@@ -1193,7 +1193,7 @@ def test_label_widths_follow_the_map_label():
 def test_band_height_is_reserved_without_annotation():
     import re
 
-    from bacon.annotation import find_regions
+    from rasher.annotation import find_regions
     from tests.test_annotation import make_plastome
     seq = make_plastome()
     band = find_regions([], len(seq), seq)
@@ -1212,8 +1212,8 @@ def test_band_height_is_reserved_without_annotation():
 
 
 def test_merged_ticks_hover_gives_the_region_without_annotation():
-    from bacon.annotation import find_regions
-    from bacon.report import Snp
+    from rasher.annotation import find_regions
+    from rasher.report import Snp
     from tests.test_annotation import make_plastome
     seq = make_plastome()
     band = find_regions([], len(seq), seq)
@@ -1264,12 +1264,12 @@ def test_caption_places_the_band_per_sequence(tmp_path):
 # ---------------------------------------------------------------------------------------------------------------
 
 def test_methods_say_snp_effects_only_when_the_map_annotated_snps(tmp_path):
-    from bacon.report import MapGenes
+    from rasher.report import MapGenes
     info = {**BASE, "settings": SETTINGS,
             "annotation": {"file": "/x/NC_1.gb", "copy": "annotation.gb", "transl_tables": [11]}}
     assert "annotation" not in methods_text(info) and "translation table" not in methods_text(info)
     assert "Genes were read from the annotation NC_1.gb." in methods_text(info, genes=MapGenes("NC_1.gb", False, []))
-    assert "derived by BACoN with translation tables 1 and 11." in methods_text(
+    assert "derived by RASHER with translation tables 1 and 11." in methods_text(
         info, genes=MapGenes("NC_1.gb", True, [1, 11]))
     # Whole pages: the effects are said when the map annotated SNPs; not without a VCF, nor with an unusable
     # annotation
@@ -1331,16 +1331,16 @@ def test_parsnp_records_that_did_not_pass_are_not_shown(tmp_path):
 
 
 def test_run_section_versions_and_small_texts(tmp_path):
-    from bacon import __version__
+    from rasher import __version__
     out = _full_run(tmp_path)
     info = json.loads((out / "run_info.json").read_text())
     info["reference"] = {"file": "/x/ref.fa", "sequences": 1, "md5": None, "length": 1000}
-    info["bacon_version"] = "0.0.1"
+    info["rasher_version"] = "0.0.1"
     (out / "run_info.json").write_text(json.dumps(info))
     page = build_report(out)
     assert "MD5 None" not in page and "(1 sequence(s), MD5 ?)" in page
-    assert f"BACoN 0.0.1 (report built with BACoN {__version__})" in page
-    info["bacon_version"] = __version__
+    assert f"RASHER 0.0.1 (report built with RASHER {__version__})" in page
+    info["rasher_version"] = __version__
     (out / "run_info.json").write_text(json.dumps(info))
     assert "report built with" not in build_report(out)
     text = _methods(settings={"assembler": "flye", "flye_iterations": 1})
@@ -1361,7 +1361,7 @@ def _contrast(fg: str, bg: str, alpha: float = 1.0) -> float:
 
 
 def test_pseudogenes_have_a_3_to_1_contrast_in_dark_mode():
-    from bacon.report import CSS, TOKENS_DARK, TOKENS_LIGHT
+    from rasher.report import CSS, TOKENS_DARK, TOKENS_LIGHT
     # A faint fill with an outline in the coding genes' colour: the outline carries the contrast
     assert ".gene-pseudo{fill:var(--c5);fill-opacity:var(--pseudo-op);stroke:var(--c5);stroke-width:1}" in CSS
     for theme in (TOKENS_LIGHT, TOKENS_DARK):
@@ -1371,7 +1371,7 @@ def test_pseudogenes_have_a_3_to_1_contrast_in_dark_mode():
 
 
 def test_bars_snp_ticks_and_genes_use_the_colourblind_friendly_palette():
-    from bacon.report import CSS, TOKENS_DARK, TOKENS_LIGHT
+    from rasher.report import CSS, TOKENS_DARK, TOKENS_LIGHT
     for rule in (".bar{fill:var(--c2)}", ".snp-all{stroke:var(--c2)", ".snp-miss{stroke:var(--c3)",
                  ".gene-cds{fill:var(--c5)}", ".gene-rna{fill:var(--c7)}"):
         assert rule in CSS, rule
@@ -1383,7 +1383,7 @@ def test_bars_snp_ticks_and_genes_use_the_colourblind_friendly_palette():
 
 
 def test_printed_figures_fit_a_page():
-    from bacon.report import CSS
+    from rasher.report import CSS
     printed = CSS[CSS.index("@media print"):]
     assert "svg.fig{max-height:155mm;width:auto}" in printed
     # A small figure keeps its own width on paper: no rule overrides the cap of each figure
@@ -1396,7 +1396,7 @@ CATERPILLAR = "".join("(" for _ in range(999)) + "L0:1" + "".join(f",L{i}:1):1" 
 
 
 def test_deep_trees_do_not_reach_the_recursion_limit(tmp_path):
-    from bacon.newick import midpoint_root, to_newick, to_svg
+    from rasher.newick import midpoint_root, to_newick, to_svg
     tree = parse(CATERPILLAR)
     ladderize(tree)
     assert len(tree.leaves()) == 1000 and to_newick(tree).count("(") == 999
@@ -1516,8 +1516,8 @@ def test_ciede2000_helper_gives_known_differences():
 
 
 def test_palette_twelve_colours_kept_apart_for_colourblind_readers():
-    from bacon.metadata import MAX_COLOUR_VALUES, PALETTE_COLOURS
-    from bacon.report import GROUP_COLOURS, MARKERS, PALETTE_DARK, PALETTE_LIGHT, TOKENS_DARK, TOKENS_LIGHT
+    from rasher.metadata import MAX_COLOUR_VALUES, PALETTE_COLOURS
+    from rasher.report import GROUP_COLOURS, MARKERS, PALETTE_DARK, PALETTE_LIGHT, TOKENS_DARK, TOKENS_LIGHT
     assert len(PALETTE_LIGHT) == len(PALETTE_DARK) == PALETTE_COLOURS == GROUP_COLOURS == 12
     assert len(MARKERS) == MAX_COLOUR_VALUES == 48
     for palette, tokens, surface, floor in ((PALETTE_LIGHT, TOKENS_LIGHT, "#fcfcfb", 2), (PALETTE_DARK, TOKENS_DARK,
@@ -1531,7 +1531,7 @@ def test_palette_twelve_colours_kept_apart_for_colourblind_readers():
             assert _closest(palette[:4], vision) >= 15  # The first four, which few values use, are the most distinct
             for shape in range(4):  # Values sharing a shape in a round of colours are four colours apart
                 assert _closest(palette[shape::4], vision) >= 11
-    from bacon.report import CSS
+    from rasher.report import CSS
     assert sum(_wcag(c, "#fcfcfb") < 3 for c in PALETTE_LIGHT) == 4 and ".mk{stroke:var(--edge)" in CSS
     # Dark: the stand-in of the sky blue (8th) is not a second pale blue next to the dark blue's (4th), with
     # which it shares the diamond
@@ -1545,7 +1545,7 @@ def _worst_same_shape(count: int, palette, visions=("deutan", "protan", "tritan"
     import itertools
     import math
 
-    from bacon.report import MARKERS
+    from rasher.report import MARKERS
     worst = math.inf
     for (c1, s1), (c2, s2) in itertools.combinations(MARKERS[:count], 2):
         if s1 == s2:
@@ -1555,7 +1555,7 @@ def _worst_same_shape(count: int, palette, visions=("deutan", "protan", "tritan"
 
 
 def test_values_sharing_a_shape_stay_apart_for_colourblind_readers():
-    from bacon.report import PALETTE_DARK, PALETTE_LIGHT
+    from rasher.report import PALETTE_DARK, PALETTE_LIGHT
     # Measured (light and dark alike): 11.3 up to 25 values, as within the first 12; 6.9 at 48. The former
     # assignment (four shapes, moved on by one after each round of 12 colours) fell to 5.9 from 13 values
     for palette in (PALETTE_LIGHT, PALETTE_DARK):
@@ -1569,7 +1569,7 @@ def test_values_sharing_a_shape_stay_apart_for_colourblind_readers():
 
 
 def test_value_markers_differ_in_colour_and_shape():
-    from bacon.report import MARKERS, SHAPES, value_marker
+    from rasher.report import MARKERS, SHAPES, value_marker
     assert SHAPES == ("circle", "triangle", "square", "diamond", "triangle-down", "plus", "cross")
     pairs = [value_marker(rank) for rank in range(48)]
     assert len(set(pairs)) == 48  # A pair of its own for each value
@@ -1582,7 +1582,7 @@ def test_value_markers_differ_in_colour_and_shape():
 
 
 def test_markers_shapes_hollow_and_escaped_titles():
-    from bacon.report import marker
+    from rasher.report import marker
     assert marker("circle", 5, 5, 10, "var(--c1)") == '<circle cx="5" cy="5" r="5" fill="var(--c1)" class="mk"/>'
     assert marker("square", 5, 5, 10, "var(--c3)").startswith('<rect x="0.7" y="0.7" width="8.6" height="8.6"')
     assert marker("diamond", 5, 5, 10, "var(--c4)").startswith('<path d="M5,-1L10.1,5L5,11L-0.1,5Z"')
@@ -1598,7 +1598,7 @@ def test_markers_shapes_hollow_and_escaped_titles():
 
 
 def test_groups_of_identical_genomes_have_twelve_colours():
-    from bacon.report import slot_colour
+    from rasher.report import slot_colour
     assert slot_colour(0) == "var(--c1)" and slot_colour(11) == "var(--c12)" and slot_colour(12) == "var(--muted)"
     root = parse("((a:0.01,b:0.01)0.95:0.02,(Reference:0.005,c:0.005)0.80:0.03);")
     assert '<rect x="' in tree_svg(root, {"a": 0, "b": 0}, "ref.fa", 100)  # Squares: never a value's shape there
@@ -1621,7 +1621,7 @@ def test_heatmap_value_band_and_legend_with_forty_values():
 
 
 def test_table_markers_stay_with_the_value_when_wrapped():
-    from bacon.report import CSS, marked
+    from rasher.report import CSS, marked
     assert marked(None, "no <value>").startswith('<span class="mkt"><svg class="mki"')
     assert marked(None, "no <value>").endswith('class="mk0"/></svg>no</span> &lt;value&gt;')
     assert ".mkt{white-space:nowrap}" in CSS and "th,td{white-space:normal" in CSS.split("@media print")[1]
@@ -1641,7 +1641,7 @@ def _marker_sig(element: str) -> tuple:
 
 
 def test_each_value_has_one_marker_everywhere_with_a_failed_sample_sorting_first(tmp_path):
-    from bacon.report import marker, value_marker
+    from rasher.report import marker, value_marker
     out = _metadata_run(tmp_path, "sample\tgroup\na\tx\nb\ty\nc\t0\n")
     summary = out / "summary.tsv"  # c failed: its value, 0, sorts first but is in no figure
     summary.write_text(summary.read_text() + "c\tfailed (bait)\tNA\tNA\tNA\tno reads matched the reference\n")
@@ -1700,7 +1700,7 @@ def test_samples_table_marks_each_value_with_its_own_marker(tmp_path):
 
 
 def test_cross_table_turns_with_many_values():
-    from bacon.report import MAX_CROSS_COLUMNS, cross_table
+    from rasher.report import MAX_CROSS_COLUMNS, cross_table
     names = [f"g{i:02d}" for i in range(30)]
     groups = [names[:2], names[2:4]]
 
@@ -1721,7 +1721,7 @@ def test_cross_table_turns_with_many_values():
 
 
 def test_groups_of_identical_genomes_have_an_edge_and_labels():
-    from bacon.report import CSS
+    from rasher.report import CSS
     root = parse("((a:0.01,b:0.01)0.95:0.02,(Reference:0.005,c:0.005)0.80:0.03);")
     assert 'fill="var(--c1)" class="mk"><title>a: group 1</title></rect>' in tree_svg(root, {"a": 0, "b": 0}, "", 100)
     names = ["a", "b", "c"]
@@ -1867,7 +1867,7 @@ def test_each_genome_has_one_colour_and_shape_in_every_place(tmp_path, colour_co
 
 
 def test_bar_chart_colours_the_bars_and_marks_the_names():
-    from bacon.report import MAX_NAME_GUTTER, Colouring
+    from rasher.report import MAX_NAME_GUTTER, Colouring
     bars = [Bar("a<1>", 30, "a<1>: 30x"), Bar("b", 10, "b: 10x"), Bar("c", 0, "c: 0x"), Bar("d", None, "d: NA"),
             Bar("e", None, "e: failed", failed="failed (bait)")]
     colours = Colouring("site", ["x", "y"], {"a<1>": "x", "b": "y", "c": "x", "e": "y"})
@@ -1908,7 +1908,7 @@ def test_bar_chart_colours_the_bars_and_marks_the_names():
 
 
 def test_bars_of_150_genomes_keep_their_markers_in_the_gutter():
-    from bacon.report import Colouring
+    from rasher.report import Colouring
     names = [f"genome_{i:03d}_with_a_longish_name" for i in range(150)]
     colours = Colouring("site", [f"v{i:02d}" for i in range(40)], {n: f"v{i % 41:02d}" if i % 41 < 40 else ""
                                                                    for i, n in enumerate(names)})
@@ -2052,7 +2052,7 @@ def test_tree_caption_with_a_heatmap_names_its_legend(tmp_path):
 def test_a_tree_that_cannot_be_drawn_loses_its_figure_only(tmp_path, caplog):
     # Finite branch lengths whose sum is not: the depth of a and of the Reference overflows the drawing
     out = _full_run(tmp_path, tree="((a:1e308,Reference:1e308)0.9:1e308,b:0.003);\n")
-    with caplog.at_level("WARNING", logger="bacon.report"):
+    with caplog.at_level("WARNING", logger="rasher.report"):
         page = build_report(out)
     assert "The tree could not be drawn (" in page and "fallback tree" in page  # The run's tree.svg instead
     assert "Pairwise SNP distances" in page and "Genome map" in page  # The other figures stay
@@ -2074,7 +2074,7 @@ def test_header_says_the_time_does_not_count_reused_steps(tmp_path):
 
 def test_each_sortable_table_sorts_by_the_column_of_its_own_header():
     # The headers are numbered across the page: the SNP table, after the samples table, must use its own columns
-    from bacon.report import SORT_JS
+    from rasher.report import SORT_JS
     assert "forEach(function (th) {" in SORT_JS and "i = th.cellIndex" in SORT_JS and "x.cells[i]" in SORT_JS
 
 
@@ -2104,7 +2104,7 @@ def test_report_says_when_the_recorded_colour_column_is_gone_from_the_copy(tmp_p
 
 
 def test_multiqc_metadata_keys_never_collide():
-    from bacon.metadata import Metadata
+    from rasher.metadata import Metadata
     rows = [{"Sample": "s1", "Status": "ok"}]
     table = sample_table(rows, "run", Metadata(["x", "x_3", "x."], {"s1": {"x": "1", "x_3": "2", "x.": "3"}}))
     keys = [k for k in table["headers"] if k.startswith("meta_")]
@@ -2132,11 +2132,11 @@ def test_report_without_tree_says_whether_the_genomes_differ_anywhere(tmp_path):
 
 
 def test_multiqc_run_ids_differ_for_names_differing_in_punctuation():
-    from bacon.multiqc import _run_id
+    from rasher.multiqc import _run_id
     ids = {_run_id(name) for name in ("run-1", "run_1", "run 1", "run.1", "run_1_")}
     assert len(ids) == 5 and "run_1" in ids
     assert _run_id("run-1") == _run_id("run-1") and re.fullmatch(r"run_1_[0-9a-f]{6}", _run_id("run-1"))
-    assert _run_id("bacon_2026") == "bacon_2026" and _run_id("") == "run"
+    assert _run_id("rasher_2026") == "rasher_2026" and _run_id("") == "run"
     assert re.fullmatch(r"[A-Za-z0-9_]+", _run_id("é !"))
 
 
@@ -2159,7 +2159,7 @@ def test_run_section_records_the_annotation(tmp_path):
 
 
 def test_an_iqtree_tree_without_bootstrap_claims_no_supports(tmp_path):
-    # No IQ-TREE bootstrap when it keeps fewer than four sequences: BACoN keeps its ML tree, without supports
+    # No IQ-TREE bootstrap when it keeps fewer than four sequences: RASHER keeps its ML tree, without supports
     for tree, supported in [("((a:0.001,Reference:0.0005):0.002,b:0.003);\n", False), (TREE, True)]:
         out = _folder(tmp_path / str(supported), {"method": "ska", "core_snps": 3, "tree_method": "iqtree",
                                                   "tree": "4_compared/ska/tree.nwk",

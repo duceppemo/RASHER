@@ -3,9 +3,9 @@
 Three files in the output folder, found by `multiqc OUTPUT_FOLDER`. Their section ids include the name of the
 output folder, so that the files of several runs in one MultiQC search path make separate sections instead of
 being merged (MultiQC merges sections with the same id, and keeps only one heatmap).
-  bacon_samples_mqc.json    table: reads, depth, assembly and status of each sample, with its metadata
-  bacon_reads_mqc.json      bar graph: each sample's bases kept, baited but filtered out, and off-target
-  bacon_distances_mqc.json  heatmap: pairwise SNP distances (when the samples were compared)
+  rasher_samples_mqc.json    table: reads, depth, assembly and status of each sample, with its metadata
+  rasher_reads_mqc.json      bar graph: each sample's bases kept, baited but filtered out, and off-target
+  rasher_distances_mqc.json  heatmap: pairwise SNP distances (when the samples were compared)
 """
 
 from __future__ import annotations
@@ -15,9 +15,9 @@ import json
 import re
 from pathlib import Path
 
-from bacon import BaconError
-from bacon.metadata import Metadata, shown_name
-from bacon.newick import parse
+from rasher import RasherError
+from rasher.metadata import Metadata, shown_name
+from rasher.newick import parse
 
 OPTIONAL_COLUMNS = ("Off_reference_pct",)
 SAMPLE_HEADERS = {
@@ -101,13 +101,13 @@ def sample_table(rows: list[dict[str, str]], run: str = "", metadata: Metadata |
         if not any(key in values for values in data.values()):
             headers.pop(key, None)
     return {
-        "id": f"bacon_samples_{_run_id(run)}",
-        "section_name": f"BACoN {run}: samples".replace("  ", " "),
-        "description": "Reads baited and kept, depth and assembly of each sample (BACoN summary.tsv)"
+        "id": f"rasher_samples_{_run_id(run)}",
+        "section_name": f"RASHER {run}: samples".replace("  ", " "),
+        "description": "Reads baited and kept, depth and assembly of each sample (RASHER summary.tsv)"
                        + (", with the sample metadata." if metadata else "."),
         "plot_type": "table",
-        "pconfig": {"id": f"bacon_samples_table_{_run_id(run)}", "title": f"BACoN {run}: samples",
-                    "namespace": f"BACoN {run}".strip()},
+        "pconfig": {"id": f"rasher_samples_table_{_run_id(run)}", "title": f"RASHER {run}: samples",
+                    "namespace": f"RASHER {run}".strip()},
         "headers": headers,
         "data": data,
     }
@@ -131,14 +131,14 @@ def reads_bargraph(rows: list[dict[str, str]], run: str = "") -> dict | None:
     if not data:
         return None
     return {
-        "id": f"bacon_reads_{_run_id(run)}",
-        "section_name": f"BACoN {run}: bases".replace("  ", " "),
+        "id": f"rasher_reads_{_run_id(run)}",
+        "section_name": f"RASHER {run}: bases".replace("  ", " "),
         "description": "Bases of each sample: kept for the assembly, matching the reference but filtered out "
                        "(short, low quality, or above the target depth), and not matching the reference.",
         "plot_type": "bargraph",
         "categories": {"Kept": {"color": "#2f7ebc"}, "Baited, filtered out": {"color": "#9ecae1"},
                        "Baited": {"color": "#2f7ebc"}, "Off-target": {"color": "#d9d9d9"}},
-        "pconfig": {"id": f"bacon_reads_plot_{_run_id(run)}", "title": f"BACoN {run}: bases", "ylab": "Bases",
+        "pconfig": {"id": f"rasher_reads_plot_{_run_id(run)}", "title": f"RASHER {run}: bases", "ylab": "Bases",
                     "cpswitch_counts_label": "Bases"},
         "data": data,
     }
@@ -157,20 +157,20 @@ def distance_heatmap(path: Path, tree: Path | None = None, run: str = "") -> dic
     if tree is not None and tree.exists():
         try:
             leaves = [leaf.name for leaf in parse(tree.read_text()).leaves()]
-        except (BaconError, OSError, UnicodeDecodeError, RecursionError):
+        except (RasherError, OSError, UnicodeDecodeError, RecursionError):
             leaves = []
         if leaves and sorted(leaves) == sorted(names):
             order, in_tree_order = leaves, True
     index = {n: i for i, n in enumerate(names)}
     matrix = [[rows[a][index[b]] for b in order] for a in order]
     return {
-        "id": f"bacon_distances_{_run_id(run)}",
-        "section_name": f"BACoN {run}: SNP distances".replace("  ", " "),
+        "id": f"rasher_distances_{_run_id(run)}",
+        "section_name": f"RASHER {run}: SNP distances".replace("  ", " "),
         "description": "Pairwise SNP distances between the assemblies and the reference, rows and columns in "
                        + ("tree order" if in_tree_order else "the order of the distance table")
                        + " (recent MultiQC versions also offer a clustered view).",
         "plot_type": "heatmap",
-        "pconfig": {"id": f"bacon_distances_heatmap_{_run_id(run)}", "title": f"BACoN {run}: SNP distances",
+        "pconfig": {"id": f"rasher_distances_heatmap_{_run_id(run)}", "title": f"RASHER {run}: SNP distances",
                     "square": True, "min": 0, "tt_decimals": 0,
                     "colstops": [[0, "#ffffd9"], [0.25, "#a1dab4"], [0.5, "#41b6c4"], [0.75, "#225ea8"],
                                  [1, "#081d58"]]},
@@ -185,9 +185,9 @@ def write_multiqc(output: Path, rows: list[dict[str, str]], distances: Path | No
     """Write the MultiQC files; remove a stale distance file when there is no comparison."""
     written = []
     run = output.resolve().name
-    sections = [("bacon_samples_mqc.json", sample_table(rows, run, metadata)),
-                ("bacon_reads_mqc.json", reads_bargraph(rows, run)),
-                ("bacon_distances_mqc.json", distance_heatmap(distances, tree, run)
+    sections = [("rasher_samples_mqc.json", sample_table(rows, run, metadata)),
+                ("rasher_reads_mqc.json", reads_bargraph(rows, run)),
+                ("rasher_distances_mqc.json", distance_heatmap(distances, tree, run)
                  if distances and distances.exists() else None)]
     for name, content in sections:
         path = output / name

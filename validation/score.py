@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Score BACoN outputs against the truth written by simulate.py.
+"""Score RASHER outputs against the truth written by simulate.py.
 
 Usage: python score.py SCENARIO_FOLDER RUN_FOLDER [RUN_FOLDER ...] [--markdown OUT.md] [--json OUT.json]
 
-For each run (a BACoN output folder, labelled by its folder name):
+For each run (a RASHER output folder, labelled by its folder name):
   assembly  per sample: contigs, circular contigs versus true circular molecules, total length versus truth,
             fraction of the true genome covered, duplicated bases, and consensus errors (mismatches, inserted and
             deleted bases) from minimap2 alignments of the contigs to the true genome

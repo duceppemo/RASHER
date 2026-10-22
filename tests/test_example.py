@@ -1,5 +1,5 @@
 """The bundled example (example/make_example.py): its annotated reference, planted SNPs and metadata agree with
-what BACoN reads from them. The reads are not simulated here (that takes seconds); the reference is built by
+what RASHER reads from them. The reads are not simulated here (that takes seconds); the reference is built by
 importing the generator."""
 
 import importlib.util
@@ -9,9 +9,9 @@ from pathlib import Path
 
 import pytest
 
-from bacon.annotation import annotate_snps, genbank_fasta_records, load_annotation, translate
-from bacon.metadata import choose_colour_column, read_metadata, unusable_reason
-from bacon.seqio import Record, acgtn, write_fasta
+from rasher.annotation import annotate_snps, genbank_fasta_records, load_annotation, translate
+from rasher.metadata import choose_colour_column, read_metadata, unusable_reason
+from rasher.seqio import Record, acgtn, write_fasta
 
 EXAMPLE = Path(__file__).resolve().parent.parent / "example" / "make_example.py"
 
@@ -45,7 +45,7 @@ def test_inverted_repeat_is_real(example, reference):
     (b_start, b_end), (a_start, a_end) = example.REGIONS["IRb"], example.REGIONS["IRa"]
     assert ref.seq[a_start - 1:a_end] == example.revcomp(ref.seq[b_start - 1:b_end])
     # At 3 kb it is below the 5 kb minimum of the detection: the example's band comes from its annotation
-    from bacon.annotation import MIN_DETECTED_REPEAT, detect_inverted_repeat
+    from rasher.annotation import MIN_DETECTED_REPEAT, detect_inverted_repeat
     assert b_end - b_start + 1 < MIN_DETECTED_REPEAT and detect_inverted_repeat(ref.seq) is None
 
 
@@ -81,7 +81,7 @@ def test_every_cds_translates_without_internal_stop(reference):
             assert protein[:-1] == translations[g.name]  # The /translation qualifier
 
 
-def test_fasta_is_what_bacon_writes_from_the_genbank(reference, tmp_path):
+def test_fasta_is_what_rasher_writes_from_the_genbank(reference, tmp_path):
     out, _ = reference
     records = [Record(r.header, acgtn(r.seq)) for r in genbank_fasta_records(out / "reference.gb")]
     assert [r.header for r in records] == ["organelle simulated circular reference"]
@@ -108,7 +108,7 @@ def test_planted_snps_are_outside_the_repeats_and_apart(example, reference):
         assert len(samples[a] ^ samples[b]) == d
 
 
-def test_planted_effects_match_bacon(example, reference):
+def test_planted_effects_match_rasher(example, reference):
     out, ref = reference
     rows = [line.split("\t") for line in (out / "planted_effects.tsv").read_text().splitlines()]
     assert rows[0] == ["position", "ref", "alt", "samples", "region", "gene", "context", "codon", "amino_acid",
@@ -160,9 +160,9 @@ def _fake_run(example, reference, where):
     (where / "data").mkdir(parents=True)
     for name in ("reference.gb", "planted_effects.tsv"):
         (where / "data" / name).write_bytes((out / name).read_bytes())
-    compared = where / "bacon" / "4_compared" / "minimap2"
+    compared = where / "rasher" / "4_compared" / "minimap2"
     compared.mkdir(parents=True)
-    (where / "bacon" / "reference.fasta").write_bytes((out / "reference.fasta").read_bytes())
+    (where / "rasher" / "reference.fasta").write_bytes((out / "reference.fasta").read_bytes())
     names = ["Reference", *example.SAMPLES]
     distances = {("Reference", s): d for (a, s), d in example.EXPECTED_DISTANCES.items() if a == "alpha"}
     distances.update({**example.EXPECTED_DISTANCES, ("Reference", "alpha"): 0})  # alpha is the reference
@@ -175,7 +175,7 @@ def _fake_run(example, reference, where):
         + "\n" + "".join(f"organelle\t{s.position}\t.\t{s.ref}\t{s.alt}\t.\t.\t.\tGT\t" + "\t".join(
             "1" if (s.position, s.alt) in carried[name] else "0" for name in example.SAMPLES) + "\n"
             for s in ref.snps))
-    (where / "bacon" / "report.html").write_text(" ".join(text for text, _ in [
+    (where / "rasher" / "report.html").write_text(" ".join(text for text, _ in [
         ('<table class="snps', ""), ("in the LSC", ""), ("coloured by <b>group</b>", ""), ("site 2", "")]))
     return where
 
@@ -190,7 +190,7 @@ def test_check_passes_a_perfect_run(example, reference, checker, tmp_path, capsy
 
 def test_check_fails_a_snp_on_another_sequence_or_a_wrong_effect(example, reference, checker, tmp_path, capsys):
     run = _fake_run(example, reference, tmp_path / "run")
-    vcf = run / "bacon" / "4_compared" / "minimap2" / "snps.vcf"
+    vcf = run / "rasher" / "4_compared" / "minimap2" / "snps.vcf"
     lines = vcf.read_text().splitlines()
     first = next(i for i, line in enumerate(lines) if not line.startswith("#"))
     lines[first] = "plasmid" + lines[first][len("organelle"):]  # The CHROM of one record
@@ -211,7 +211,7 @@ def test_check_fails_a_snp_on_another_sequence_or_a_wrong_effect(example, refere
 
 def test_check_main_exits_with_the_failures(example, reference, checker, tmp_path):
     run = _fake_run(example, reference, tmp_path / "run")
-    (run / "bacon" / "report.html").write_text("nothing")
+    (run / "rasher" / "report.html").write_text("nothing")
     with pytest.raises(SystemExit) as exc:
         checker.main(["check_example.py", str(run)])
     assert str(exc.value).startswith("FAILED: report.html lacks the SNP table")

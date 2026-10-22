@@ -2,8 +2,8 @@
 
 import pytest
 
-from bacon import BaconError
-from bacon.metadata import (
+from rasher import RasherError
+from rasher.metadata import (
     Metadata,
     choose_colour_column,
     is_numeric,
@@ -28,23 +28,23 @@ def test_read_table_formats(tmp_path):
     csv = tmp_path / "m.csv"
     csv.write_text('sample,note\ns1,"a, quoted\tvalue"\n')
     assert read_table(csv, "x")[1] == [{"sample": "s1", "note": "a, quoted\tvalue"}]  # Quotes: commas kept
-    with pytest.raises(BaconError, match="Metadata file not found"):
+    with pytest.raises(RasherError, match="Metadata file not found"):
         read_table(tmp_path / "none.tsv", "Metadata file")
     (tmp_path / "empty.tsv").write_text("# only a comment\n\n")
-    with pytest.raises(BaconError, match="is empty"):
+    with pytest.raises(RasherError, match="is empty"):
         read_table(tmp_path / "empty.tsv", "Metadata file")
 
 
 def test_read_table_refuses_unclosed_quotes_and_quoted_line_breaks(tmp_path):
     csv = tmp_path / "m.csv"
     csv.write_text('sample,size,group\ns1,"5 inch,A\ns2,3,B\ns3,2,B\n')  # Would swallow s2 and s3 silently
-    with pytest.raises(BaconError, match=r"m.csv, line 2: .*unclosed quote"):
+    with pytest.raises(RasherError, match=r"m.csv, line 2: .*unclosed quote"):
         read_table(csv, "Metadata file")
     csv.write_text('sample,note\ns1,"line one\nline two"\ns2,x\n')  # A line break in a value breaks the copy
-    with pytest.raises(BaconError, match="line 2: a quoted value spans several lines"):
+    with pytest.raises(RasherError, match="line 2: a quoted value spans several lines"):
         read_table(csv, "Metadata file")
     csv.write_text('\n# c\nsample,note\ns1,"say ""hi"""\n\ns2,"ab\n')  # The line is the file's; the last line
-    with pytest.raises(BaconError, match="line 6: an unclosed quote"):
+    with pytest.raises(RasherError, match="line 6: an unclosed quote"):
         read_table(csv, "Metadata file")
     tsv = tmp_path / "m.tsv"
     tsv.write_text('sample\tsize\tgroup\ns1\t"5 inch\tA\ns2\t3\tB\ns3\t2\tB\n')
@@ -85,13 +85,13 @@ def test_comment_lines_count_only_before_the_header(tmp_path):
 def test_duplicate_column_names_are_an_error(tmp_path):
     path = tmp_path / "m.csv"
     path.write_text("sample,Group,group,g\ns1,A,B,C\n")
-    with pytest.raises(BaconError, match="column name 'Group', 'group' is used more than once .*its own name"):
+    with pytest.raises(RasherError, match="column name 'Group', 'group' is used more than once .*its own name"):
         read_metadata(path)
     path.write_text("sample,g,Sample\ns1,A,B\n")  # A second 'sample' column, whatever its case
-    with pytest.raises(BaconError, match="column name 'sample', 'Sample' is used more than once"):
+    with pytest.raises(RasherError, match="column name 'sample', 'Sample' is used more than once"):
         read_metadata(path)
     path.write_text("sample,file,File\ns1,a.fq,b.fq\n")
-    with pytest.raises(BaconError, match="Sample sheet .*column name 'file', 'File' is used more than once"):
+    with pytest.raises(RasherError, match="Sample sheet .*column name 'file', 'File' is used more than once"):
         sheet_metadata(path)
     path.write_text("sample,g,,\ns1,A,,\n")  # Several empty names are not duplicates
     assert read_metadata(path).columns == ["g"]
@@ -118,10 +118,10 @@ def test_read_metadata_values_and_warnings(tmp_path):
 def test_read_metadata_errors(tmp_path):
     path = tmp_path / "m.csv"
     path.write_text("name,group\ns1,A\n")
-    with pytest.raises(BaconError, match="needs a 'sample' column"):
+    with pytest.raises(RasherError, match="needs a 'sample' column"):
         read_metadata(path)
     path.write_text("sample\ns1\n")
-    with pytest.raises(BaconError, match="no column besides"):
+    with pytest.raises(RasherError, match="no column besides"):
         read_metadata(path)
 
 
@@ -185,7 +185,7 @@ def test_choose_colour_column():
     assert choose_colour_column(m, "NONE") == (None, None)
     column, why = choose_colour_column(m, "n")
     assert column is None and "'n' cannot colour" in why and "12 distinct" in why
-    with pytest.raises(BaconError, match="no such metadata column"):
+    with pytest.raises(RasherError, match="no such metadata column"):
         choose_colour_column(m, "missing")
     only_text = Metadata(["comment"], {k: {"comment": v["comment"]} for k, v in m.rows.items()})
     column, why = choose_colour_column(only_text, None)
@@ -220,10 +220,10 @@ def test_csv_is_read_as_0_3_5_read_it_but_quotes_cannot_swallow_rows(tmp_path):
     assert read_table(csv, "x")[1] == [{"sample": "s1", "group": "A", "note": "xy"},
                                        {"sample": "s2", "group": "B", "note": 'say "hi"'}]
     csv.write_text('sample,group\ns1,"A\ns2,B\ns3,C\n')  # Still an error: the quote would swallow s2 and s3
-    with pytest.raises(BaconError, match="line 2: an unclosed quote"):
+    with pytest.raises(RasherError, match="line 2: an unclosed quote"):
         read_table(csv, "x")
     csv.write_text('sample,group\ns1,A\ns2,"B\n')  # On the last line too
-    with pytest.raises(BaconError, match="line 3: an unclosed quote"):
+    with pytest.raises(RasherError, match="line 3: an unclosed quote"):
         read_table(csv, "x")
 
 
@@ -283,7 +283,7 @@ def test_utf32_and_utf8_with_a_few_invalid_bytes(tmp_path, caplog):
 
 
 def test_sample_sheet_in_utf8_with_an_invalid_byte_finds_its_files(tmp_path, caplog):
-    from bacon.samples import read_sample_sheet
+    from rasher.samples import read_sample_sheet
     (tmp_path / "\u00e9t\u00e9.fastq").write_text("@r\nACGT\n+\nIIII\n")
     sheet = tmp_path / "s.csv"
     sheet.write_bytes("sample,file,note\ns1,\u00e9t\u00e9.fastq,ok\n".encode() + b"#s2,x.fastq,caf\xe9\n")

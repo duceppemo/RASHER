@@ -1,7 +1,7 @@
 # Example
 
-A small simulated dataset, bundled with BACoN, to check an installation and to see every output in a few
-seconds. [`example/make_example.py`](https://github.com/duceppemo/BACoN/blob/main/example/make_example.py)
+A small simulated dataset, bundled with RASHER, to check an installation and to see every output in a few
+seconds. [`example/make_example.py`](https://github.com/duceppemo/RASHER/blob/main/example/make_example.py)
 generates it (standard library only; the same files every time):
 
 - an annotated 30 kb circular reference ("organelle"), as fasta and as GenBank;
@@ -41,7 +41,7 @@ copy of the start of `orf03`. The rest is random sequence (37% GC).
 circular reference`, a `source`, two `repeat_region` features (`/rpt_type=inverted`, `/standard_name="IRb"` and
 `"IRa"`), and for each gene a `gene` feature with its `CDS` (`/codon_start=1`, `/transl_table=11`,
 `/translation`), `tRNA` or `rRNA`, or `/pseudo`. `data/reference.fasta` is the same sequence as fasta, with the
-header `organelle simulated circular reference`: byte for byte what BACoN writes to `reference.fasta` from the
+header `organelle simulated circular reference`: byte for byte what RASHER writes to `reference.fasta` from the
 GenBank file, so the GenBank file could be given as `-r` instead of the fasta and `--annotation`.
 
 The 20 SNPs are planted outside the inverted repeats (both copies stay identical in every genome), at least 40 bp
@@ -49,7 +49,7 @@ apart, in chosen contexts: 12 in coding sequences (5 synonymous, 6 missense, 1 n
 in the second exon of `orf04`), 1 in the intron of `orf04`, 2 in tRNA genes, 1 in the pseudogene and 4 in
 intergenic spacers. `data/planted_snps.tsv` lists the positions of each sample and `data/planted_effects.tsv`
 the expected region, gene, context, codon change and effect of each SNP, computed by the generator without
-BACoN:
+RASHER:
 
 ```
 position  ref  alt  samples     region  gene      context    codon    amino_acid  effect
@@ -69,15 +69,15 @@ are comments saying that the values are simulated.
 ## Running it
 
 ```bash
-conda activate BACoN
+conda activate RASHER
 bash example/run_example.sh example_output      # optional: number of threads as a second argument
 ```
 
-The script generates the data in `example_output/data/`, runs BACoN with the default settings, the annotation
-and the metadata into `example_output/bacon/`:
+The script generates the data in `example_output/data/`, runs RASHER with the default settings, the annotation
+and the metadata into `example_output/rasher/`:
 
 ```bash
-bacon -r example_output/data/reference.fasta -i example_output/data/reads -o example_output/bacon \
+rasher -r example_output/data/reference.fasta -i example_output/data/reads -o example_output/rasher \
     --annotation example_output/data/reference.gb --metadata example_output/data/metadata.tsv
 ```
 
@@ -86,18 +86,18 @@ of every SNP of the VCF (`planted_effects.tsv`), and that the report shows the a
 exits with an error if anything differs:
 
 ```
-OK: all 6 pairwise SNP distances match the truth (example_output/bacon/4_compared/minimap2/snp_distances.tsv)
+OK: all 6 pairwise SNP distances match the truth (example_output/rasher/4_compared/minimap2/snp_distances.tsv)
 OK: the 20 SNPs are annotated as planted (12 coding changes: 5 synonymous, 6 missense, 1 nonsense)
-OK: report.html has the annotation and the metadata (example_output/bacon/report.html)
+OK: report.html has the annotation and the metadata (example_output/rasher/report.html)
 ```
 
 The whole script takes about 7 seconds with 8 threads (5 of them to simulate the reads).
 
 ## The report
 
-Open `example_output/bacon/report.html` in a browser. The report of this example is also online:
-[view it](https://duceppemo.github.io/BACoN/reports/example_report.html)
-or [download it](https://raw.githubusercontent.com/duceppemo/BACoN/main/docs/reports/example_report.html).
+Open `example_output/rasher/report.html` in a browser. The report of this example is also online:
+[view it](https://duceppemo.github.io/RASHER/reports/example_report.html)
+or [download it](https://raw.githubusercontent.com/duceppemo/RASHER/main/docs/reports/example_report.html).
 (Local paths were removed from it before publication: the program paths start with `$CONDA_PREFIX`.)
 
 **Overview and samples.** All four samples assembled: 235 to 253 of the 282 to 323 reads of each sample matched
@@ -106,22 +106,22 @@ templated assembly is 30,000 bp for each sample, as long as the reference, with 
 reads span the 3 kb inverted repeat, so the consensus is called in both copies. The samples table has the
 metadata columns after the sample name; `group` colours the figures, so its values carry their marker.
 
-![Overview and samples](https://raw.githubusercontent.com/duceppemo/BACoN/main/docs/images/example_report_overview.png)
+![Overview and samples](https://raw.githubusercontent.com/duceppemo/RASHER/main/docs/images/example_report_overview.png)
 
 **Tree.** alpha sits with the reference; beta and gamma form a clade (their 6 shared SNPs); delta is on its
 own branch. Each leaf gets the marker of its group, a colour and a shape (A a circle, B a triangle), and the
 group after its name; delta, without a value, gets a hollow circle.
 
-![Tree](https://raw.githubusercontent.com/duceppemo/BACoN/main/docs/images/example_report_tree.png)
+![Tree](https://raw.githubusercontent.com/duceppemo/RASHER/main/docs/images/example_report_tree.png)
 
 **SNP distances.** The heatmap, in tree order, shows the pairwise distances; the reference and alpha form a
 group of identical genomes (the inner grey band and the block on the right), and the outer band gives the
 group of each genome. Under the list of identical genomes, a table counts, for each group of identical genomes,
 the genomes of each value of `group`.
 
-![SNP distances](https://raw.githubusercontent.com/duceppemo/BACoN/main/docs/images/example_report_distances.png)
+![SNP distances](https://raw.githubusercontent.com/duceppemo/RASHER/main/docs/images/example_report_distances.png)
 
-**Genome map and SNPs.** `example_output/bacon/4_compared/minimap2/snps.vcf` lists the 20 planted SNPs at their
+**Genome map and SNPs.** `example_output/rasher/4_compared/minimap2/snps.vcf` lists the 20 planted SNPs at their
 positions in the reference, with the genotype of each sample. The genome map shows them over the 23 genes of
 `reference.gb` (the + strand above the centre line, the − strand below; `orf01` and `orf04`, with 2 SNPs each,
 are labelled) and the LSC/IRb/SSC/IRa band derived from the annotated inverted repeats (the example's 3 kb repeat
@@ -138,12 +138,12 @@ example position 3,457 `C>T` in `orf03`, `CGA>TGA`, `R153*`, nonsense (delta onl
 the second exon of `orf04`, `AAA>CAA`, `K234Q`, missense (beta and gamma). Every row agrees with
 `planted_effects.tsv`; the script checks it.
 
-![Genome map](https://raw.githubusercontent.com/duceppemo/BACoN/main/docs/images/example_report_map.png)
+![Genome map](https://raw.githubusercontent.com/duceppemo/RASHER/main/docs/images/example_report_map.png)
 
 **Methods and run.** The methods paragraph describes what was run, with the program versions; the run section
 records the command, the reference's MD5, the annotation and metadata files and every program used.
 
-![Methods and run](https://raw.githubusercontent.com/duceppemo/BACoN/main/docs/images/example_report_methods.png)
+![Methods and run](https://raw.githubusercontent.com/duceppemo/RASHER/main/docs/images/example_report_methods.png)
 
 ## Variations
 
@@ -159,4 +159,4 @@ Running the same command again with other options reruns only what changes ([Usa
   (`python example/check_example.py example_output ska`, or `parsnp`, passes the three checks).
 
 For real data, see the [Tutorial](Tutorial) (28 potato cultivars) and
-[its report](https://duceppemo.github.io/BACoN/reports/tutorial_potato_report.html).
+[its report](https://duceppemo.github.io/RASHER/reports/tutorial_potato_report.html).

@@ -33,8 +33,8 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
       - run: pip install -e ".[test]"
-      - run: pytest -v --cov=bacon --cov-report=term --cov-report=xml
-      - run: bacon --version
+      - run: pytest -v --cov=rasher --cov-report=term --cov-report=xml
+      - run: rasher --version
       # Upload once. Dependabot pull requests cannot read the CODECOV_TOKEN secret, so they skip the upload.
       - uses: codecov/codecov-action@v7
         if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.12' && github.actor != 'dependabot[bot]'

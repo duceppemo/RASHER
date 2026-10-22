@@ -2,7 +2,7 @@ import shutil
 
 import pytest
 
-from bacon.steps import _fill_from, _flye_info, count_circular
+from rasher.steps import _fill_from, _flye_info, count_circular
 
 
 def test_count_circular_headers(tmp_path):
@@ -31,8 +31,8 @@ def test_fill_from_reference_only_at_the_ends():
 
 
 def test_publish_marks_circular_contigs(tmp_path):
-    from bacon.seqio import read_records
-    from bacon.steps import AssemblyDirs, _publish_assembly
+    from rasher.seqio import read_records
+    from rasher.steps import AssemblyDirs, _publish_assembly
     raw = tmp_path / "raw.fasta"
     raw.write_text(">contig_1\nACGT\n>u2ctg_circular-yes_depth-3\nAC\n>contig_3\nGG\n")
     dirs = AssemblyDirs(tmp_path / "asm")
@@ -42,8 +42,8 @@ def test_publish_marks_circular_contigs(tmp_path):
 
 
 def test_filter_by_length_keeps_longest_up_to_target(tmp_path):
-    from bacon.seqio import read_records
-    from bacon.steps import filter_by_length
+    from rasher.seqio import read_records
+    from rasher.steps import filter_by_length
     src = tmp_path / "r.fasta"
     src.write_text("".join(f">r{i}\n{'A' * n}\n" for i, n in enumerate([100, 900, 50, 700, 700, 300])))
     out = tmp_path / "o.fasta.gz"
@@ -56,8 +56,8 @@ def test_filter_by_length_keeps_longest_up_to_target(tmp_path):
 
 
 def test_filter_by_length_keeps_nothing_when_no_read_is_long_enough(tmp_path):
-    from bacon.seqio import read_records
-    from bacon.steps import filter_by_length
+    from rasher.seqio import read_records
+    from rasher.steps import filter_by_length
     src = tmp_path / "r.fasta"
     src.write_text(">r1\nACGT\n>r2\nACGTACGT\n")
     out = tmp_path / "o.fasta.gz"
@@ -68,7 +68,7 @@ def test_filter_by_length_keeps_nothing_when_no_read_is_long_enough(tmp_path):
 def test_pipe_failure_names_the_program_that_failed(tmp_path):
     import pytest
 
-    from bacon.tools import ToolError, run
+    from rasher.tools import ToolError, run
     with pytest.raises(ToolError, match="^false failed with exit code 1"):
         run([["yes"], ["false"]], tmp_path / "log")
     with pytest.raises(ToolError, match="^sh failed with exit code 7"):
@@ -76,8 +76,8 @@ def test_pipe_failure_names_the_program_that_failed(tmp_path):
 
 
 def test_published_assemblies_are_upper_case_acgtn(tmp_path):
-    from bacon.seqio import read_records
-    from bacon.steps import AssemblyDirs, _publish_assembly
+    from rasher.seqio import read_records
+    from rasher.steps import AssemblyDirs, _publish_assembly
     raw = tmp_path / "raw.fasta"
     raw.write_text(">c1\nacgtRYKMn\n")
     dirs = AssemblyDirs(tmp_path / "asm")
@@ -85,13 +85,13 @@ def test_published_assemblies_are_upper_case_acgtn(tmp_path):
     assert next(read_records(dirs.assemblies / "s1.fasta")).seq == "ACGTNNNNN"
 
 
-def test_no_program_starts_once_bacon_is_stopping(tmp_path):
+def test_no_program_starts_once_rasher_is_stopping(tmp_path):
     import pytest
 
-    from bacon.tools import ToolError, allow_programs, kill_running, run
+    from rasher.tools import ToolError, allow_programs, kill_running, run
     kill_running()
     try:
-        with pytest.raises(ToolError, match="not started: BACoN is stopping"):
+        with pytest.raises(ToolError, match="not started: RASHER is stopping"):
             run(["true"], tmp_path / "log")
     finally:
         allow_programs()
@@ -105,7 +105,7 @@ def test_a_second_interruption_during_the_kill_leaves_no_program_running(tmp_pat
 
     import pytest
 
-    from bacon import tools
+    from rasher import tools
     real_kill, seen = tools._kill, []
 
     def kill(proc):  # A second Ctrl-C arrives once the first program is killed, before the second one is
@@ -124,7 +124,7 @@ def test_a_second_interruption_during_the_kill_leaves_no_program_running(tmp_pat
         timer.cancel()
         monkeypatch.setattr(tools, "_kill", real_kill)
     assert len(seen) == 2
-    tools.kill_running()  # As BACoN does at the end of an interrupted run
+    tools.kill_running()  # As RASHER does at the end of an interrupted run
     for proc in seen:
         try:
             proc.wait(timeout=5)
@@ -136,7 +136,7 @@ def test_a_second_interruption_during_the_kill_leaves_no_program_running(tmp_pat
 def test_templated_assembly_notes_reference_sequences_without_reads(tmp_path, monkeypatch):
     from pathlib import Path
 
-    import bacon.steps as steps
+    import rasher.steps as steps
 
     def fake_run(cmd, log_file, **kwargs):  # The consensus has only the reference sequence with reads
         if "consensus" in cmd:
@@ -153,7 +153,7 @@ def test_templated_assembly_notes_reference_sequences_without_reads(tmp_path, mo
 def test_only_a_sample_folder_in_the_step_folder_is_deleted(tmp_path):
     import pytest
 
-    from bacon.steps import AssemblyDirs, SampleFailed
+    from rasher.steps import AssemblyDirs, SampleFailed
     root = tmp_path / "out" / "3_assembled"
     (root / "s1").mkdir(parents=True)
     (root / "s1" / "old.fasta").write_text(">x\nA\n")
@@ -168,7 +168,7 @@ def test_only_a_sample_folder_in_the_step_folder_is_deleted(tmp_path):
 
 def test_logged_command_line_can_be_run_again(tmp_path):
     """The working folder of a program is in its logged command line."""
-    from bacon.tools import run
+    from rasher.tools import run
     work = tmp_path / "my work"
     work.mkdir()
     run(["sh", "-c", "pwd"], tmp_path / "log", cwd=work)
@@ -182,12 +182,12 @@ def test_logged_command_line_can_be_run_again(tmp_path):
 @pytest.mark.parametrize("names", [["v.FASTQ.GZ"], ["y.FQ.GZ"], ["z.fastq"], ["x.fastq.gz"], ["w.fq.gz"],
                                    ["a.FQ.GZ", "b.fastq"]])
 def test_bbduk_reads_files_whatever_their_extension_says(tmp_path, names):
-    """BBTools picks the format and compression from the extension (case-sensitively); BACoN from the content."""
+    """BBTools picks the format and compression from the extension (case-sensitively); RASHER from the content."""
     import gzip
     import random
 
-    from bacon.samples import Sample
-    from bacon.steps import bait_bbduk
+    from rasher.samples import Sample
+    from rasher.steps import bait_bbduk
     rng = random.Random(1)
     genome = "".join(rng.choice("ACGT") for _ in range(3000))
     ref = tmp_path / "ref.fasta"
@@ -210,7 +210,7 @@ def test_bbduk_reads_files_whatever_their_extension_says(tmp_path, names):
 def test_off_reference_share(tmp_path):
     import random
 
-    from bacon.steps import off_reference
+    from rasher.steps import off_reference
     rng = random.Random(1)
     ref = "".join(rng.choice("ACGT") for _ in range(20000))
     other = "".join(rng.choice("ACGT") for _ in range(5000))

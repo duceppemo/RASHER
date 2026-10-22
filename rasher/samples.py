@@ -8,9 +8,9 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
-from bacon import BaconError
-from bacon.metadata import read_table
-from bacon.seqio import sniff_format, split_extension
+from rasher import RasherError
+from rasher.metadata import read_table
+from rasher.seqio import sniff_format, split_extension
 
 log = logging.getLogger(__name__)
 
@@ -48,9 +48,9 @@ def _sequence_files(folder: Path) -> list[Path]:
 
 def _check_name(name: str, origin: object) -> None:
     if not VALID_NAME.fullmatch(name):
-        raise BaconError(f"Invalid sample name {name!r} (from {origin}): {NAME_RULE}")
+        raise RasherError(f"Invalid sample name {name!r} (from {origin}): {NAME_RULE}")
     if name.lower() in {"reference", "all_assemblies", "assembly_graphs"}:
-        raise BaconError(f"Sample name {name!r} (from {origin}) is reserved; rename the file or folder")
+        raise RasherError(f"Sample name {name!r} (from {origin}) is reserved; rename the file or folder")
 
 
 def _make_sample(name: str, files: list[Path], origin: object) -> Sample | None:
@@ -65,7 +65,7 @@ def _make_sample(name: str, files: list[Path], origin: object) -> Sample | None:
         return None
     kinds = {formats[f] for f in files}
     if len(kinds) > 1:
-        raise BaconError(f"Sample {name} mixes fasta and fastq files: {', '.join(map(str, files))}")
+        raise RasherError(f"Sample {name} mixes fasta and fastq files: {', '.join(map(str, files))}")
     return Sample(name, files, kinds.pop())
 
 
@@ -76,12 +76,12 @@ def discover(path: Path) -> list[Sample]:
     the subfolder, with all the sequence files it contains (for example MinKNOW's fastq_pass/barcode01/).
     """
     if not path.exists():
-        raise BaconError(f"Input not found: {path}")
+        raise RasherError(f"Input not found: {path}")
     candidates: list[tuple[str, list[Path], Path]] = []
     if path.is_file():
         parts = split_extension(path.name)
         if not parts:
-            raise BaconError(f"Not a fasta/fastq file (by extension): {path}")
+            raise RasherError(f"Not a fasta/fastq file (by extension): {path}")
         candidates.append((parts[0], [path], path))
     else:
         for entry in sorted(path.iterdir()):
@@ -106,23 +106,23 @@ def read_sample_sheet(path: Path) -> list[Sample]:
 
     Several rows may share a sample name; their files are merged. Relative paths are resolved from the
     sheet's folder. Lines starting with '#' are comments, before or after the header (a sample can be left out
-    by commenting its line). The other columns are metadata (bacon.metadata.sheet_metadata).
+    by commenting its line). The other columns are metadata (rasher.metadata.sheet_metadata).
     """
     header, rows = read_table(path, "Sample sheet", comment_lines=True)
     columns = {c.lower(): c for c in header}
     if "sample" not in columns or "file" not in columns:
-        raise BaconError(f"Sample sheet {path} needs the columns 'sample' and 'file' (found: {header})")
+        raise RasherError(f"Sample sheet {path} needs the columns 'sample' and 'file' (found: {header})")
     grouped: dict[str, list[Path]] = {}
     for row in rows:
         name = row.get(columns["sample"], "")
         files = [f.strip() for f in row.get(columns["file"], "").split(";") if f.strip()]
         if not name or not files:
-            raise BaconError(f"Sample sheet {path}: row without a sample name or a file: {row}")
+            raise RasherError(f"Sample sheet {path}: row without a sample name or a file: {row}")
         for f in files:
             file = Path(f).expanduser()
             file = file if file.is_absolute() else path.parent / file
             if not file.is_file():
-                raise BaconError(f"Sample sheet {path}: file not found for {name}: {file}")
+                raise RasherError(f"Sample sheet {path}: file not found for {name}: {file}")
             files_of = grouped.setdefault(name, [])
             if file.resolve() in {f.resolve() for f in files_of}:
                 log.warning("Sample sheet %s: %s is listed twice for %s; its reads are used once",
@@ -137,9 +137,9 @@ def _finalize(candidates: list[tuple[str, list[Path], object]], source: Path) ->
     seen: dict[str, object] = {}
     for name, _, origin in candidates:
         if name in seen:
-            raise BaconError(f"Two inputs give the same sample name {name!r}: {seen[name]} and {origin}")
+            raise RasherError(f"Two inputs give the same sample name {name!r}: {seen[name]} and {origin}")
         seen[name] = origin
     samples = [s for name, files, origin in candidates if (s := _make_sample(name, files, origin))]
     if not samples:
-        raise BaconError(f"No fasta/fastq files with reads found in {source}")
+        raise RasherError(f"No fasta/fastq files with reads found in {source}")
     return samples

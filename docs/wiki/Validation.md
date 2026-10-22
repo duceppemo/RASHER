@@ -1,16 +1,16 @@
 # Validation
 
-BACoN 0.3 was rebuilt around one rule: a program is used only if it is maintained and does at least as well
+RASHER 0.3 was rebuilt around one rule: a program is used only if it is maintained and does at least as well
 as the alternatives on data where the answer is known. The records, with every score, are in
-[`validation/results/`](https://github.com/duceppemo/BACoN/tree/main/validation/results); this page
-summarizes the [2026-09-24 record](https://github.com/duceppemo/BACoN/blob/main/validation/results/2026-09-24_v0.3.0/SUMMARY.md)
-(BACoN 0.3.0). The [2026-10-13 record](https://github.com/duceppemo/BACoN/blob/main/validation/results/2026-10-13_v0.3.8/SUMMARY.md)
-reran it with BACoN 0.3.8 and the same programs: every score on simulated data was identical, and on the potato
+[`validation/results/`](https://github.com/duceppemo/RASHER/tree/main/validation/results); this page
+summarizes the [2026-09-24 record](https://github.com/duceppemo/RASHER/blob/main/validation/results/2026-09-24_v0.3.0/SUMMARY.md)
+(RASHER 0.3.0). The [2026-10-13 record](https://github.com/duceppemo/RASHER/blob/main/validation/results/2026-10-13_v0.3.8/SUMMARY.md)
+reran it with RASHER 0.3.8 and the same programs: every score on simulated data was identical, and on the potato
 data the templated and the Flye assemblies still agree on all 406 SNP distances.
 
 ## Mitogenomes, nuclear copies and heteroplasmy
 
-The [mitogenome record](https://github.com/duceppemo/BACoN/blob/main/validation/results/2026-10-13_mito/SUMMARY.md)
+The [mitogenome record](https://github.com/duceppemo/RASHER/blob/main/validation/results/2026-10-13_mito/SUMMARY.md)
 adds real mitogenomes with a truth, and two simulated scenarios (`heteroplasmy`, `numt`).
 
 On six *Arabidopsis* Col-0 lines (ONT R10.4.1 whole-genome reads; truth: each line's organelles assembled from its
@@ -34,48 +34,48 @@ heteroplasmy and nuclear copies are summarized in [Methods](Methods#heteroplasmy
 
 ## Other organelle pipelines
 
-The [benchmark record](https://github.com/duceppemo/BACoN/blob/main/validation/results/2026-10-14_benchmark/SUMMARY.md)
+The [benchmark record](https://github.com/duceppemo/RASHER/blob/main/validation/results/2026-10-14_benchmark/SUMMARY.md)
 ran four other pipelines that take Nanopore reads on the same six Col-0 lines, scored against the same truths:
 
 | Pipeline | Plastomes complete, substitutions | Mitogenomes complete, substitutions | Max SNPs between lines (plastome, mitogenome) |
 |---|---|---|---|
-| BACoN, templated (mitogenome with `--filter-by-reference`) | 6, 0 | 6, 0 | 0, 0 |
-| BACoN, Flye (mitogenome with `--filter-by-reference`) | 6, 0 | 6, 0–6 | 0, 1 |
+| RASHER, templated (mitogenome with `--filter-by-reference`) | 6, 0 | 6, 0 | 0, 0 |
+| RASHER, Flye (mitogenome with `--filter-by-reference`) | 6, 0 | 6, 0–6 | 0, 1 |
 | ptGAUL | 6, 0 | — | 0, — |
 | TIPPo | 6, 0 | 4 (Flye failed on two lines), 0–18 | 0, 1 |
 | Oatk (k 501) | 4 (two in 139 and 184 fragments), 0 | 0 (11–70% of the truth) | 0, 1 |
 | CLAW, Flye | 5 (one 43 kb fragment), 0 | — | 0, — |
 | CLAW, Unicycler | 5 (three with extra contigs, 482–682 kb), 0–176 | — | 0, — |
 
-Every pipeline's complete plastomes had 9–51 indels against the truth (in BACoN's, nearly all homopolymer runs
+Every pipeline's complete plastomes had 9–51 indels against the truth (in RASHER's, nearly all homopolymer runs
 one or two bases short), and 222 in one of CLAW-Unicycler's; none had substitutions but CLAW-Unicycler's. Alone
-on the machine with 16 threads, per line: BACoN 9–15 min per organelle and 1.3 GB, ptGAUL 14 min and 7.6 GB, CLAW
+on the machine with 16 threads, per line: RASHER 9–15 min per organelle and 1.3 GB, ptGAUL 14 min and 7.6 GB, CLAW
 30 min and 4.4 GB, Oatk 46 min and 40 GB, TIPPo 59 min and 85 GB (Oatk and TIPPo build both organelles in one
 run). The record also corrects the share of the truth covered given in the mitogenome record (an erratum: complete
 genomes cover 0.998–1.0 of their truth, not 0.6–0.99).
 
 On 24 natural accessions with older R9.4.1 reads (the
-[accession record](https://github.com/duceppemo/BACoN/blob/main/validation/results/2026-10-15_accessions/SUMMARY.md);
+[accession record](https://github.com/duceppemo/RASHER/blob/main/validation/results/2026-10-15_accessions/SUMMARY.md);
 Illumina truth), mean absolute error of the 276 plastome distances, and substitution errors of the plastome
 assemblies:
 
 | Pipeline | Plastome distance error | Substitutions in the 24 plastomes |
 |---|---|---|
 | Clair3 (reads aligned to the reference; consensus = reference + SNPs) | **3.8** | 56 (misses every true indel) |
-| BACoN Flye, `--snp-method minimap2` | 5.7 | 69 |
-| BACoN templated, `--snp-method minimap2` | 12.4 | **15** |
-| BACoN templated, SKA2 (default before 0.4.0) | 46.6 | 15 |
+| RASHER Flye, `--snp-method minimap2` | 5.7 | 69 |
+| RASHER templated, `--snp-method minimap2` | 12.4 | **15** |
+| RASHER templated, SKA2 (default before 0.4.0) | 46.6 | 15 |
 | ptGAUL + SKA2 / Snippy / MAFFT | 44.7 / 46.8 / 902 (two misaligned plastomes) | 275 |
 
 Every Nanopore assembly kept 400–740 homopolymer indels per plastome with these reads. On the mitogenomes,
-BACoN's Flye assemblies compared with SKA2 had the smallest distance error (9.6, against 25.1 for Clair3). Most
+RASHER's Flye assemblies compared with SKA2 had the smallest distance error (9.6, against 25.1 for Clair3). Most
 of that error is at positions where the Illumina reads are mixed (nuclear copies, repeats), which the truth
-leaves undecided. Where the truth can judge, Clair3 and BACoN's templated mitogenomes with minimap2 err by 1.3
+leaves undecided. Where the truth can judge, Clair3 and RASHER's templated mitogenomes with minimap2 err by 1.3
 and 2.1 SNPs.
 
 ## SNP methods: SKA2 and minimap2
 
-The [minimap2 record](https://github.com/duceppemo/BACoN/blob/main/validation/results/2026-10-15_minimap2/SUMMARY.md)
+The [minimap2 record](https://github.com/duceppemo/RASHER/blob/main/validation/results/2026-10-15_minimap2/SUMMARY.md)
 adds `--snp-method minimap2`, tested on 24 *Arabidopsis* accessions with ONT R9.4.1 reads (PRJEB62038). The truth
 is each accession's Illumina reads: the base carried by at least 90% of the reads at a depth of at least 20. Mean
 absolute error of the 276 pairwise distances:
@@ -95,7 +95,7 @@ absolute error of the 276 pairwise distances:
   48 of 406 pairs (SKA2: 326), because minimap2 counts the unpolished stretches of some Flye assemblies.
 
 On 32 human mitogenomes from the 1000 Genomes long-read cohort (R10.4.1; the
-[human mitogenome record](https://github.com/duceppemo/BACoN/blob/main/validation/results/2026-10-16_human_mt/SUMMARY.md);
+[human mitogenome record](https://github.com/duceppemo/RASHER/blob/main/validation/results/2026-10-16_human_mt/SUMMARY.md);
 Illumina truth of the same cell lines), SKA2 failed although the reads are current. Most variable positions have
 another variant within 15 bases in some sample:
 
@@ -105,13 +105,13 @@ another variant within 15 bases in some sample:
 | minimap2 | **0.87** (0.25 where the truth can judge) | 6.9 |
 | Clair3, for comparison | 0.54 (0.31 where the truth can judge) | |
 
-BACoN templated with minimap2 found 99.7% of the SNPs with no false call, as Clair3 did. Since 0.4.0,
+RASHER templated with minimap2 found 99.7% of the SNPs with no false call, as Clair3 did. Since 0.4.0,
 minimap2 is the default comparison of templated assemblies (`--snp-method auto`); de novo assemblies are still
 compared with SKA2, which skips their uncorrected errors.
 
 ## Simulated data with a known truth
 
-[`validation/simulate.py`](https://github.com/duceppemo/BACoN/blob/main/validation/simulate.py) generates
+[`validation/simulate.py`](https://github.com/duceppemo/RASHER/blob/main/validation/simulate.py) generates
 three scenarios, with reads that mimic R10.4.1 SUP reads (substitutions, indels, homopolymer errors) and 15%
 off-target reads:
 
@@ -121,7 +121,7 @@ off-target reads:
 - **linear**: three linear molecules of 15, 9 and 6 kb.
 - **rdna**: a linear molecule with a 3 kb unit repeated six times between two flanks, like an rDNA array.
 
-Results with the programs of BACoN 0.3:
+Results with the programs of RASHER 0.3:
 
 | | samtools (templated, default) | Flye | myloasm |
 |---|---|---|---|
@@ -159,8 +159,8 @@ separate the T-type plastomes from the others, which carry the 241 bp sequence a
 ## Reproducing
 
 ```bash
-conda activate BACoN
-bash validation/run_validation.sh /tmp/bacon_validation 16
+conda activate RASHER
+bash validation/run_validation.sh /tmp/rasher_validation 16
 ```
 
 The simulated reads are generated from a fixed seed (byte-identical files). All results reproduce exactly,

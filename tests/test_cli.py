@@ -4,32 +4,32 @@ from pathlib import Path
 
 import pytest
 
-import bacon
-from bacon.cli import build_parser, main
+import rasher
+from rasher.cli import build_parser, main
 
 
 def test_version_matches_pyproject():
     root = Path(__file__).parents[1]
     text = (root / "pyproject.toml").read_text()
-    assert re.search(r'^version = "([^"]+)"', text, re.M).group(1) == bacon.__version__
+    assert re.search(r'^version = "([^"]+)"', text, re.M).group(1) == rasher.__version__
     # The other files that give the version (see the release steps in docs/wiki/Development.md)
-    v = bacon.__version__
+    v = rasher.__version__
     assert f"\nversion: {v}\n" in (root / "CITATION.cff").read_text()
-    assert f"Nanopore reads (v{v})." in (root / "README.md").read_text()
+    assert f"Illumina short reads (v{v})." in (root / "README.md").read_text()
     for doc in (root / "README.md", root / "docs" / "wiki" / "Installation.md"):  # Download and pip lines
         text = doc.read_text()
         assert set(re.findall(r"refs/tags/v([\d.]+)\.tar\.gz", text)) == {v}, doc
-        assert set(re.findall(r"BACoN-([\d.]+)/example", text)) == {v}, doc
+        assert set(re.findall(r"RASHER-([\d.]+)/example", text)) == {v}, doc
     for report in (root / "docs" / "reports").glob("*.html"):  # Published reports made with this version
         text = report.read_text()
-        assert f"BACoN {v}" in text and not set(re.findall(r"BACoN (\d+\.\d+\.\d+)", text)) - {v}, report
+        assert f"RASHER {v}" in text and not set(re.findall(r"RASHER (\d+\.\d+\.\d+)", text)) - {v}, report
 
 
 def test_version_flag(capsys):
     with pytest.raises(SystemExit) as exc:
         main(["--version"])
     assert exc.value.code == 0
-    assert capsys.readouterr().out.strip() == f"BACoN {bacon.__version__}"
+    assert capsys.readouterr().out.strip() == f"RASHER {rasher.__version__}"
 
 
 def test_defaults():
@@ -69,9 +69,9 @@ def test_argument_errors(argv, message, capsys):
 
 
 def test_hdist_with_minimap2_is_ignored_with_a_warning(tmp_path, caplog, monkeypatch):
-    import bacon.cli
+    import rasher.cli
     seen = []
-    monkeypatch.setattr(bacon.cli, "run", lambda s: seen.append(s.hdist) or 0)
+    monkeypatch.setattr(rasher.cli, "run", lambda s: seen.append(s.hdist) or 0)
     base = ["-r", "r.fa", "-i", str(tmp_path), "-o", str(tmp_path / "o")]
     assert main([*base, "--hdist", "2"]) == 0
     assert "--hdist only applies to --baiting-method bbduk: ignored with minimap2" in caplog.text
@@ -86,8 +86,8 @@ def test_hdist_with_minimap2_is_ignored_with_a_warning(tmp_path, caplog, monkeyp
 def test_an_interrupted_run_kills_the_programs_left_running(tmp_path, monkeypatch):
     import subprocess
 
-    import bacon.cli
-    from bacon import tools
+    import rasher.cli
+    from rasher import tools
     proc = subprocess.Popen(["sleep", "30"], start_new_session=True)
     with tools._RUNNING_LOCK:
         tools._RUNNING.add(proc)  # A program a second Ctrl-C kept the first one's cleanup from killing
@@ -95,7 +95,7 @@ def test_an_interrupted_run_kills_the_programs_left_running(tmp_path, monkeypatc
     def interrupted(settings):
         raise KeyboardInterrupt
 
-    monkeypatch.setattr(bacon.cli, "run", interrupted)
+    monkeypatch.setattr(rasher.cli, "run", interrupted)
     try:
         assert main(["-r", "r.fa", "-i", str(tmp_path), "-o", str(tmp_path / "o")]) == 130
         assert proc.wait(timeout=5) == -9
@@ -110,10 +110,10 @@ def test_after_the_run_ctrl_c_ends_the_program_without_a_traceback(tmp_path):
     import sys
     # Run as a program (no arguments given to main): Python's exit, which waits for the threads, is not
     # interrupted by a KeyboardInterrupt
-    code = ("import signal, sys, bacon.cli\n"
-            "bacon.cli.run = lambda s: (_ for _ in ()).throw(KeyboardInterrupt)\n"
-            f"sys.argv = ['bacon', '-r', 'r.fa', '-i', {str(tmp_path)!r}, '-o', {str(tmp_path / 'o')!r}]\n"
-            "print(bacon.cli.main(), signal.getsignal(signal.SIGINT) is signal.SIG_DFL)\n")
+    code = ("import signal, sys, rasher.cli\n"
+            "rasher.cli.run = lambda s: (_ for _ in ()).throw(KeyboardInterrupt)\n"
+            f"sys.argv = ['rasher', '-r', 'r.fa', '-i', {str(tmp_path)!r}, '-o', {str(tmp_path / 'o')!r}]\n"
+            "print(rasher.cli.main(), signal.getsignal(signal.SIGINT) is signal.SIG_DFL)\n")
     out = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, check=True).stdout
     assert out.split() == ["130", "True"]
     # Called with arguments (as here), main leaves the handler of Ctrl-C as it was
@@ -123,7 +123,7 @@ def test_after_the_run_ctrl_c_ends_the_program_without_a_traceback(tmp_path):
     assert signal.getsignal(signal.SIGINT) is before
 
 
-def test_bacon_error_exits_1(tmp_path, capsys):
+def test_rasher_error_exits_1(tmp_path, capsys):
     code = main(["-r", str(tmp_path / "missing.fa"), "-i", str(tmp_path), "-o", str(tmp_path / "o"),
                  "--snp-method", "none"])
     assert code == 1
@@ -138,7 +138,7 @@ def test_metadata_options():
 
 
 def test_color_by_needs_metadata(capsys, tmp_path):
-    from bacon.cli import main
+    from rasher.cli import main
     with pytest.raises(SystemExit):
         main(["-r", "r.fa", "-i", "in", "-o", "out", "--color-by", "group"])
     assert "--color-by needs --metadata" in capsys.readouterr().err
@@ -160,11 +160,12 @@ def test_changelog_has_this_version_and_the_citation_the_concept_doi():
     # A release renames "## Unreleased" to "## X.Y.Z (date)" (docs/wiki/Development.md); the release workflow
     # takes that section for the GitHub release
     root = Path(__file__).parents[1]
-    assert re.search(rf"^## {re.escape(bacon.__version__)} \(\d{{4}}-\d{{2}}-\d{{2}}\)$",
+    assert re.search(rf"^## {re.escape(rasher.__version__)} \((\d{{4}}-\d{{2}}-\d{{2}}|unreleased)\)$",
                      (root / "CHANGELOG.md").read_text(), re.M)
-    # "Cite this repository" at a tag gives the top-level DOI: the concept DOI, which resolves to the latest version
+    # At the first release, add RASHER's Zenodo concept DOI to CITATION.cff and assert it here (as BACoN does);
+    # until then, the citation must at least point at the parent tool.
     citation = (root / "CITATION.cff").read_text()
-    assert "\ndoi: 10.5281/zenodo.22970412\n" in citation and "Concept DOI" in citation
+    assert "10.5281/zenodo.22970412" in citation and "fork of BACoN" in citation
 
 
 def test_color_by_help_gives_the_limit_of_values(capsys):
@@ -178,8 +179,8 @@ def test_color_by_help_gives_the_limit_of_values(capsys):
 
 @pytest.mark.skipif(os.geteuid() == 0, reason="root reads anything")
 def test_a_path_that_cannot_be_read_is_an_error_not_a_traceback(tmp_path, caplog, monkeypatch):
-    import bacon.pipeline
-    monkeypatch.setattr(bacon.pipeline, "require", lambda names: {})  # The programs are not needed here
+    import rasher.pipeline
+    monkeypatch.setattr(rasher.pipeline, "require", lambda names: {})  # The programs are not needed here
     (tmp_path / "ref.fasta").write_text(">r\nACGT\n")
     locked = tmp_path / "locked"
     locked.mkdir()
@@ -191,11 +192,11 @@ def test_a_path_that_cannot_be_read_is_an_error_not_a_traceback(tmp_path, caplog
             caplog.clear()
             assert main(["-r", ref, *argv, "--snp-method", "none"]) == 1
             assert [r.getMessage() for r in caplog.records] == [f"{path}: Permission denied"]
-        # In a started run, the error is in bacon.log too
+        # In a started run, the error is in rasher.log too
         caplog.clear()
         out = tmp_path / "out"
         assert main(["-r", str(locked / "ref.fasta"), "-i", ref, "-o", str(out), "--snp-method", "none"]) == 1
         assert f"{locked / 'ref.fasta'}: Permission denied" in caplog.text
-        assert f"[ERROR] {locked / 'ref.fasta'}: Permission denied" in (out / "bacon.log").read_text()
+        assert f"[ERROR] {locked / 'ref.fasta'}: Permission denied" in (out / "rasher.log").read_text()
     finally:
         locked.chmod(0o700)

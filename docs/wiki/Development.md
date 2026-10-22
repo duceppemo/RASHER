@@ -3,8 +3,8 @@
 ## Setup
 
 ```bash
-git clone https://github.com/duceppemo/BACoN && cd BACoN
-conda env create -f environment.yml && conda activate BACoN
+git clone https://github.com/duceppemo/RASHER && cd RASHER
+conda env create -f environment.yml && conda activate RASHER
 pip install -e ".[test]"
 pre-commit install
 ```
@@ -13,28 +13,28 @@ pre-commit install
 
 | Module | Contents |
 |---|---|
-| `bacon/cli.py` | command line |
-| `bacon/pipeline.py` | the steps, checkpoints, summary and provenance |
-| `bacon/samples.py` | finding samples (file, folder, sample sheet) |
-| `bacon/metadata.py` | sample metadata: TSV/CSV reading (shared with the sample sheet), merging, the column that colours the report |
-| `bacon/steps.py` | baiting, filtering, assembly |
-| `bacon/compare.py` | SKA2, Parsnp, distances, trees |
-| `bacon/newick.py` | Newick parsing, midpoint rooting, SVG drawing |
-| `bacon/report.py` | the HTML report (`python -m bacon.report OUTPUT` rebuilds it) |
-| `bacon/annotation.py` | GenBank and GFF3 annotations: genes, plastome regions, the effects of SNPs on coding sequences |
-| `bacon/multiqc.py` | the MultiQC custom-content files |
-| `bacon/seqio.py` | fasta/fastq reading and writing |
-| `bacon/tools.py` | running external programs and logging their output |
+| `rasher/cli.py` | command line |
+| `rasher/pipeline.py` | the steps, checkpoints, summary and provenance |
+| `rasher/samples.py` | finding samples (file, folder, sample sheet) |
+| `rasher/metadata.py` | sample metadata: TSV/CSV reading (shared with the sample sheet), merging, the column that colours the report |
+| `rasher/steps.py` | baiting, filtering, assembly |
+| `rasher/compare.py` | SKA2, Parsnp, distances, trees |
+| `rasher/newick.py` | Newick parsing, midpoint rooting, SVG drawing |
+| `rasher/report.py` | the HTML report (`python -m rasher.report OUTPUT` rebuilds it) |
+| `rasher/annotation.py` | GenBank and GFF3 annotations: genes, plastome regions, the effects of SNPs on coding sequences |
+| `rasher/multiqc.py` | the MultiQC custom-content files |
+| `rasher/seqio.py` | fasta/fastq reading and writing |
+| `rasher/tools.py` | running external programs and logging their output |
 
-BACoN uses the Python standard library only (python-isal is used when installed). External programs are run
-with `bacon.tools.run`, which logs the command and the program's messages and raises an error with the end of
+RASHER uses the Python standard library only (python-isal is used when installed). External programs are run
+with `rasher.tools.run`, which logs the command and the program's messages and raises an error with the end of
 the log when a program fails.
 
 ## Tests
 
 ```bash
 ruff check .
-pytest --cov=bacon
+pytest --cov=rasher
 ```
 
 The tests replace the external programs by small stub scripts (`tests/test_pipeline.py`), so they run in
@@ -53,7 +53,7 @@ and the example in the conda environment.
 
 A program is added or replaces another only if it is maintained, installs with the others from bioconda,
 and does at least as well in the validation. Add it to `environment.yml`, `recipe/meta.yaml` and
-`bacon/tools.py` (`PACKAGES`), with a stub in `tests/test_pipeline.py`, then run the validation and record the
+`rasher/tools.py` (`PACKAGES`), with a stub in `tests/test_pipeline.py`, then run the validation and record the
 results in a new dated folder under `validation/results/` (never rewrite an old record).
 
 ## Documentation
@@ -63,16 +63,16 @@ every push to `main` that changes it. Do not edit the wiki on GitHub: the next p
 
 ## Web site
 
-GitHub Pages serves `docs/` at https://duceppemo.github.io/BACoN/ (`docs/.nojekyll`: files are served as they
+GitHub Pages serves `docs/` at https://duceppemo.github.io/RASHER/ (`docs/.nojekyll`: files are served as they
 are). It holds the example reports of `docs/reports/`; rebuild them after changes to the report, with local
 paths removed from `run_info.json` first.
 
 ## Releases
 
-1. Update `version` in `pyproject.toml`, `__version__` in `bacon/__init__.py`, `CITATION.cff` (version and
+1. Update `version` in `pyproject.toml`, `__version__` in `rasher/__init__.py`, `CITATION.cff` (version and
    date), `CHANGELOG.md`, the citation and the example's download line in `README.md`, and the download and
    `pip install` lines of `docs/wiki/Installation.md` (`tests/test_cli.py` checks that they agree). Then
-   rebuild the reports of `docs/reports/`: they show the BACoN version of `run_info.json`, so run the example
+   rebuild the reports of `docs/reports/`: they show the RASHER version of `run_info.json`, so run the example
    (`bash example/run_example.sh`) and the tutorial's command again with the bumped version (a resume reruns
    nothing; the report is rebuilt) before copying their `report.html`, with the local paths removed from
    `run_info.json` first (`tests/test_cli.py` checks that the published reports name the current version).

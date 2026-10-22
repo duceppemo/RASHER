@@ -31,7 +31,7 @@ def fasta(tmp_path):
 
 @pytest.fixture(autouse=True)
 def _programs_allowed():
-    """A test that interrupts BACoN leaves it stopping: the next test must be able to run programs."""
+    """A test that interrupts RASHER leaves it stopping: the next test must be able to run programs."""
     yield
-    from bacon import tools
+    from rasher import tools
     tools.allow_programs()

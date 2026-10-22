@@ -2,9 +2,9 @@ from pathlib import Path
 
 import pytest
 
-from bacon import BaconError
-from bacon.compare import clean_alignment, snp_distances, write_distances
-from bacon.seqio import Record, read_records
+from rasher import RasherError
+from rasher.compare import clean_alignment, snp_distances, write_distances
+from rasher.seqio import Record, read_records
 
 
 def test_clean_alignment_and_rename(tmp_path):
@@ -26,7 +26,7 @@ def test_snp_distances_ignore_gaps_and_n_and_sort_reference_first(tmp_path):
 
 
 def test_wrap_circular():
-    from bacon.compare import wrap_circular
+    from rasher.compare import wrap_circular
     circ = Record("s_1 circular=true", "ACGTACGTAC")
     assert wrap_circular(circ, 4).seq == "ACGTACGTACACG"
     assert wrap_circular(Record("s_2", "ACGTACGTAC"), 4).seq == "ACGTACGTAC"
@@ -35,7 +35,7 @@ def test_wrap_circular():
 
 
 def test_clean_vcf_renames_drops_reference_and_adds_contigs(tmp_path):
-    from bacon.compare import clean_vcf
+    from rasher.compare import clean_vcf
     ref = tmp_path / "ref.fasta"
     ref.write_text(">chr1\nACGTACGT\n>chr2\nAC\n")
     raw = tmp_path / "raw.vcf"
@@ -47,10 +47,10 @@ def test_clean_vcf_renames_drops_reference_and_adds_contigs(tmp_path):
                    "chr1\t6\t.\tC\t.\t.\t.\t.\tGT\t0\t.\t0\n")  # No alternate allele: dropped
     out = tmp_path / "out.vcf"
     n = clean_vcf(raw, out, rename={"ref.fasta.ref": "Reference", "a.fasta": "a", "b.fasta": "b"}, reference=ref,
-                  source="BACoN test")
+                  source="RASHER test")
     lines = out.read_text().splitlines()
     assert n == 2
-    assert lines[:4] == ["##fileformat=VCFv4.2", "##source=BACoN test", "##contig=<ID=chr1,length=8>",
+    assert lines[:4] == ["##fileformat=VCFv4.2", "##source=RASHER test", "##contig=<ID=chr1,length=8>",
                          "##contig=<ID=chr2,length=2>"]
     assert '##FILTER=<ID=IND,Description="indel">' in lines and "##source=harvest" not in lines
     assert '##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">' in lines
@@ -66,7 +66,7 @@ def _vcf(tmp_path, body, samples=("Reference", "a", "b"), header=True):
 
 
 def _clean(tmp_path, raw):
-    from bacon.compare import clean_vcf
+    from rasher.compare import clean_vcf
     ref = tmp_path / "ref.fasta"
     ref.write_text(">chr\n" + "A" * 100 + "\n")
     out = tmp_path / "out.vcf"
@@ -100,7 +100,7 @@ def test_clean_vcf_folds_positions_of_an_extended_circular_reference(tmp_path):
 def test_clean_vcf_rejects_malformed_input(tmp_path):
     import pytest
 
-    from bacon import BaconError
+    from rasher import RasherError
     for body, header, samples, message in [
         ("chr\t5\t.\tA\tC\n", True, ("Reference", "a"), "truncated"),
         ("chr\t5\t.\tA\tC\t.\t.\t.\tGT\t0\t1\n", False, ("Reference", "a"), "before the #CHROM"),
@@ -108,7 +108,7 @@ def test_clean_vcf_rejects_malformed_input(tmp_path):
         ("", True, ("a", "b"), "one reference column"),
     ]:
         raw = _vcf(tmp_path, body, samples=samples, header=header)
-        with pytest.raises(BaconError, match=message):
+        with pytest.raises(RasherError, match=message):
             _clean(tmp_path, raw)
     assert not (tmp_path / "out.vcf.tmp").exists()
 
@@ -122,7 +122,7 @@ def test_ska_vcf_has_snps_next_to_the_ends_of_circular_genomes(tmp_path):
     import pytest
     if not shutil.which("ska"):
         pytest.skip("ska not installed")
-    from bacon.compare import run_ska, write_vcf
+    from rasher.compare import run_ska, write_vcf
     rng = random.Random(1)
     ref = "".join(rng.choice("ACGT") for _ in range(5000))
     (tmp_path / "ref.fasta").write_text(f">chr\n{ref}\n")
@@ -147,7 +147,7 @@ def test_ska_vcf_has_snps_next_to_the_ends_of_circular_genomes(tmp_path):
 
 
 def test_genotype_renumbering_handles_diploid_phased_and_extra_fields():
-    from bacon.compare import _genotype_fix
+    from rasher.compare import _genotype_fix
     remap = {"1": ".", "2": "1"}
     assert _genotype_fix("2", remap) == "1"
     assert _genotype_fix("0/2", remap) == "0/1"
@@ -156,7 +156,7 @@ def test_genotype_renumbering_handles_diploid_phased_and_extra_fields():
 
 
 def test_write_ska_reference_extends_when_most_assemblies_are_circular(tmp_path):
-    from bacon.compare import write_ska_reference
+    from rasher.compare import write_ska_reference
     ref = tmp_path / "ref.fasta"
     ref.write_text(">chr\n" + "ACGT" * 20 + "\n")
     asm = {}
@@ -169,7 +169,7 @@ def test_write_ska_reference_extends_when_most_assemblies_are_circular(tmp_path)
 
 
 def test_parsnp_warns_when_the_core_is_a_fraction_of_the_reference(tmp_path, monkeypatch, caplog):
-    import bacon.compare as compare
+    import rasher.compare as compare
     ref = tmp_path / "reference.fasta"
     ref.write_text(">chr\n" + "A" * 1000 + "\n")
     asm = {"a": tmp_path / "a.fasta"}
@@ -198,7 +198,7 @@ def test_parsnp_warns_when_the_core_is_a_fraction_of_the_reference(tmp_path, mon
 
 
 def test_circular_rule_counts_samples_not_added_genomes(tmp_path):
-    from bacon.compare import circular_genomes
+    from rasher.compare import circular_genomes
     asm = {}
     for name, circular in [("a", True), ("b", True), ("pub1", False), ("pub2", False), ("pub3", False)]:
         asm[name] = tmp_path / f"{name}.fasta"
@@ -209,7 +209,7 @@ def test_circular_rule_counts_samples_not_added_genomes(tmp_path):
 
 
 def test_added_genomes_are_extended_like_the_reference(tmp_path, monkeypatch):
-    import bacon.compare as compare
+    import rasher.compare as compare
     seen = {}
 
     def fake_run(cmd, log, **kwargs):
@@ -234,7 +234,7 @@ def test_added_genomes_are_extended_like_the_reference(tmp_path, monkeypatch):
 
 
 def test_snp_alignment_keeps_only_columns_with_two_nucleotides(tmp_path):
-    from bacon.compare import clean_alignment
+    from rasher.compare import clean_alignment
     src = tmp_path / "raw.fasta"
     #                    SNP  ambiguity only  gap only  constant  SNP with N
     src.write_text(">Reference\nA" "A" "A" "A" "A\n>a\nC" "R" "-" "A" "N\n>b\nA" "A" "A" "A" "G\n")
@@ -251,8 +251,8 @@ def test_ska_pan_alignment_has_only_snp_sites(tmp_path):
     import pytest
     if not shutil.which("ska"):
         pytest.skip("ska not installed")
-    from bacon.compare import run_ska
-    from bacon.seqio import read_records
+    from rasher.compare import run_ska
+    from rasher.seqio import read_records
     rng = random.Random(2)
     ref = "".join(rng.choice("ACGT") for _ in range(4000))
     (tmp_path / "ref.fasta").write_text(f">chr\n{ref}\n")
@@ -276,7 +276,7 @@ def test_ska_pan_alignment_has_only_snp_sites(tmp_path):
 
 
 def test_project_reads_each_reference_position_from_the_cs_tags():
-    from bacon.compare import project
+    from rasher.compare import project
 
     def paf(start, cs, target="chr"):
         return f"q\t100\t0\t10\t+\t{target}\t20\t{start}\t{start + 10}\t9\t10\t60\ttp:A:P\tcs:Z:{cs}\n"
@@ -289,14 +289,14 @@ def test_project_reads_each_reference_position_from_the_cs_tags():
     assert "".join(project(two, {"chr": 12})["chr"]) == "NNACGN--CANN"
     # Other reference sequences are ignored
     assert "".join(project(paf(0, "=AC", target="other"), {"chr": 4})["chr"]) == "NNNN"
-    with pytest.raises(BaconError, match="cs tag"):
+    with pytest.raises(RasherError, match="cs tag"):
         project("q\t10\t0\t2\t+\tchr\t4\t0\t2\t2\t2\t60\n", {"chr": 4})
-    with pytest.raises(BaconError, match="--cs=long"):  # Short form: the identical bases are not written
+    with pytest.raises(RasherError, match="--cs=long"):  # Short form: the identical bases are not written
         project(paf(0, ":3*ag"), {"chr": 12})
 
 
 def test_mask_uncertain_bases_among_ns():
-    from bacon.compare import mask_uncertain
+    from rasher.compare import mask_uncertain
     bases = list("ACNGTNANCAAAAAAAAANAAAA")
     # The bases with three N within 3 positions (the T only); an isolated N masks nothing; '-' and '' (not
     # covered) are kept and do not count
@@ -307,8 +307,8 @@ def test_mask_uncertain_bases_among_ns():
 
 def test_minimap2_reference_ambiguity_codes_and_several_sequences(tmp_path, monkeypatch):
     """IUPAC codes of the reference become N; positions are numbered within each reference sequence."""
-    import bacon.compare
-    from bacon.compare import MINIMAP2_POSITIONS, run_minimap2
+    import rasher.compare
+    from rasher.compare import MINIMAP2_POSITIONS, run_minimap2
 
     refs = {"one": "ACGRAC", "two": "TTGCA"}
     genomes = {"a": {"one": "ACGTAC", "two": "TTCCA"}, "b": {"one": "ACGTAG", "two": "TTGCA"},
@@ -323,7 +323,7 @@ def test_minimap2_reference_ambiguity_codes_and_several_sequences(tmp_path, monk
             lines.append(f"{target}_q\t{n}\t0\t{n}\t+\t{target}\t{n}\t0\t{n}\t{n}\t{n}\t60\tcs:Z:{cs}\n")
         stdout.write_text("".join(lines))
 
-    monkeypatch.setattr(bacon.compare, "run", fake_run)
+    monkeypatch.setattr(rasher.compare, "run", fake_run)
     (tmp_path / "ref.fasta").write_text("".join(f">{k}\n{v}\n" for k, v in refs.items()))
     paths = {}
     for name in genomes:
@@ -339,8 +339,8 @@ def test_minimap2_reference_ambiguity_codes_and_several_sequences(tmp_path, monk
 
 def test_minimap2_keeps_positions_covered_by_enough_genomes(tmp_path, monkeypatch):
     """--ska-min-freq: the share of the sequences (the reference too) with a nucleotide at a position."""
-    import bacon.compare
-    from bacon.compare import MINIMAP2_POSITIONS, minimap2_vcf, run_minimap2
+    import rasher.compare
+    from rasher.compare import MINIMAP2_POSITIONS, minimap2_vcf, run_minimap2
 
     ref = "ACGTACGTAC"
     genomes = {"a": "ACGTTCGTAC", "b": "ACGTTCGTCC", "c": "ACGTAC"}  # c: the first 6 positions only
@@ -351,7 +351,7 @@ def test_minimap2_keeps_positions_covered_by_enough_genomes(tmp_path, monkeypatc
         stdout.write_text(f"q\t{len(g)}\t0\t{len(g)}\t+\tchr\t10\t0\t{len(g)}\t{len(g)}\t{len(g)}\t60\t"
                           f"cs:Z:{cs}\n")
 
-    monkeypatch.setattr(bacon.compare, "run", fake_run)
+    monkeypatch.setattr(rasher.compare, "run", fake_run)
     (tmp_path / "ref.fasta").write_text(f">chr\n{ref}\n")
     paths = {}
     for name, g in genomes.items():
@@ -379,7 +379,7 @@ def test_real_tools_with_spaces_and_accents_in_the_paths(tmp_path, method):
     import random
     import shutil
 
-    from bacon.compare import run_minimap2, run_parsnp, run_ska, write_vcf
+    from rasher.compare import run_minimap2, run_parsnp, run_ska, write_vcf
     needed = {"ska": ["ska"], "minimap2": ["minimap2"], "parsnp": ["parsnp", "harvesttools"]}[method]
     if not all(shutil.which(p) for p in needed):
         pytest.skip(f"{method} not installed")
@@ -413,8 +413,8 @@ def test_real_tools_with_spaces_and_accents_in_the_paths(tmp_path, method):
 def test_clean_vcf_rejects_positions_shifted_by_old_parsnp(tmp_path):
     """Parsnp 2.1.1 writes every SNP one base off: the reference then never carries its own allele."""
     shifted = "".join(f"chr\t{p}\t.\tA\tC,G\t40\tPASS\tNA\tGT\t1\t{g}\t1\n" for p, g in ((11, 2), (21, 0), (31, 1)))
-    from bacon import BaconError
-    with pytest.raises(BaconError, match="Parsnp 2.1.2 or later"):
+    from rasher import RasherError
+    with pytest.raises(RasherError, match="Parsnp 2.1.2 or later"):
         _clean(tmp_path, _vcf(tmp_path, shifted))
     one_ambiguous = "chr\t11\t.\tA\tC\t40\tPASS\tNA\tGT\t1\t0\t1\nchr\t21\t.\tA\tC\t40\tPASS\tNA\tGT\t0\t0\t1\n"
     assert _clean(tmp_path, _vcf(tmp_path, one_ambiguous))[0] == 1
@@ -426,8 +426,8 @@ def test_iqtree_on_tiny_or_near_identical_alignments(tmp_path, case):
     distinct sequences: the tree is still built, and its title does not claim bootstrap supports it lacks."""
     import shutil
 
-    from bacon.compare import build_tree
-    from bacon.newick import parse
+    from rasher.compare import build_tree
+    from rasher.newick import parse
     if not shutil.which("iqtree3") and not shutil.which("iqtree"):
         pytest.skip("IQ-TREE is not installed")
     seqs = {"one_site": ["A", "A", "C", "C"],

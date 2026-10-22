@@ -11,10 +11,10 @@ from collections import Counter
 from collections.abc import Iterable
 from pathlib import Path
 
-from bacon import BaconError
-from bacon.newick import ladderize, midpoint_root, parse, to_newick, to_svg
-from bacon.seqio import Record, read_records, write_fasta
-from bacon.tools import run, which
+from rasher import RasherError
+from rasher.newick import ladderize, midpoint_root, parse, to_newick, to_svg
+from rasher.seqio import Record, read_records, write_fasta
+from rasher.tools import run, which
 
 log = logging.getLogger(__name__)
 
@@ -34,7 +34,7 @@ def clean_alignment(src: Path, dst: Path, rename: dict[str, str] | None = None,
         name = (rename or {}).get(rec.name, rec.name)
         records.append(Record(name, seq))
     if len({len(r.seq) for r in records}) > 1:
-        raise BaconError(f"Sequences of {src} have different lengths: not an alignment")
+        raise RasherError(f"Sequences of {src} have different lengths: not an alignment")
     if snps_only and records:
         sites = [i for i, column in enumerate(zip(*(r.seq for r in records)))
                  if len(NUCLEOTIDES.intersection(column)) >= 2]
@@ -76,7 +76,7 @@ PARSNP_REFERENCE = "reference.fasta"  # The reference's name in the folder of Pa
 def _parsnp_names(assemblies: dict[str, Path], reference: Path) -> dict[str, str]:
     """Parsnp names sequences after their file (and adds '.ref' to the reference); map them back: the names of the
     links Parsnp reads (_stage_parsnp_inputs), and those of the files themselves (the comparisons of earlier
-    versions of BACoN, which gave Parsnp the files)."""
+    versions of RASHER, which gave Parsnp the files)."""
     names = {path.name: name for name, path in assemblies.items()}
     names.update({f"{name}.fasta": name for name in assemblies})
     for ref in (reference.name, PARSNP_REFERENCE):
@@ -115,7 +115,7 @@ def run_parsnp(reference: Path, assemblies: dict[str, Path], out_dir: Path, log_
         shutil.rmtree(work, ignore_errors=True)
     xmfa, ggr = out_dir / "parsnp.xmfa", out_dir / "parsnp.ggr"
     if not xmfa.is_file() or not ggr.is_file():
-        raise BaconError(f"Parsnp produced no alignment (assemblies too different from the reference?); "
+        raise RasherError(f"Parsnp produced no alignment (assemblies too different from the reference?); "
                          f"see {log_file}")
     run(["harvesttools", "-x", str(xmfa), "-M", str(out_dir / "parsnp.core.raw.fasta")], log_file)
     run(["harvesttools", "-i", str(ggr), "-S", str(out_dir / "parsnp.snps.raw.fasta")], log_file)
@@ -250,11 +250,11 @@ def project(paf: str, lengths: dict[str, int]) -> dict[str, list[str]]:
             continue
         cs = next((x[5:] for x in f[12:] if x.startswith("cs:Z:")), None)
         if cs is None:
-            raise BaconError("minimap2 wrote an alignment without its difference string (cs tag)")
+            raise RasherError("minimap2 wrote an alignment without its difference string (cs tag)")
         seq, t = seqs[target], int(f[7])
         for op, value in _CS.findall(cs):
-            if op == ":":  # Identical bases, short form: no bases to read (BACoN asks for --cs=long)
-                raise BaconError("minimap2 wrote a short difference string (cs tag): --cs=long is needed")
+            if op == ":":  # Identical bases, short form: no bases to read (RASHER asks for --cs=long)
+                raise RasherError("minimap2 wrote a short difference string (cs tag): --cs=long is needed")
             if op in "=*-":
                 # '=': identical bases; '*': the reference's base, then the genome's; '-': reference bases
                 # missing from the genome
@@ -404,15 +404,15 @@ def clean_vcf(raw: Path, out: Path, *, rename: dict[str, str], reference: Path, 
                 names = [rename.get(n, n) for n in fields[9:]]
                 ref_cols = [i for i, n in enumerate(names) if n == "Reference"]
                 if len(ref_cols) != 1:
-                    raise BaconError(f"{raw}: expected one reference column, found {len(ref_cols)} ({names})")
+                    raise RasherError(f"{raw}: expected one reference column, found {len(ref_cols)} ({names})")
                 ref_col = ref_cols[0]
                 keep = sorted((i for i, n in enumerate(names) if n != "Reference"), key=lambda i: names[i])
                 header = fields[:9] + [names[i] for i in keep]
                 continue
             if header is None or ref_col is None:
-                raise BaconError(f"{raw}: variant records before the #CHROM header line")
+                raise RasherError(f"{raw}: variant records before the #CHROM header line")
             if len(fields) < 9 + len(names):
-                raise BaconError(f"{raw}: truncated record: {line[:80]}")
+                raise RasherError(f"{raw}: truncated record: {line[:80]}")
             genotypes = fields[9:]
             if fields[3].upper() not in NUCLEOTIDES:  # The reference's base unknown
                 continue
@@ -442,9 +442,9 @@ def clean_vcf(raw: Path, out: Path, *, rename: dict[str, str], reference: Path, 
                    "." if fields[7] in ("NA", "") else fields[7], fields[8]]
             records[(chrom, pos)] = row + [_genotype_fix(genotypes[i], remap) for i in keep]
     if header is None:
-        raise BaconError(f"{raw}: no #CHROM header line")
+        raise RasherError(f"{raw}: no #CHROM header line")
     if seen >= 2 and reference_not_0 > seen / 2:  # A few ambiguous split k-mers are normal; most is a shift
-        raise BaconError(f"{raw}: the reference does not carry its own allele in {reference_not_0} of {seen} "
+        raise RasherError(f"{raw}: the reference does not carry its own allele in {reference_not_0} of {seen} "
                          "records, so the positions are shifted (as with Parsnp 2.1.1): use Parsnp 2.1.2 or later")
     if not any(m.startswith("##FORMAT=<ID=GT,") for m in meta):
         meta.append('##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">')
@@ -482,7 +482,7 @@ def write_vcf(method: str, reference: Path, out_dir: Path, log_dir: Path, *, thr
     try:
         if method == "ska":
             mapped_to = out_dir / SKA_REFERENCE
-            if not mapped_to.exists():  # A comparison made by BACoN <= 0.3.2: rebuild it by the same rule
+            if not mapped_to.exists():  # A comparison made by RASHER <= 0.3.2: rebuild it by the same rule
                 write_ska_reference(reference, assemblies, mapped_to, added=added)
             run(["ska", "map", str(mapped_to), str(out_dir / "ska.skf"),
                  "-f", "vcf", "-o", str(raw), "--threads", str(threads)], log_dir / "ska.log", what="(ska map)")
@@ -546,7 +546,7 @@ def build_tree(alignment: Path, out_dir: Path, log_dir: Path, *, method: str, th
     tree = parse(raw.read_text())
     for leaf in tree.leaves():
         if leaf.name not in names:
-            raise BaconError(f"{method} returned an unexpected sequence name {leaf.name!r}")
+            raise RasherError(f"{method} returned an unexpected sequence name {leaf.name!r}")
         leaf.name = names[leaf.name]
     raw.write_text(to_newick(tree) + "\n")  # The program's tree, with the genome names
     tree = midpoint_root(tree)

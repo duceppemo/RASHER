@@ -10,8 +10,8 @@ from collections.abc import Iterable, Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from bacon import BaconError
-from bacon.tools import stopping
+from rasher import RasherError
+from rasher.tools import stopping
 
 # Errors raised while decompressing a truncated or corrupt gzip file.
 DECOMPRESSION_ERRORS: tuple[type[BaseException], ...] = (EOFError, zlib.error, gzip.BadGzipFile)
@@ -84,7 +84,7 @@ def sniff_format(path: Path) -> str | None:
     try:
         return _sniff_format(path)
     except DECOMPRESSION_ERRORS as exc:
-        raise BaconError(f"{path}: truncated or corrupt compressed file ({exc})") from None
+        raise RasherError(f"{path}: truncated or corrupt compressed file ({exc})") from None
 
 
 def _sniff_format(path: Path) -> str | None:
@@ -95,22 +95,22 @@ def _sniff_format(path: Path) -> str | None:
                     return "fastq"
                 if line[0] == ">":
                     return "fasta"
-                raise BaconError(f"{path} is neither fasta nor fastq (first line: {line.strip()[:40]!r})")
+                raise RasherError(f"{path} is neither fasta nor fastq (first line: {line.strip()[:40]!r})")
     return None
 
 
 def read_records(path: Path) -> Iterator[Record]:
     """Iterate over the records of a fasta (multi-line allowed) or fastq (4 lines per record) file.
 
-    A truncated or corrupt compressed file is a BaconError (decompression errors are not). Reading stops when
-    BACoN is interrupted (a sample's reads can take minutes to go through)."""
+    A truncated or corrupt compressed file is a RasherError (decompression errors are not). Reading stops when
+    RASHER is interrupted (a sample's reads can take minutes to go through)."""
     try:
         for count, rec in enumerate(_read_records(path)):
             if count % 4096 == 0 and stopping():
-                raise BaconError(f"{path}: reading stopped: BACoN is stopping")
+                raise RasherError(f"{path}: reading stopped: RASHER is stopping")
             yield rec
     except DECOMPRESSION_ERRORS as exc:
-        raise BaconError(f"{path}: truncated or corrupt compressed file ({exc})") from None
+        raise RasherError(f"{path}: truncated or corrupt compressed file ({exc})") from None
 
 
 def _read_records(path: Path) -> Iterator[Record]:
@@ -139,7 +139,7 @@ def _read_records(path: Path) -> Iterator[Record]:
                 continue
             seq, plus, qual = fh.readline().rstrip(), fh.readline(), fh.readline().rstrip()
             if not header.startswith("@") or not plus.startswith("+") or len(seq) != len(qual):
-                raise BaconError(f"{path}: malformed or truncated fastq record {header.strip()[:60]!r}")
+                raise RasherError(f"{path}: malformed or truncated fastq record {header.strip()[:60]!r}")
             yield Record(header[1:].rstrip(), seq, qual)
 
 
@@ -187,15 +187,15 @@ def sequence_lengths(path: Path) -> list[tuple[str, int]]:
 def check_reference(path: Path) -> list[tuple[str, int]]:
     """Validate a fasta reference and return its (name, length) pairs."""
     if not path.is_file():
-        raise BaconError(f"Reference file not found: {path}")
+        raise RasherError(f"Reference file not found: {path}")
     if sniff_format(path) != "fasta":
-        raise BaconError(f"The reference must be a fasta file: {path}")
+        raise RasherError(f"The reference must be a fasta file: {path}")
     lengths = sequence_lengths(path)
     if not lengths or sum(n for _, n in lengths) == 0:
-        raise BaconError(f"The reference contains no sequence: {path}")
+        raise RasherError(f"The reference contains no sequence: {path}")
     names = [name for name, _ in lengths]
     if len(set(names)) != len(names):
-        raise BaconError(f"The reference has duplicate sequence names: {path}")
+        raise RasherError(f"The reference has duplicate sequence names: {path}")
     return lengths
 
 

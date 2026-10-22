@@ -21,7 +21,7 @@ jobs:
           python -m build
       - name: Check the tag matches the package version
         run: |
-          pkg=$(python -c "import bacon; print(bacon.__version__)")
+          pkg=$(python -c "import rasher; print(rasher.__version__)")
           proj=$(python -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")
           tag="${GITHUB_REF_NAME#v}"
           test "$pkg" = "$tag" || { echo "::error::tag $tag != __version__ $pkg"; exit 1; }
@@ -37,6 +37,6 @@ jobs:
           PY
       - uses: softprops/action-gh-release@v3
         with:
-          name: BACoN ${{ github.ref_name }}
+          name: RASHER ${{ github.ref_name }}
           body_path: notes.md
           files: dist/*

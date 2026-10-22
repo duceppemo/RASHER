@@ -7,7 +7,7 @@ import math
 from dataclasses import dataclass, field
 from xml.sax.saxutils import escape
 
-from bacon import BaconError
+from rasher import RasherError
 
 
 @dataclass(eq=False)  # Nodes are equal only to themselves: comparing subtrees would recurse down a deep tree
@@ -49,7 +49,7 @@ def parse(text: str) -> Node:
     """Parse one Newick tree. Internal node labels (support values) are kept as names."""
     text = "".join(text.split()) if "'" not in text else text.strip()
     if not text.endswith(";"):
-        raise BaconError("Not a Newick tree (no final ';')")
+        raise RasherError("Not a Newick tree (no final ';')")
     pos = 0
 
     def label() -> tuple[str, float]:
@@ -71,9 +71,9 @@ def parse(text: str) -> Node:
             try:
                 length = float(text[start:pos])
             except ValueError:
-                raise BaconError(f"Bad branch length in Newick tree: {text[start:pos]!r}") from None
+                raise RasherError(f"Bad branch length in Newick tree: {text[start:pos]!r}") from None
             if not math.isfinite(length):
-                raise BaconError(f"Branch length not a finite number in Newick tree: {text[start:pos]!r}")
+                raise RasherError(f"Branch length not a finite number in Newick tree: {text[start:pos]!r}")
         return name.strip(), length
 
     def tree() -> Node:
@@ -93,21 +93,21 @@ def parse(text: str) -> Node:
                     node = opened[-1].add(Node())
                     break
                 if text[pos] != ")":
-                    raise BaconError(f"Unbalanced parentheses in Newick tree at position {pos}")
+                    raise RasherError(f"Unbalanced parentheses in Newick tree at position {pos}")
                 pos += 1
                 node = opened.pop()
                 node.name, node.length = label()
                 if not _finite_support(node.name):
-                    raise BaconError(f"Support not a finite number in Newick tree: {node.name!r}")
+                    raise RasherError(f"Support not a finite number in Newick tree: {node.name!r}")
             else:
                 return root
 
     try:
         root = tree()
     except (IndexError, ValueError):  # ValueError: a quoted label without its closing quote
-        raise BaconError("Truncated Newick tree") from None
+        raise RasherError("Truncated Newick tree") from None
     if text[pos:] != ";":
-        raise BaconError(f"Unexpected text after the Newick tree: {text[pos:pos + 20]!r}")
+        raise RasherError(f"Unexpected text after the Newick tree: {text[pos:pos + 20]!r}")
     return root
 
 

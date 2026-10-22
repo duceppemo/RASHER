@@ -10,14 +10,14 @@ from collections.abc import Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from bacon import BaconError
+from rasher import RasherError
 
 log = logging.getLogger(__name__)
 
 MISSING_VALUES = {"", "NA", "na", "-"}  # Cells read as "no value"
-PALETTE_COLOURS = 12  # The report's categorical colours (bacon.report.PALETTE_LIGHT and PALETTE_DARK)
+PALETTE_COLOURS = 12  # The report's categorical colours (rasher.report.PALETTE_LIGHT and PALETTE_DARK)
 # Distinct values a column may have to colour the figures: each value has a marker of its own, a colour and a shape
-# (bacon.report.MARKERS)
+# (rasher.report.MARKERS)
 MAX_COLOUR_VALUES = 48
 MAX_VALUE_LENGTH = 30  # Above this average length of the distinct values, a column is free text
 FREE_TEXT_FROM = 10  # With this many samples having a value, more distinct values than half of them is free text
@@ -52,11 +52,11 @@ def read_table(path: Path, what: str, comment_lines: bool = False,
     whitespace); columns with an empty name (a trailing separator) are dropped, and two columns of the same name
     (any case) are an error."""
     if not path.is_file():
-        raise BaconError(f"{what} not found: {path}")
+        raise RasherError(f"{what} not found: {path}")
     try:
         data = path.read_bytes()
     except OSError as exc:
-        raise BaconError(f"{what} cannot be read: {path} ({exc.strerror})") from None
+        raise RasherError(f"{what} cannot be read: {path} ({exc.strerror})") from None
     text = _decode(data, path, what, encoding_warning)
     lines: list[tuple[int, str]] = []  # (line number in the file, text)
     for number, line in enumerate(text.replace("\r\n", "\n").replace("\r", "\n").split("\n"), 1):
@@ -64,7 +64,7 @@ def read_table(path: Path, what: str, comment_lines: bool = False,
             continue
         lines.append((number, line))
     if not lines:
-        raise BaconError(f"{what} is empty: {path}")
+        raise RasherError(f"{what} is empty: {path}")
     tsv = "\t" in lines[0][1]
     records = ([[_unquoted(c) for c in line.split("\t")] for _, line in lines] if tsv
                else _csv_records(lines, path, what))
@@ -72,7 +72,7 @@ def read_table(path: Path, what: str, comment_lines: bool = False,
     lower = [c.lower() for c in header if c]
     duplicates = [c for c in dict.fromkeys(header) if c and lower.count(c.lower()) > 1]  # In header order
     if duplicates:
-        raise BaconError(f"{what} {path}: the column name {', '.join(repr(d) for d in duplicates)} is used more "
+        raise RasherError(f"{what} {path}: the column name {', '.join(repr(d) for d in duplicates)} is used more "
                          "than once (names differing only in case are the same): give each column its own name")
     rows = []
     for cells in records[1:]:
@@ -131,14 +131,14 @@ def _csv_records(lines: list[tuple[int, str]], path: Path, what: str) -> list[li
         except StopIteration:
             return records
         except csv.Error as exc:
-            raise BaconError(f"{what} {path}, line {lines[start][0]}: {exc}") from None
+            raise RasherError(f"{what} {path}, line {lines[start][0]}: {exc}") from None
         if reader.line_num > len(lines):  # Into the end marker: the quote was never closed
             if start == len(lines):  # The end marker itself
                 return records
-            raise BaconError(f"{what} {path}, line {lines[start][0]}: an unclosed quote (its value would swallow "
+            raise RasherError(f"{what} {path}, line {lines[start][0]}: an unclosed quote (its value would swallow "
                              "the lines after it)")
         if reader.line_num - start > 1:
-            raise BaconError(f"{what} {path}, line {lines[start][0]}: a quoted value spans several lines (an "
+            raise RasherError(f"{what} {path}, line {lines[start][0]}: a quoted value spans several lines (an "
                              "unclosed quote?)")
         records.append(cells)
 
@@ -173,10 +173,11 @@ def read_metadata(path: Path) -> Metadata:
     header, rows = read_table(path, "Metadata file")
     key = _find(header, "sample")
     if key is None:
-        raise BaconError(f"Metadata file {path} needs a 'sample' column (found: {', '.join(header) or 'nothing'})")
+        raise RasherError(f"Metadata file {path} needs a 'sample' column (found: "
+                          f"{', '.join(header) or 'nothing'})")
     columns = [c for c in header if c != key]
     if not columns:
-        raise BaconError(f"Metadata file {path} has no column besides {key!r}")
+        raise RasherError(f"Metadata file {path} has no column besides {key!r}")
     metadata = Metadata(columns, {})
     duplicates: list[str] = []
     for row in rows:
@@ -197,7 +198,7 @@ def read_metadata(path: Path) -> Metadata:
 def sheet_metadata(path: Path) -> Metadata | None:
     """The metadata in a sample sheet: its columns other than 'sample' and 'file'. A sample on several rows keeps
     the first value of each column; rows giving different values are reported."""
-    # Its encoding was reported when its samples were read (bacon.samples.read_sample_sheet)
+    # Its encoding was reported when its samples were read (rasher.samples.read_sample_sheet)
     header, rows = read_table(path, "Sample sheet", comment_lines=True, encoding_warning=False)
     key = _find(header, "sample")
     columns = [c for c in header if c.lower() not in KEY_COLUMNS]
@@ -270,7 +271,7 @@ def choose_colour_column(metadata: Metadata, requested: str | None) -> tuple[str
             return None, None
         column = _find(metadata.columns, requested.lower())
         if column is None:
-            raise BaconError(f"--color-by {requested!r}: no such metadata column (columns: "
+            raise RasherError(f"--color-by {requested!r}: no such metadata column (columns: "
                              f"{', '.join(metadata.columns)})")
         reason = unusable_reason(metadata.values(column))
         return (None, f"the metadata column {column!r} cannot colour the figures: {reason}") if reason else \

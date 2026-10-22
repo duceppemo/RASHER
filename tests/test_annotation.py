@@ -5,8 +5,8 @@ import textwrap
 
 import pytest
 
-from bacon import BaconError
-from bacon.annotation import (
+from rasher import RasherError
+from rasher.annotation import (
     Cds,
     annotate_snps,
     annotation_format,
@@ -192,7 +192,7 @@ def test_genbank_cds_without_gene_feature_pseudo_and_duplicate_names():
 def read_genbank_text(text: str):
     import io
 
-    from bacon.annotation import _genbank_records
+    from rasher.annotation import _genbank_records
     return _genbank_records(io.StringIO(text))[0]
 
 
@@ -313,7 +313,7 @@ def test_effect_through_a_shared_exon_given_once(tmp_path):
 
 
 def test_transl_except_codon_gives_no_effect(tmp_path):
-    from bacon.annotation import _transl_except
+    from rasher.annotation import _transl_except
     seq = "ATGGCTTGAAAATAG" + "C" * 105  # M A Sec K *
     features = """
     CDS             1..15
@@ -377,7 +377,7 @@ def test_gzipped_inputs_and_format_detection(tmp_path):
 def test_genbank_without_sequence_cannot_be_the_reference(tmp_path):
     gb = tmp_path / "a.gb"
     gb.write_text(_gb(FEATURES).split("ORIGIN")[0] + "//\n")
-    with pytest.raises(BaconError, match="no sequence .*--annotation"):
+    with pytest.raises(RasherError, match="no sequence .*--annotation"):
         genbank_fasta_records(gb)
     assert load_annotation(gb, [("ref.1", 120)]).genes == 3  # Still a valid annotation
 
@@ -411,19 +411,19 @@ def test_load_annotation_matches_names_and_warns(tmp_path):
 
 
 def test_load_annotation_errors(tmp_path):
-    with pytest.raises(BaconError, match="not found"):
+    with pytest.raises(RasherError, match="not found"):
         load_annotation(tmp_path / "missing.gb", [("a", 1)])
     fasta = tmp_path / "x.fasta"
     fasta.write_text(">a\nACGT\n")
-    with pytest.raises(BaconError, match="not a GenBank .* or GFF3"):
+    with pytest.raises(RasherError, match="not a GenBank .* or GFF3"):
         load_annotation(fasta, [("a", 4)])
     empty = tmp_path / "e.gff3"
     empty.write_text("##gff-version 3\n")
-    with pytest.raises(BaconError, match="no feature"):
+    with pytest.raises(RasherError, match="no feature"):
         load_annotation(empty, [("a", 4)])
     bad = tmp_path / "bad.gb.gz"
     bad.write_bytes(b"\x1f\x8b\x08\x00garbage")
-    with pytest.raises(BaconError, match="truncated or corrupt"):
+    with pytest.raises(RasherError, match="truncated or corrupt"):
         load_annotation(bad, [("a", 4)])
 
 
@@ -675,7 +675,7 @@ def test_gene_snp_counts(tmp_path):
 
 
 def test_inverted_repeat_copies_named_in_free_text():
-    from bacon.annotation import _IR_COPY
+    from rasher.annotation import _IR_COPY
     for text, copy in [("IRa", "a"), ("IRB", "b"), ("inverted repeat B", "b"), ("inverted repeat IRb", "b"),
                        ("inverted repeat region IRa", "a"), ("Inverted Repeat A region", "a"), ("IR_A", "a"),
                        (" IRa (25,341 bp)", "a")]:
@@ -752,7 +752,7 @@ def test_5_prime_partial_cds_starting_with_atg_has_no_start_codon():
 
 
 def test_region_mention_in_a_wide_feature_note_does_not_label_it():
-    from bacon.annotation import region_label
+    from rasher.annotation import region_label
     repeats = """
     repeat_region   4001..4600
                     /rpt_type=inverted
@@ -794,7 +794,7 @@ WRAPPED_SEQ = WRAPPED_CDS[30:] + "A" * 60 + WRAPPED_CDS[:30]  # 120 bp: the CDS 
 def _wrapped_coding(gff, sequences: list[tuple[str, int]], strand: str) -> str:
     """The coding sequence read from the first gene of a GFF3 annotation, on the + strand of WRAPPED_SEQ or on
     the - strand of its reverse complement (where the same CDS is at 1..30 read downwards, then 91..120)."""
-    from bacon.annotation import reverse_complement
+    from rasher.annotation import reverse_complement
     ann = load_annotation(gff, sequences)
     [sequence] = ann.sequences.values()
     [gene] = sequence.genes
@@ -886,7 +886,7 @@ def test_gene_without_symbol_is_labelled_by_locus_tag_and_product():
     assert cds_symbol.symbol == "ycf1" and cds_symbol.label == "SIM_p011 (ycf1)"
     assert cds_symbol.map_label == "SIM_p011"
     # The intergenic context names the neighbours by their labels
-    from bacon.annotation import SequenceAnnotation, annotate_snp
+    from rasher.annotation import SequenceAnnotation, annotate_snp
     seq_ann = SequenceAnnotation("ref", 120, list(genes.values()), [], True)
     assert annotate_snp(seq_ann, 35, "A", ["C"], SEQ).context == \
         "intergenic between LK299_pgp087 (maturase K) and trnX"
@@ -945,7 +945,7 @@ def make_plastome(seed: int = 1, lsc: int = 9000, ir: int = 6000, ssc: int = 400
     50 bp further (in both copies); `edit`, a function, rewrites IRa last."""
     import random
 
-    from bacon.annotation import reverse_complement
+    from rasher.annotation import reverse_complement
     rng = random.Random(seed)
     parts = ["".join(rng.choices("ACGT", k=n)) for n in (lsc, ir, ssc)]
     lsc_seq, irb, ssc_seq = parts
@@ -964,7 +964,7 @@ def make_plastome(seed: int = 1, lsc: int = 9000, ir: int = 6000, ssc: int = 400
 
 
 def test_detects_the_inverted_repeat_and_derives_the_regions():
-    from bacon.annotation import detect_inverted_repeat, regions_from_repeat
+    from rasher.annotation import detect_inverted_repeat, regions_from_repeat
     seq = make_plastome()
     repeat = detect_inverted_repeat(seq)
     assert repeat is not None
@@ -977,7 +977,7 @@ def test_detects_the_inverted_repeat_and_derives_the_regions():
 
 
 def test_detection_tolerates_mismatches_and_a_small_deletion():
-    from bacon.annotation import detect_inverted_repeat
+    from rasher.annotation import detect_inverted_repeat
     repeat = detect_inverted_repeat(make_plastome(mismatches=5))
     assert repeat is not None and repeat.first == (9001, 15000) and repeat.second == (19001, 25000)
     assert repeat.differences == 5 and 0.999 < repeat.identity < 1
@@ -1001,7 +1001,7 @@ def test_detection_tolerates_mismatches_and_a_small_deletion():
 
 
 def test_detection_across_the_origin_and_regions_naming():
-    from bacon.annotation import detect_inverted_repeat, regions_from_repeat
+    from rasher.annotation import detect_inverted_repeat, regions_from_repeat
     n = 25000
     for start in (22000, 9000 + 5999, 12000):  # IRa across the origin; IRb's last base first; starting in IRb
         seq = make_plastome(start=start)
@@ -1032,14 +1032,14 @@ def test_no_repeat_detected_without_one():
     import random
     import time
 
-    from bacon.annotation import MAX_DETECTION_LENGTH, detect_inverted_repeat
+    from rasher.annotation import MAX_DETECTION_LENGTH, detect_inverted_repeat
     rng = random.Random(7)
     assert detect_inverted_repeat("".join(rng.choices("ACGT", k=25000))) is None  # No repeat
     assert detect_inverted_repeat(make_plastome(ir=3000)) is None  # Below the minimum (the bundled example's size)
     assert detect_inverted_repeat(make_plastome(ir=3000, lsc=2000, ssc=1000)) is None  # Too short to search
     assert detect_inverted_repeat("ACGT" * 10000) is None  # Low complexity: its own reverse complement everywhere
     half = "".join(rng.choices("ACGT", k=6000))
-    from bacon.annotation import find_regions, regions_from_repeat, reverse_complement
+    from rasher.annotation import find_regions, regions_from_repeat, reverse_complement
     palindrome = "".join(rng.choices("ACGT", k=8000)) + half + reverse_complement(half) \
         + "".join(rng.choices("ACGT", k=8000))
     # The two halves of a palindrome are two copies that abut (the Toxoplasma apicoplast NC_001799.1 has its
@@ -1064,7 +1064,7 @@ def test_no_repeat_detected_without_one():
 
 
 def test_find_regions_prefers_the_annotation_unless_it_contradicts_the_sequence():
-    from bacon.annotation import find_regions
+    from rasher.annotation import find_regions
     seq = make_plastome()
     n = len(seq)
     annotated = _features("""
@@ -1149,7 +1149,7 @@ def _edit_distance(a: str, b: str) -> int:
 def test_banded_edit_distance_matches_the_plain_one_within_the_band():
     import random
 
-    from bacon.annotation import _banded_edit_distance
+    from rasher.annotation import _banded_edit_distance
     rng = random.Random(3)
     for _ in range(60):
         a = "".join(rng.choices("ACGT", k=rng.randint(1, 60)))
@@ -1171,8 +1171,8 @@ def test_banded_edit_distance_matches_the_plain_one_within_the_band():
 
 
 def test_stretch_differences_count_events_not_bases():
-    import bacon.annotation as module
-    from bacon.annotation import _stretch_differences
+    import rasher.annotation as module
+    from rasher.annotation import _stretch_differences
     x = _random(300, 5)
     assert _stretch_differences(x, x) == 0 and _stretch_differences("", "") == 0
     assert _stretch_differences(x, x[1:] + "G") == 2  # A deletion and an insertion 300 bp apart: not 225 mismatches
@@ -1201,14 +1201,14 @@ def test_stretch_differences_count_events_not_bases():
 def test_compensating_indels_do_not_reject_the_repeat():
     # A base deleted and one inserted 300 bp further in IRa (NC_007144.1, cucumber, has such a pair): the stretch
     # between, of equal length in both copies, differs at three bases in four read base by base
-    from bacon.annotation import detect_inverted_repeat
+    from rasher.annotation import detect_inverted_repeat
     repeat = detect_inverted_repeat(make_plastome(edit=lambda ira: ira[:3000] + ira[3001:3300] + "G" + ira[3300:]))
     assert repeat is not None and repeat.first == (9001, 15000) and repeat.second == (19001, 25000)
     assert repeat.lengths == (6000, 6000) and repeat.differences == 2
 
 
 def test_insertions_and_n_runs_in_one_copy():
-    from bacon.annotation import IR_MAX_INDEL, detect_inverted_repeat
+    from rasher.annotation import IR_MAX_INDEL, detect_inverted_repeat
     for size in (100, 600, 1500, 2500):  # Larger than the band of 500 antidiagonals: the chain goes on past it
         repeat = detect_inverted_repeat(make_plastome(edit=lambda ira, s=size: ira[:3000] + _random(s, 9) + ira[3000:]))
         assert repeat is not None and repeat.first == (9001, 15000) and repeat.second == (19001, 25000 + size)
@@ -1234,7 +1234,7 @@ def test_a_truncated_detection_confirms_a_correct_annotation():
     # The annotation gives the whole copies; the detection stops at an insertion larger than IR_MAX_INDEL (or
     # at a run of N longer than IR_MAX_GAP): each detected copy lies inside an annotated one, so the annotation
     # is kept. Only copies found mostly outside the annotated ones override them.
-    from bacon.annotation import _agree, find_regions
+    from rasher.annotation import _agree, find_regions
     seq = make_plastome(lsc=12000, ir=12000, edit=lambda ira: ira[:5000] + _random(3500, 9) + ira[5000:])
     annotated = _features("""
     repeat_region   12001..24000
@@ -1257,7 +1257,7 @@ def test_a_truncated_detection_confirms_a_correct_annotation():
     band = find_regions(annotated, len(seq), seq, "ref", warnings)
     assert band.source == "annotation" and not warnings
     # The threshold: a detected copy lying 80% inside an annotated copy confirms it, 78% does not
-    from bacon.annotation import InvertedRepeat, Region
+    from rasher.annotation import InvertedRepeat, Region
     regions = [Region("IRb", 9001, 15000, 6000), Region("IRa", 19001, 25000, 6000)]
     assert _agree(regions, InvertedRepeat((10201, 16200), (17801, 23800), (6000, 6000), 0), 25000)  # 4,800 inside
     assert not _agree(regions, InvertedRepeat((10301, 16300), (17801, 23800), (6000, 6000), 0), 25000)  # 4,700
@@ -1267,8 +1267,8 @@ def test_a_truncated_detection_confirms_a_correct_annotation():
 def test_abutting_copies_across_the_origin_and_the_rotated_search():
     # The Toxoplasma apicoplast NC_001799.1 has its copies abutting across the origin: a repeat with no region
     # between the copies on one side, so no band; recorded with a note
-    import bacon.annotation as module
-    from bacon.annotation import _same_pair, detect_inverted_repeat, find_regions, reverse_complement
+    import rasher.annotation as module
+    from rasher.annotation import _same_pair, detect_inverted_repeat, find_regions, reverse_complement
     x = _random(5500, 11)
     seq = reverse_complement(x) + "A" + _random(19998, 12) + "A" + x  # A pairs with T: the copies end there
     repeat = detect_inverted_repeat(seq)
@@ -1291,7 +1291,7 @@ def test_abutting_copies_across_the_origin_and_the_rotated_search():
         assert detect_inverted_repeat(seq) == repeat and len(calls) == 1  # Abutting: no room to go on
     # The rotated search must find the same pair of copies (compared in either pairing: a copy across the origin
     # starts late in the sequence but covers its first base)
-    from bacon.annotation import InvertedRepeat
+    from rasher.annotation import InvertedRepeat
     a = InvertedRepeat((1, 2997), (12001, 14997), (2997, 2997), 0)
     b = InvertedRepeat((12001, 18000), (22001, 2997), (6000, 5997), 2)
     assert _same_pair(b, a, 24997) and _same_pair(a, b, 24997)
@@ -1299,7 +1299,7 @@ def test_abutting_copies_across_the_origin_and_the_rotated_search():
 
 
 def test_identity_is_recorded_rounded():
-    from bacon.annotation import find_regions
+    from rasher.annotation import find_regions
     seq = make_plastome(mismatches=5)
     record = find_regions([], len(seq), seq).record()
     assert record["repeat"]["differences"] == 5 and record["repeat"]["identity"] == 0.999167  # Not 0.99916666...
@@ -1310,7 +1310,7 @@ def test_identity_is_recorded_rounded():
 # ---------------------------------------------------------------------------------------------------------------
 
 def test_a_repeat_that_is_not_a_plastome_layout_gives_no_band():
-    from bacon.annotation import PLASTOME_MAX_SINGLE_COPY, PLASTOME_MIN_IR_FRACTION, find_regions
+    from rasher.annotation import PLASTOME_MAX_SINGLE_COPY, PLASTOME_MIN_IR_FRACTION, find_regions
     assert PLASTOME_MIN_IR_FRACTION == 0.05 and PLASTOME_MAX_SINGLE_COPY == 200_000
     # Two copies of 5 kb in 205 kb (4.9%): the inverted rRNA operons of a bacterium (H. pylori NC_000915.1 has
     # 10.5 kb copies in 1.67 Mb) rather than the repeats of a plastome
@@ -1330,7 +1330,7 @@ def test_a_repeat_that_is_not_a_plastome_layout_gives_no_band():
 
 
 def test_a_sequence_said_not_to_be_a_plastid_gets_no_plastome_regions():
-    from bacon.annotation import Location, RawFeature, find_regions
+    from rasher.annotation import Location, RawFeature, find_regions
     seq = make_plastome()
     n = len(seq)
     mito = _features(f"""
@@ -1367,7 +1367,7 @@ def test_a_sequence_said_not_to_be_a_plastid_gets_no_plastome_regions():
 
 
 def test_annotated_repeats_that_give_no_regions_are_said_so():
-    from bacon.annotation import find_regions
+    from rasher.annotation import find_regions
     seq = make_plastome()
     n = len(seq)
     # NC_001879.2 (tobacco) annotates its LSC as `inverted repeat B`, its SSC as `SSC; inverted repeat A` and its
@@ -1474,7 +1474,7 @@ def test_diverged_stretches_are_aligned_in_reasonable_time():
     # stretches takes about 2 s each, 14 s for the eight of the reviewer's case)
     import time
 
-    from bacon.annotation import detect_inverted_repeat
+    from rasher.annotation import detect_inverted_repeat
 
     def edit(ira: str) -> str:
         s = list(ira)
@@ -1620,7 +1620,7 @@ def test_cds_with_a_remote_part_gives_no_effects(tmp_path):
     assert genes["remote"].cds[0].unreadable and any("remote" in w and "no SNP effects" in w for w in ann.warnings)
     info, effects = _effects(ann, 25, SEQ[24], "A")
     assert info.context == "CDS" and effects == []
-    from bacon.annotation import _transl_except
+    from rasher.annotation import _transl_except
     assert _transl_except("(pos:join(72..72,80..81),aa:TERM)") == [(72, 72), (80, 81)]
     assert _transl_except("(pos:complement(join(5..6,9..9)),aa:TERM); (pos:7..9,aa:Sec)") == [(5, 6), (9, 9), (7, 9)]
     assert genes["split"].cds[0].transl_except == [(72, 72), (80, 81)]
@@ -1696,7 +1696,7 @@ def test_ncbi_gff3_inverted_repeat_features_are_inverted_repeats(tmp_path):
     # NCBI's GFF3 writes a GenBank `repeat_region /rpt_type=inverted` as an `inverted_repeat` (Phalaenopsis
     # NC_007499.1: notes "repeat B" and "repeat A", no IR name): the same regions as from the GenBank record, and
     # these two chosen over a longer feature named IR
-    from bacon.annotation import find_regions, region_label
+    from rasher.annotation import find_regions, region_label
     gb = _features("""
     repeat_region   4001..6000
                     /note="repeat B"
@@ -1823,7 +1823,7 @@ def test_gff3_exon_lines_before_their_parentless_rna(tmp_path):
 
 def test_organelle_kind_is_the_part_before_the_colon(tmp_path):
     # A kinetoplast is a mitochondrion (INSDC: /organelle="mitochondrion:kinetoplast"): table 1 by default
-    from bacon.annotation import Location, RawFeature, _not_a_plastid, _organelle
+    from rasher.annotation import Location, RawFeature, _not_a_plastid, _organelle
     features = """
     source          1..120
                     /organelle="mitochondrion:kinetoplast"
@@ -1873,7 +1873,7 @@ def test_a_stop_codon_inside_the_coding_sequence_gives_no_effects(tmp_path):
 def test_repeat_detected_whole_with_the_origin_next_to_an_indel_in_a_copy(change):
     # The origin a few bases from an indel (or a run of N) inside IRa: the copy seeded on one side of the origin
     # ends at the indel, short of the origin; the search again from between the copies gets the whole repeat
-    from bacon.annotation import _shift_interval, detect_inverted_repeat
+    from rasher.annotation import _shift_interval, detect_inverted_repeat
     edit = {"deletion": lambda ira: ira[:3000] + ira[3010:],
             "insertion": lambda ira: ira[:3000] + "ACGTTGCAAC" * 5 + ira[3000:],
             "N run": lambda ira: ira[:3000] + "N" * 50 + ira[3050:]}[change]
@@ -1906,7 +1906,7 @@ def test_only_trans_splicing_exceptions_make_a_cds_trans_spliced(tmp_path):
 
 def test_partial_ends_of_a_cds_across_the_origin(tmp_path):
     # join(<51..60,1..20): the '<' is on the part listed first, the last by coordinate; CTG is not a start codon
-    from bacon.annotation import reverse_complement
+    from rasher.annotation import reverse_complement
     cds = "CTGGCTAAAGGTCGAGCTAAAGCTGCATAA"  # L A K G R A K A A *
     seq = cds[10:] + "A" * 30 + cds[:10]
     ann = _ann(tmp_path / "plus", 'CDS             join(<51..60,1..20)\n                /gene="p"\n', seq)

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Compare BACoN runs on the same real dataset, where no truth is known.
+"""Compare RASHER runs on the same real dataset, where no truth is known.
 
 Usage: python compare_runs.py RUN_FOLDER [RUN_FOLDER ...]
 

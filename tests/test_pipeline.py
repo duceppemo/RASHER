@@ -158,7 +158,8 @@ STUBS = {
             seq = seq.replace("\\n", "")
             out.write_text(f"{name}\\n{'N' * 10}{seq[10:]}\\n")
     """,
-    # Keeps reads whose name starts with "on"; reports BBDuk's counts; STUB_BBDUK_OOM: runs out of memory;
+    # Keeps reads whose name starts with "on" (or whose header's comment is "on": one mate of a pair whose mates have
+    # the same name); reports BBDuk's counts; STUB_BBDUK_OOM: runs out of memory;
     # STUB_BBDUK_FAIL: fails otherwise. Its arguments are split on whitespace, as bbduk.sh's `eval` splits them; it
     # first prints its java command line, as bbduk.sh does (-eoom: -XX:+ExitOnOutOfMemoryError).
     "bbduk.sh": """
@@ -181,7 +182,7 @@ STUBS = {
             return [lines[i:i + 4] for i in range(0, len(lines), 4)]
         r1 = records(opts["in"])
         r2 = records(opts["in2"]) if "in2" in opts else None
-        hit = lambda rec: rec[0][1:].startswith("on")
+        hit = lambda rec: rec[0][1:].startswith("on") or rec[0].split()[1:] == ["on"]
         keep = [i for i in range(len(r1)) if hit(r1[i]) or (r2 is not None and hit(r2[i]))]
         def write(path, records_):
             with gzip.open(path, "wt") as out:
@@ -329,6 +330,11 @@ def test_needed_tools_follow_the_default_comparison(tmp_path):
         tools = needed_tools(Settings(**base, assembler=assembler))
         assert "ska" in tools and tool in tools and "minimap2" in tools
     assert needed_tools(Settings(**base, snp_method="none")) == ["minimap2", "fastp", "samtools"]
+    # The BAM of the baited reads needs samtools whatever the assembler; the off-reference share needs minimap2
+    # whatever the baiting
+    assert "samtools" in needed_tools(Settings(**base, assembler="spades", keep_bam=True))
+    assert "samtools" not in needed_tools(Settings(**base, assembler="spades"))
+    assert "minimap2" in needed_tools(Settings(**base, assembler="spades", baiting="bbduk"))
 
 
 def test_folder_of_the_old_default_resumes_with_minimap2(stubs, dataset, tmp_path):
@@ -372,7 +378,7 @@ def test_full_run(stubs, dataset, tmp_path):
     dist = (out / "4_compared" / "ska" / "snp_distances.tsv").read_text().splitlines()
     assert dist[0].split("\t") == ["snp-dists", "Reference", "s1", "s2", "s3"]
     info = json.loads((out / "run_info.json").read_text())
-    assert info["samples"]["none"]["status"] == "failed (bait)"
+    assert info["samples"]["none"]["status"] == "failed (bait)" and info["samples"]["s1"]["paired"] is False
     assert info["comparison"]["method"] == "ska"
     assert "spades.py" in info["tools"]
     assert "Baiting reads matching the reference" in (out / "rasher.log").read_text()  # INFO, not only warnings
@@ -385,6 +391,7 @@ def test_full_run(stubs, dataset, tmp_path):
     assert info["reference"]["md5"] != hashlib.md5((out / "reference.fasta").read_bytes()).hexdigest()
     report = (out / "report.html").read_text()
     assert all(name in report for name in ("s1", "s2", "s3", "none", "SKA2", "SNP distances", "4 genomes, 4 distinct"))
+    assert "either mate" not in report  # Single-end reads: no word of pairs in the methods
     for name in ("rasher_samples_mqc.json", "rasher_reads_mqc.json", "rasher_distances_mqc.json"):
         json.loads((out / name).read_text())
     assert set(json.loads((out / "rasher_samples_mqc.json").read_text())["data"]) == {"s1", "s2", "s3", "none"}
@@ -2080,6 +2087,8 @@ def test_paired_full_run(stubs, dataset_pe, tmp_path):
     assert len(filt["p1"]["upstream"]) == 2 and all(len(sig) == 2 for sig in filt["p1"]["upstream"])
     tree = (out / "4_compared" / "ska" / "tree.nwk").read_text()
     assert all(n in tree for n in ("p1", "p2", "p3", "Reference"))
+    assert json.loads((out / "run_info.json").read_text())["samples"]["p1"]["paired"] is True
+    assert "read pairs were kept whole when either mate matched" in (out / "report.html").read_text()
 
 
 def test_paired_resume_reruns_nothing(stubs, dataset_pe, tmp_path):
@@ -2111,13 +2120,14 @@ def test_paired_bbduk_keeps_a_pair_when_either_mate_matches(stubs, tmp_path):
     ref.write_text(">ref\n" + "ACGT" * 250 + "\n")
     reads = tmp_path / "reads"
     reads.mkdir()
-    # R1 off target, R2 on target: BBDuk keeps the pair
-    _reads(reads / "m_R1.fastq.gz", [("off1", 900), ("off2", 800)])
-    _reads(reads / "m_R2.fastq.gz", [("on1", 900), ("off9", 800)])
+    # Pair r1: R1 off target, R2 on target: BBDuk keeps the pair
+    _reads(reads / "m_R1.fastq.gz", [("r1", 900), ("r2", 800)])
+    _reads(reads / "m_R2.fastq.gz", [("r1 on", 900), ("r2", 800)])
     assert run(settings(ref, reads, tmp_path / "out", baiting="bbduk", snp_method="none")) == 0
     row = summary(tmp_path / "out")["m"]
     assert row["Raw_reads"] == "4" and row["Baited_reads"] == "2"
-    assert [r.name for r in read_records(tmp_path / "out" / "1_extracted" / "m_R1.fastq.gz")] == ["off1"]
+    assert [r.name for r in read_records(tmp_path / "out" / "1_extracted" / "m_R1.fastq.gz")] == ["r1"]
+    assert [r.name for r in read_records(tmp_path / "out" / "1_extracted" / "m_R2.fastq.gz")] == ["r1"]
 
 
 def test_paired_keep_bam(stubs, dataset_pe, tmp_path):
@@ -2139,3 +2149,138 @@ def test_paired_and_single_end_samples_in_one_run(stubs, dataset_pe, tmp_path):
     assert rows["p1"]["Status"] == "ok"
     tree = (out / "4_compared" / "ska" / "tree.nwk").read_text()
     assert "single" in tree and "p1" in tree
+
+
+def test_a_copied_paired_output_folder_without_the_files_times_resumes(stubs, dataset_pe, tmp_path):
+    import shutil
+    ref, reads = dataset_pe
+    out, copy = tmp_path / "out", tmp_path / "copy"
+    run(settings(ref, reads, out))
+    shutil.copytree(out, copy, copy_function=shutil.copyfile)  # cp -r, scp, unzip: the files get new times
+    stubs.unlink()
+    assert run(settings(ref, reads, copy)) == 0
+    assert calls(stubs) == ["minimap2", "minimap2"]  # Only the failed pair is retried: the sizes of both mates
+    filt = json.loads((copy / ".checkpoints" / "filter.json").read_text())["results"]["p1"]
+    assert len(filt["upstream"]) == len(filt["output_signature"]) == 2  # Of each mate: [size, mtime_ns]
+    assert all(len(sig) == 2 for sig in filt["upstream"] + filt["output_signature"])
+    stubs.unlink()
+    assert run(settings(ref, reads, copy)) == 0 and calls(stubs) == ["minimap2", "minimap2"]  # The copy's own
+    with gzip.open(copy / "2_filtered" / "p1_R2.fastq.gz", "at") as fh:  # One mate of a filtered pair changed
+        fh.write("@on3\nACGT\n+\nIIII\n")
+    stubs.unlink()
+    assert run(settings(ref, reads, copy)) == 0
+    made = calls(stubs)
+    assert made.count("minimap2") == 2 and made.count("fastp") == 1 and made.count("spades.py") == 1
+    assert "ska" in made
+
+
+@pytest.mark.parametrize("step", ["1_extracted", "2_filtered"])
+def test_a_vanished_r2_reruns_only_that_sample(stubs, dataset_pe, tmp_path, step):
+    ref, reads = dataset_pe
+    out = tmp_path / "out"
+    run(settings(ref, reads, out))
+    (out / step / "p2_R2.fastq.gz").unlink()
+    stubs.unlink()
+    assert run(settings(ref, reads, out)) == 0
+    made = calls(stubs)
+    # The failed pair is baited again (one call per file), and p2 too when its baited R2 is gone
+    assert made.count("minimap2") == (4 if step == "1_extracted" else 2)
+    assert made.count("fastp") == 1 and made.count("spades.py") == 1 and "ska" in made
+    assert (out / step / "p2_R2.fastq.gz").exists() and summary(out)["p2"]["Status"] == "ok"
+
+
+@pytest.mark.parametrize(("assembler", "flag"), [("spades", "-m"), ("skesa", "--memory")])
+def test_de_novo_memory_is_shared_by_the_samples_assembled_in_this_run(stubs, dataset, tmp_path, assembler, flag):
+    ref, reads = dataset
+    out = tmp_path / "out"
+
+    def memory() -> str:  # Of the last assembly of s1
+        log = (out / "logs" / "3_assemble" / "s1.log").read_text().splitlines()
+        # SKESA runs from its folder: "$ (cd FOLDER && skesa ...)"
+        command = [line for line in log if " spades.py " in line or " skesa " in line][-1].rstrip(")").split()
+        return command[command.index(flag) + 1]
+
+    run(settings(ref, reads, out, assembler=assembler, memory_gb=8, parallel=2, snp_method="none"))
+    assert memory() == "4"  # Two samples at the same time
+    (out / "3_assembled" / "all_assemblies" / "s1.fasta").unlink()
+    run(settings(ref, reads, out, assembler=assembler, memory_gb=8, parallel=2, snp_method="none"))
+    assert memory() == "8"  # Only s1 is assembled again
+
+
+def test_an_output_folder_of_bacon_does_not_resume(stubs, dataset, tmp_path, monkeypatch):
+    """BACoN 0.4.0 seeds its fingerprints with "0" (its major version alone) and its baiting has the parameters of
+    RASHER's: its checkpoints (single-end reads, baited with -x map-ont) must not be taken for RASHER's."""
+    import hashlib
+
+    from rasher import pipeline
+    from rasher.pipeline import FINGERPRINT_SEED, _fingerprint
+    assert f"RASHER {__version__.split('.')[0]}" == FINGERPRINT_SEED
+    ref, reads = dataset
+    out = tmp_path / "out"
+    real = pipeline._fingerprint
+    monkeypatch.setattr(pipeline, "_fingerprint",  # Checkpoints chained as BACoN chains them
+                        lambda previous, params: real("0" if previous == FINGERPRINT_SEED else previous, params))
+    run(settings(ref, reads, out))
+    monkeypatch.setattr(pipeline, "_fingerprint", real)
+    bait = {"reference": hashlib.md5((out / "reference.fasta").read_bytes()).hexdigest(), "method": "minimap2",
+            "kmer": None}
+    assert json.loads((out / ".checkpoints" / "bait.json").read_text())["fingerprint"] == _fingerprint("0", bait)
+    stubs.unlink()
+    assert run(settings(ref, reads, out)) == 0
+    made = calls(stubs)
+    # Every step runs again: baiting (4 samples), filtering, assembly and the comparison chained from them
+    assert made.count("minimap2") == 4 and made.count("fastp") == 3 and made.count("spades.py") == 3
+    assert "ska" in made
+    assert json.loads((out / ".checkpoints" / "bait.json").read_text())["fingerprint"] == \
+        _fingerprint(FINGERPRINT_SEED, bait)
+
+
+def test_a_result_whose_outputs_another_sample_overwrote_is_made_again(stubs, tmp_path):
+    """A single-end sample x_R1 left out of a run (commented out of the sheet) in which a paired sample x writes
+    x_R1 files: when x_R1 comes back, its baiting is not reused (it would assemble x's reads); nor x's, after."""
+    ref = tmp_path / "ref.fasta"
+    ref.write_text(">ref\n" + "ACGT" * 250 + "\n")
+    d = tmp_path / "reads"
+    d.mkdir()
+    _reads(d / "a.fastq.gz", [("onA", 900), ("offA", 800)])
+    _pair(d, "b", [("onB1", 500), ("onB2", 400)])
+    sheet, out = tmp_path / "sheet.tsv", tmp_path / "out"
+    single, paired = f"x_R1\t{d}/a.fastq.gz", f"x\t{d}/b_R1.fastq.gz;{d}/b_R2.fastq.gz"
+
+    def names(step: str) -> list[str]:
+        return [r.name for r in read_records(out / step / "x_R1.fastq.gz")]
+
+    def rerun(*rows: str) -> list[str]:
+        sheet.write_text("sample\tfile\n" + "\n".join(rows) + "\n")
+        stubs.unlink(missing_ok=True)
+        run(settings(ref, None, out, input=None, sample_sheet=sheet, snp_method="none", min_read_length=10))
+        return calls(stubs)
+
+    rerun(single)
+    assert names("1_extracted") == ["onA"]
+    rerun(f"#{single}", paired)  # x's reads overwrite x_R1's files
+    assert names("1_extracted") == ["onB1", "onB2"]
+    bait = json.loads((out / ".checkpoints" / "bait.json").read_text())["results"]
+    assert len(bait["x_R1"]["output_signature"]) == 2 and isinstance(bait["x_R1"]["output_signature"][0], int)
+    assert [len(sig) for sig in bait["x"]["output_signature"]] == [2, 2]  # [[size, mtime_ns]] of R1 and R2
+    made = rerun(single, f"#{paired}")
+    assert made.count("minimap2") == 1 and "fastp" in made  # Baited again: its files were x's
+    assert names("1_extracted") == names("2_filtered") == ["onA"] and summary(out)["x_R1"]["Baited_reads"] == "1"
+    made = rerun(f"#{single}", paired)
+    assert made.count("minimap2") == 2  # x's R1 file was overwritten in turn: x is baited again too
+    assert names("1_extracted") == ["onB1", "onB2"] and summary(out)["x"]["Baited_reads"] == "4"
+
+
+def test_a_sample_failing_before_filtering_keeps_no_fastp_report(stubs, dataset, tmp_path):
+    """fastp's reports of an earlier run, which MultiQC would take for this run's, go when a sample fails at the
+    baiting."""
+    ref, reads = dataset
+    out = tmp_path / "out"
+    run(settings(ref, reads, out, snp_method="none"))
+    reports = out / "logs" / "2_filter"
+    assert (reports / "s1.fastp.json").exists() and (reports / "s1.fastp.html").exists()
+    _reads(reads / "s1.fastq.gz", [("off1", 900)])  # New reads, none matching the reference
+    run(settings(ref, reads, out, snp_method="none"))
+    assert summary(out)["s1"]["Status"] == "failed (bait)"
+    assert not (reports / "s1.fastp.json").exists() and not (reports / "s1.fastp.html").exists()
+    assert (reports / "s2.fastp.json").exists()

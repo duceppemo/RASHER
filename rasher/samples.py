@@ -51,19 +51,25 @@ def split_pair_stem(filename: str) -> tuple[str, tuple[str, str, str], int] | No
 def pair_files(files: list[Path]) -> tuple[list[tuple[Path, Path]], list[Path]]:
     """The (R1, R2) pairs among `files`, and the files left unpaired (in their original order).
 
-    Two files pair when they sit in the same folder and their names differ only by the mate marker, and no
-    third file claims the same marker: two X_R1 files leave all of X unpaired (a duplicate to report, not to
-    guess around)."""
+    Two files pair when they sit in the same folder and their names differ only by the mate marker (the format
+    their extension gives included: X_R1.fasta does not pair with X_R2.fastq), and no third file claims the same
+    marker: two X_R1 files leave all of X unpaired (a duplicate to report, not to guess around). A file and a
+    link to it do not pair."""
     groups: dict[tuple[object, ...], dict[int, list[Path]]] = {}
     for f in files:
         if split := split_pair_stem(f.name):
             base, key, mate = split
-            groups.setdefault((f.parent.resolve(), base, key), {}).setdefault(mate, []).append(f)
+            fmt = split_extension(f.name)[1]  # type: ignore[index] - a pair stem has an extension
+            groups.setdefault((f.parent.resolve(), base, key, fmt), {}).setdefault(mate, []).append(f)
     pairs, paired = [], set()
     for mates in groups.values():
         if len(mates.get(1, [])) == 1 and len(mates.get(2, [])) == 1:
-            pairs.append((mates[1][0], mates[2][0]))
-            paired.update(mates[1] + mates[2])
+            r1, r2 = mates[1][0], mates[2][0]
+            if r1.resolve() == r2.resolve():
+                log.warning("%s and %s are the same file (one links to the other): not paired", r1, r2)
+                continue
+            pairs.append((r1, r2))
+            paired.update((r1, r2))
     pairs.sort()
     return pairs, [f for f in files if f not in paired]
 
@@ -94,6 +100,13 @@ def _check_name(name: str, origin: object) -> None:
 
 def _make_sample(name: str, files: list[Path], origin: object) -> Sample | None:
     _check_name(name, origin)
+    unique: dict[Path, Path] = {}
+    for f in files:
+        if (real := f.resolve()) in unique:
+            log.warning("Sample %s: %s is the file %s (a link): its reads are used once", name, f, unique[real])
+        else:
+            unique[real] = f
+    files = list(unique.values())
     formats = {f: sniff_format(f) for f in files}
     empty = [f for f, fmt in formats.items() if fmt is None]
     for f in empty:
@@ -113,6 +126,12 @@ def _make_sample(name: str, files: list[Path], origin: object) -> Sample | None:
                     "has" if len(unpaired) == 1 else "have", len(pairs))
     if pairs:
         files = [f for pair in pairs for f in pair]
+    else:
+        marked = [f for f in files if split_pair_stem(f.name)]
+        if {split_pair_stem(f.name)[2] for f in marked} == {1, 2}:  # type: ignore[index] - marked
+            log.warning("Sample %s: %s look like read mates but were not paired (a duplicate mate file, or mates "
+                        "in different folders): processed as single-end reads", name,
+                        ", ".join(f.name for f in marked))
     return Sample(name, files, kinds.pop(), pairs)
 
 
@@ -122,7 +141,8 @@ def discover(path: Path) -> list[Sample]:
     In a folder, two files that differ only by a mate marker (X_R1/X_R2, X_1/X_2, X.R1/X.R2 before the
     extension) are one paired sample named by what is before the marker; every other sequence file is one
     single-end sample named after the file; each subfolder is one sample named after the subfolder, with all
-    the sequence files it contains (pairs found the same way).
+    the sequence files it contains (pairs found the same way). In a folder, a file named as a pair's sample (X
+    next to X_1 and X_2, as fasterq-dump --split-3 writes its unpaired reads) is skipped.
     """
     if not path.exists():
         raise RasherError(f"Input not found: {path}")
@@ -131,6 +151,9 @@ def discover(path: Path) -> list[Sample]:
         parts = split_extension(path.name)
         if not parts:
             raise RasherError(f"Not a fasta/fastq file (by extension): {path}")
+        if split_pair_stem(path.name):
+            log.info("%s looks like one mate of a pair: give the folder or a sample sheet to pair it with its "
+                     "mate", path)
         candidates.append((parts[0], [path], path))
     else:
         flat: list[Path] = []
@@ -149,10 +172,19 @@ def discover(path: Path) -> list[Sample]:
             elif entry.is_file() and split_extension(entry.name):
                 flat.append(entry)
         pairs, unpaired = pair_files(flat)
+        bases: dict[str, str] = {}
         for r1, r2 in pairs:
             base, _, _ = split_pair_stem(r1.name)  # type: ignore[misc] - r1 matched in pair_files
-            candidates.append((base, [r1, r2], f"{r1.name} + {r2.name}"))
-        candidates += [(split_extension(f.name)[0], [f], f) for f in unpaired]  # type: ignore[index]
+            bases[base] = f"{r1.name} + {r2.name}"
+            candidates.append((base, [r1, r2], bases[base]))
+        for f in unpaired:
+            stem = split_extension(f.name)[0]  # type: ignore[index] - flat files have an extension
+            if stem in bases:
+                log.warning("Skipping %s: the sample %s is the pair %s, and this file the unpaired reads "
+                            "fasterq-dump writes next to a pair; list it as its own sample to use it", f, stem,
+                            bases[stem])
+                continue
+            candidates.append((stem, [f], f))
         candidates.sort(key=lambda c: c[0])
     return _finalize(candidates, path)
 
@@ -205,4 +237,8 @@ def _finalize(candidates: list[tuple[str, list[Path], object]], source: Path) ->
                 if s.name + mate in names:
                     raise RasherError(f"Sample names {s.name!r} (paired) and {s.name + mate!r} collide: the "
                                       f"paired sample writes {s.name + mate} files; rename one")
+        elif s.name + "_R1" in names and s.name + "_R2" in names:
+            # A single-end sample deletes the X_R1 + X_R2 files of an earlier paired run of it (rasher.steps)
+            raise RasherError(f"Sample names {s.name!r}, {s.name + '_R1'!r} and {s.name + '_R2'!r} collide: the "
+                              f"reads files of the last two are those {s.name} writes when paired; rename one")
     return samples

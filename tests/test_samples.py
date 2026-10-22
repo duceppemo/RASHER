@@ -275,6 +275,87 @@ def test_sheet_files_pair(tmp_path, fastq):
     assert sample.name == "p" and len(sample.pairs) == 1
 
 
+def test_mates_that_do_not_pair_are_single_end_with_a_warning(tmp_path, fastq, caplog):
+    (tmp_path / "in" / "dup").mkdir(parents=True)
+    fastq("in/dup/x_R1.fastq.gz", [("r", "ACGT")])
+    fastq("in/dup/x_R1.fastq", [("r", "ACGT")], gz=False)  # A duplicate mate
+    fastq("in/dup/x_R2.fastq.gz", [("r", "TTTT")])
+    (sample,) = discover(tmp_path / "in")
+    assert sample.pairs == [] and len(sample.files) == 3
+    assert ("Sample dup: x_R1.fastq, x_R1.fastq.gz, x_R2.fastq.gz look like read mates but were not paired (a "
+            "duplicate mate file, or mates in different folders): processed as single-end reads") in caplog.text
+    (tmp_path / "a").mkdir()
+    (tmp_path / "b").mkdir()
+    fastq("a/y_R1.fastq.gz", [("r", "ACGT")])
+    fastq("b/y_R2.fastq.gz", [("r", "TTTT")])
+    sheet = tmp_path / "sheet.tsv"
+    sheet.write_text("sample\tfile\ny\ta/y_R1.fastq.gz;b/y_R2.fastq.gz\n")
+    caplog.clear()
+    (sample,) = read_sample_sheet(sheet)
+    assert sample.pairs == [] and "Sample y: y_R1.fastq.gz, y_R2.fastq.gz look like read mates" in caplog.text
+
+
+def test_fasterq_dump_unpaired_reads_next_to_their_pair_are_skipped(tmp_path, fastq, caplog):
+    (tmp_path / "in").mkdir()
+    fastq("in/SRR1.fastq", [("u", "ACGT")], gz=False)  # fasterq-dump --split-3
+    fastq("in/SRR1_1.fastq", [("r", "ACGT")], gz=False)
+    fastq("in/SRR1_2.fastq", [("r", "TTTT")], gz=False)
+    fastq("in/SRR2.fastq", [("s", "ACGT")], gz=False)
+    samples = {s.name: s for s in discover(tmp_path / "in")}
+    assert sorted(samples) == ["SRR1", "SRR2"] and len(samples["SRR1"].pairs) == 1 and samples["SRR2"].files
+    assert (f"Skipping {tmp_path / 'in' / 'SRR1.fastq'}: the sample SRR1 is the pair SRR1_1.fastq + SRR1_2.fastq"
+            in caplog.text)
+
+
+def test_a_file_does_not_pair_with_a_link_to_itself(tmp_path, fastq, caplog):
+    d = tmp_path / "in"
+    d.mkdir()
+    fastq("in/x_R1.fastq.gz", [("r", "ACGT")])
+    (d / "x_R2.fastq.gz").symlink_to(d / "x_R1.fastq.gz")
+    assert [(s.name, s.pairs) for s in discover(d)] == [("x_R1", []), ("x_R2", [])]
+    assert (f"{d / 'x_R1.fastq.gz'} and {d / 'x_R2.fastq.gz'} are the same file (one links to the other): not "
+            "paired") in caplog.text
+    (d / "s").mkdir()
+    fastq("in/s/y_R1.fastq.gz", [("r", "ACGT")])
+    (tmp_path / "in" / "s" / "y_R2.fastq.gz").symlink_to("y_R1.fastq.gz")
+    caplog.clear()
+    sample = {s.name: s for s in discover(tmp_path / "in")}["s"]
+    assert sample.pairs == [] and [f.name for f in sample.files] == ["y_R1.fastq.gz"]  # Its reads used once
+    assert "y_R2.fastq.gz is the file" in caplog.text and "look like read mates" not in caplog.text
+
+
+def test_mates_of_different_formats_do_not_pair(tmp_path, fastq, fasta):
+    (tmp_path / "in" / "s").mkdir(parents=True)
+    fasta("in/x_R1.fasta", [("r", "ACGT")])
+    fastq("in/x_R2.fastq", [("r", "TTTT")], gz=False)
+    assert [(s.name, s.fmt, s.pairs) for s in discover(tmp_path / "in")] == [("x_R1", "fasta", []),
+                                                                            ("x_R2", "fastq", [])]
+    fasta("in/s/y_R1.fasta", [("r", "ACGT")])
+    fastq("in/s/y_R2.fastq", [("r", "TTTT")], gz=False)
+    with pytest.raises(RasherError, match="Sample s mixes fasta and fastq"):  # One sample: still an error
+        discover(tmp_path / "in")
+
+
+def test_a_single_mate_file_gets_a_pairing_hint(fastq, caplog):
+    import logging
+    with caplog.at_level(logging.INFO, logger="rasher"):
+        (sample,) = discover(fastq("x_R1.fastq.gz", [("r", "ACGT")]))
+    assert sample.name == "x_R1" and sample.pairs == []
+    assert "x_R1.fastq.gz looks like one mate of a pair: give the folder or a sample sheet" in caplog.text
+
+
+def test_single_end_sample_collides_with_samples_named_as_its_mates(tmp_path, fastq):
+    """A single-end sample deletes the X_R1 + X_R2 reads of an earlier paired run of it."""
+    for name in ("x", "x_R1", "x_R2", "y", "y_R1"):
+        fastq(f"{name}.fastq.gz", [("r", "ACGT")])
+    sheet = tmp_path / "sheet.tsv"
+    sheet.write_text("sample\tfile\ny\ty.fastq.gz\ny_R1\ty_R1.fastq.gz\n")
+    assert len(read_sample_sheet(sheet)) == 2  # One of the two: no X_R2 to delete with it
+    sheet.write_text("sample\tfile\nx\tx.fastq.gz\nx_R1\tx_R1.fastq.gz\nx_R2\tx_R2.fastq.gz\n")
+    with pytest.raises(RasherError, match="Sample names 'x', 'x_R1' and 'x_R2' collide"):
+        read_sample_sheet(sheet)
+
+
 def test_paired_sample_name_collides_with_mate_named_sample(tmp_path, fastq):
     (tmp_path / "in" / "x_R1").mkdir(parents=True)
     fastq("in/x_R1/reads.fastq.gz", [("q", "AAAA")])

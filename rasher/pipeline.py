@@ -48,6 +48,7 @@ SUMMARY_COLUMNS = [
     "Contigs", "Circular_contigs", "Assembly_length", "Largest_contig", "Assembly_N50", "Length_vs_reference",
     "Off_reference_pct", "Assembly_depth", "N_bases", "Note",
 ]
+FINGERPRINT_SEED = f"RASHER {__version__.split('.')[0]}"  # The start of the chain of the steps' fingerprints
 LOW_DEPTH = 20  # Below this estimated depth of filtered reads, a note is added
 OFF_REFERENCE = 10  # Above this percentage of a de novo assembly's bases off the reference, a note is added
 
@@ -194,7 +195,7 @@ def _same_input(res: dict, upstream: object, reads: Path | None, relocated: bool
 
 def _output_signature(path: Path | None) -> list[object] | None:
     """Size and modification time of a step's output, recorded by the next step: if the output changes (a sample
-    run again, then interrupted), the next step's result is not reused."""
+    run again, then interrupted), the next step's result is not reused; and by the step itself (_own_outputs)."""
     if path is None or not path.exists():
         return None
     st = path.stat()
@@ -206,6 +207,25 @@ def _reads_signature(st: SampleState) -> object:
     if st.reads2 is None:
         return _output_signature(st.reads)
     return [_output_signature(st.reads), _output_signature(st.reads2)]
+
+
+def _result_signature(res: dict) -> object:
+    """The output signature of a step's saved result (as _reads_signature: of both files when it is paired)."""
+    first = _output_signature(Path(res["output"])) if res.get("output") else None
+    if not res.get("output2"):
+        return first
+    return [first, _output_signature(Path(res["output2"]))]
+
+
+def _own_outputs(res: dict, relocated: bool = False) -> bool:
+    """Whether a saved result's outputs are still the files it made: the signatures recorded with it
+    ("output_signature") match them (in a moved or copied folder, `relocated`, by their sizes alone). Another
+    sample can overwrite them: a sample left out of a run (a line of the sample sheet commented out) named x_R1
+    shares its files with the R1 reads of a paired sample x. Without signatures, its outputs must exist."""
+    if "output_signature" not in res:
+        return _outputs_exist({"": res})
+    saved, current = res["output_signature"], _result_signature(res)
+    return saved == current or (relocated and _size_only(saved) == _size_only(current))
 
 
 def _size_only(signature: object) -> object:
@@ -828,7 +848,9 @@ def _run(s: Settings, started: float) -> int:
               "filter": "Filtering reads with fastp",
               "assemble": {"samtools": "Building the templated consensus with samtools",
                            "spades": "Assembling with SPAdes", "skesa": "Assembling with SKESA"}[s.assembler]}
-    fingerprint = __version__.split(".")[0]
+    # The seed of the fingerprints: the tool and its major version. BACoN, whose parameters are those of RASHER for
+    # some steps, seeds its own with its major version alone: its output folders do not resume under RASHER.
+    fingerprint = FINGERPRINT_SEED
     refreshed: set[str] = set()  # Samples whose output changed in this run: their later steps must run again
     for i, step in enumerate(STEPS[:-1]):
         fingerprint = _fingerprint(fingerprint, params[step])
@@ -849,10 +871,11 @@ def _run(s: Settings, started: float) -> int:
                    if name in inputs and not res.get("failed") and name not in refreshed
                    and (_same_files(res.get("input"), inputs[name]) if step == "bait"
                         else _same_input(res, upstream.get(name), reads.get(name), relocated))
-                   and _outputs_exist({name: res})
+                   and _own_outputs(res, relocated)
                    and (not bam or res.get("bam") and (folder["bait"] / f"{name}.bam").is_file())}
-        for name, res in results.items():  # The input's signature, as it is here: a copy's files, earlier versions
+        for name, res in results.items():  # The signatures, as they are here: a copy's files, earlier versions
             res["input" if step == "bait" else "upstream"] = upstream[name]
+            res["output_signature"] = _result_signature(res)
         todo = [st for st in states if not st.failed and st.sample.name not in results]
         if not todo:
             log.info("%s: already done, skipping", labels[step])
@@ -876,6 +899,8 @@ def _run(s: Settings, started: float) -> int:
                         res["bam"] = True
                 elif not res.get("failed"):
                     res["upstream"] = upstream[name]
+                if not res.get("failed"):  # Its own outputs: reused only while they are still these files
+                    res["output_signature"] = _result_signature(res)
                 with lock:
                     results[name] = res
                     checkpoints.save(step, fp, {**absent, **results})
@@ -884,6 +909,11 @@ def _run(s: Settings, started: float) -> int:
             new = _run_parallel(todo, functions[step], s, step, logs / LOG_FOLDERS[step], on_done=done)
             refreshed |= {name for name, res in new.items() if not res.get("failed")}
         _apply(states, results, step)
+        if step == "bait":  # Not filtered in this run: fastp's reports of an earlier run would look like its own
+            for st in states:
+                if st.failed:
+                    for suffix in (".fastp.json", ".fastp.html"):
+                        (logs / LOG_FOLDERS["filter"] / f"{st.sample.name}{suffix}").unlink(missing_ok=True)
         if all(st.failed for st in states):
             _finish(s, states, tools, None, started, annotation, metadata, regions)
             raise RasherError(f"All samples failed at the {step} step; see the logs in {logs}")
@@ -1096,7 +1126,8 @@ def _finish(s: Settings, states: list[SampleState], tools: dict[str, str], compa
         "reference": _reference_info(s, regions),
         "annotation": annotation,
         "metadata": metadata,
-        "samples": {st.sample.name: {"files": [str(f) for f in st.sample.files], "status": st.failed or "ok"}
+        "samples": {st.sample.name: {"files": [str(f) for f in st.sample.files], "paired": bool(st.sample.pairs),
+                                     "status": st.failed or "ok"}
                     for st in states},
         "comparison": comparison,
     }

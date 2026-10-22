@@ -27,6 +27,7 @@ from rasher.seqio import (
     read_stats,
     split_extension,
     subsample_reads,
+    verify_pairs,
     write_fasta,
 )
 from rasher.tools import ToolError, run, which
@@ -59,6 +60,19 @@ def _read_outputs(out_dir: Path, name: str, fmt: str, paired: bool) -> list[Path
     return [out_dir / f"{name}{tag}{reads_suffix(fmt)}" for tag in (("_R1", "_R2") if paired else ("",))]
 
 
+def _clear_other_outputs(out_dir: Path, name: str, fmt: str, paired: bool) -> None:
+    """Delete the sample's reads files of an earlier run in another shape (single-end or paired) or format, which
+    would sit next to this run's. X_R1 and X_R2 files go only together: a lone X_R1 file is not X's (its pairs
+    are written and deleted together) but may be the reads of a sample named X_R1 (a single-end sample X next to
+    samples X_R1 and X_R2 is refused: rasher.samples)."""
+    current = _read_outputs(out_dir, name, fmt, paired)
+    for other_fmt in ("fastq", "fasta"):
+        for other in (_read_outputs(out_dir, name, other_fmt, shape) for shape in (False, True)):
+            if other != current and all(path.exists() for path in other):
+                for path in other:
+                    path.unlink()
+
+
 # ---------------------------------------------------------------------------------------------------------------
 # 1. Baiting
 # ---------------------------------------------------------------------------------------------------------------
@@ -82,6 +96,7 @@ def bait_minimap2(sample: Sample, reference: Path, out_dir: Path, log_dir: Path,
     log_file = log_dir / f"{sample.name}.log"
     options = ["sr", "--secondary=no", "-t", str(threads), str(reference)]
     outputs = _read_outputs(out_dir, sample.name, sample.fmt, bool(sample.pairs))
+    _clear_other_outputs(out_dir, sample.name, sample.fmt, bool(sample.pairs))
     bam, paf = out_dir / f"{sample.name}.bam", out_dir / f".{sample.name}.paf"
     try:
         names: set[str] = set()
@@ -128,13 +143,17 @@ _BBDUK_COUNTS = re.compile(r"^(Input|Contaminants):\s+(\d+) reads\s.*?(\d+) base
 def bait_bbduk(sample: Sample, reference: Path, out_dir: Path, log_dir: Path, threads: int, kmer: int,
                hdist: int, memory_gb: int) -> StepResult:
     """Keep the reads sharing at least one k-mer (up to `hdist` mismatches) with the reference; of paired reads,
-    the pairs with a mate that does (BBDuk's default for pairs)."""
+    the pairs with a mate that does (BBDuk's default for pairs).
+
+    BBDuk pairs the reads of R1 and R2 by position, without looking at their names: the pairs it keeps are
+    checked to be mates (`verify_pairs`)."""
     out_dir.mkdir(parents=True, exist_ok=True)
     log_file = log_dir / f"{sample.name}.log"
     paired = bool(sample.pairs)
     tags = ("_R1", "_R2") if paired else ("",)
     mates = [[pair[i] for pair in sample.pairs] for i in (0, 1)] if paired else [sample.files]
     outputs = _read_outputs(out_dir, sample.name, sample.fmt, paired)
+    _clear_other_outputs(out_dir, sample.name, sample.fmt, paired)
     # BBDuk takes one input file (of each mate): several are merged first
     merged = [out_dir / f".{sample.name}.merged{tag}{reads_suffix(sample.fmt)}" if len(files) > 1 else None
               for tag, files in zip(tags, mates)]
@@ -161,7 +180,17 @@ def bait_bbduk(sample: Sample, reference: Path, out_dir: Path, log_dir: Path, th
             fh.seek(start)
             counts = {m.group(1): (int(m.group(2)), int(m.group(3))) for m in _BBDUK_COUNTS.finditer(fh.read())}
         total = ReadStats(*counts["Input"]) if "Input" in counts else None
-        return _bait_result(outputs, total, read_stats(outputs))
+        if paired:
+            try:
+                kept = verify_pairs(*outputs)
+            except RasherError as exc:
+                raise SampleFailed(f"the reads BBDuk kept are not pairs of mates ({exc}): the R1 and R2 input "
+                                   "files do not list the same reads in the same order",
+                                   {"Raw_reads": total.reads if total else "NA",
+                                    "Raw_bases": total.bases if total else "NA"}) from None
+        else:
+            kept = read_stats(outputs)
+        return _bait_result(outputs, total, kept)
     except BaseException as exc:
         for out in outputs:  # A failed (or interrupted) sample leaves no reads, partial or stale
             out.unlink(missing_ok=True)
@@ -204,12 +233,17 @@ def filter_fastp(name: str, reads: Path, reads2: Path | None, fmt: str, out_dir:
     mate does), then keep an evenly spread subset of about `target_bases` (`subsample_reads`).
 
     fastp cannot read fasta: fasta reads (or pairs) shorter than `min_length` are dropped here instead, without
-    trimming. fastp's report (<sample>.fastp.json, for MultiQC, and .html) goes to `log_dir`.
+    trimming. fastp's report (<sample>.fastp.json, for MultiQC, and .html) goes to `log_dir`; that of an earlier
+    run is deleted first (fasta reads, or a failed fastp, would leave it stale).
     """
     out_dir.mkdir(parents=True, exist_ok=True)
     log_file = log_dir / f"{name}.log"
+    report = [log_dir / f"{name}.fastp.json", log_dir / f"{name}.fastp.html"]
+    for old in report:
+        old.unlink(missing_ok=True)
     paired = reads2 is not None
     outputs = _read_outputs(out_dir, name, fmt, paired)
+    _clear_other_outputs(out_dir, name, fmt, paired)
     trimmed = _read_outputs(out_dir, f".{name}.trimmed", fmt, paired)
     out2, trimmed2 = (outputs[1], trimmed[1]) if paired else (None, None)
     try:
@@ -218,8 +252,8 @@ def filter_fastp(name: str, reads: Path, reads2: Path | None, fmt: str, out_dir:
         else:
             mates = ["--in2", str(reads2), "--out2", str(trimmed2)] if paired else []
             run(["fastp", "--in1", str(reads), "--out1", str(trimmed[0]), *mates, "--length_required",
-                 str(min_length), "--thread", str(threads), "--json", str(log_dir / f"{name}.fastp.json"),
-                 "--html", str(log_dir / f"{name}.fastp.html")], log_file, what=f"(filtering {name})")
+                 str(min_length), "--thread", str(threads), "--json", str(report[0]), "--html", str(report[1])],
+                log_file, what=f"(filtering {name})")
         subsample_reads(trimmed[0], trimmed2, outputs[0], out2, target_bases)
         stats = read_stats(outputs)
         if stats.reads == 0:

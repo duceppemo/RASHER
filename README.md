@@ -17,7 +17,7 @@ A rasher is a thin slice of bacon: RASHER is the short-read fork of
 ```
 reads ──► 1. bait (minimap2) ──► 2. filter (fastp) ──► 3. assemble ──────────────► 4. compare
                                                        templated: samtools consensus    SNPs: minimap2, SKA2 or Parsnp
-                                                       de novo:   SPAdes                tree: FastTree or IQ-TREE
+                                                       de novo:   SPAdes or SKESA       tree: FastTree or IQ-TREE
 ```
 
 ## Quick start
@@ -72,7 +72,8 @@ If RASHER is useful in your work, please cite it (see [`CITATION.cff`](CITATION.
 
 > Duceppe, M.-O. (2026). RASHER: Bait, Assemble and Compare Illumina short reads (v0.1.0).
 
-and the programs it runs: minimap2, fastp, samtools or SPAdes, SKA2 or Parsnp, and FastTree or IQ-TREE
+and the programs it runs: minimap2, fastp, samtools or SPAdes or SKESA, SKA2 or Parsnp, and FastTree or
+IQ-TREE
 ([references](https://github.com/duceppemo/RASHER/wiki/Methods#references)). RASHER is a fork of
 [BACoN](https://github.com/duceppemo/BACoN) (Duceppe, 2026, doi:10.5281/zenodo.22970412).
 

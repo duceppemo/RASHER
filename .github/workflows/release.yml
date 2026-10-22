@@ -32,7 +32,9 @@ jobs:
           import os, re
           version = os.environ["GITHUB_REF_NAME"].lstrip("v")
           text = open("CHANGELOG.md").read()
-          m = re.search(rf"## {re.escape(version)}[^\n]*\n(.*?)(?=\n## |\Z)", text, re.S)
+          # RASHER's own sections: those above the first rule or top-level heading (the parent tool's history)
+          text = re.split(r"\n(?:---|# )", text, maxsplit=1)[0]
+          m = re.search(rf"## {re.escape(version)}(?=[ \n])[^\n]*\n(.*?)(?=\n## |\Z)", text, re.S)
           print(m.group(1).strip() if m else f"Release {version}")
           PY
       - uses: softprops/action-gh-release@v3

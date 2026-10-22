@@ -185,6 +185,40 @@ def test_extract_pairs_desync_is_an_error(fastq, tmp_path):
         extract_pairs([(r1, r2)], {"a"}, tmp_path / "o1.fastq.gz", tmp_path / "o2.fastq.gz")
 
 
+@pytest.mark.parametrize("name1, name2, expected", [
+    ("a", "a", True), ("a/1", "a/2", True), ("a/1", "a", True), ("SRR1.0.1", "SRR1.0.2", True),
+    ("SRR1.0.2", "SRR1.0.1", True), ("x_1", "x_2", True), ("a", "b", False), ("SRR1.0.1", "SRR1.1.2", False),
+    ("SRR1.1", "SRR1.3", False), ("SRR1.0.1", "SRR1.0.1/2", True), ("a.12", "a.21", False), ("x1", "y2", False),
+    ("a.1", "a.3", False),
+])
+def test_mates_match(name1, name2, expected):
+    from rasher.seqio import mates_match
+    assert mates_match(name1, name2) is expected
+
+
+def test_extract_pairs_with_fastq_dump_readids_names(fastq, tmp_path):
+    """fastq-dump --readids: SRR1.<spot>.1 and SRR1.<spot>.2, which aligners report as they are."""
+    from rasher.seqio import extract_pairs, read_records
+    r1 = fastq("r1.fastq.gz", [(f"SRR1.{i}.1", "ACGT") for i in range(3)])
+    r2 = fastq("r2.fastq.gz", [(f"SRR1.{i}.2", "TTTT") for i in range(3)])
+    out1, out2 = tmp_path / "o1.fastq.gz", tmp_path / "o2.fastq.gz"
+    total, kept = extract_pairs([(r1, r2)], {"SRR1.0.1", "SRR1.2.2"}, out1, out2)  # A hit on either mate
+    assert (total.reads, kept.reads) == (6, 4)
+    assert [r.name for r in read_records(out1)] == ["SRR1.0.1", "SRR1.2.1"]
+    assert [r.name for r in read_records(out2)] == ["SRR1.0.2", "SRR1.2.2"]
+
+
+def test_verify_pairs(fastq):
+    from rasher.seqio import verify_pairs
+    r1 = fastq("r1.fastq.gz", [("a/1", "ACGT"), ("b/1", "CC")])
+    stats = verify_pairs(r1, fastq("r2.fastq.gz", [("a/2", "TTTTTT"), ("b/2", "A")]))
+    assert (stats.reads, stats.bases) == (4, 13)
+    with pytest.raises(RasherError, match="desynchronise at read 1: 'a/1' vs 'b/2'"):
+        verify_pairs(r1, fastq("shuffled.fastq.gz", [("b/2", "A"), ("a/2", "TTTTTT")]))
+    with pytest.raises(RasherError, match="same number of reads"):
+        verify_pairs(r1, fastq("short.fastq.gz", [("a/2", "TTTTTT")]))
+
+
 def test_extract_pairs_unequal_counts_is_an_error(fastq, tmp_path):
     from rasher.seqio import extract_pairs
     r1 = fastq("r1.fastq.gz", [("a", "ACGT"), ("b", "CCCC")])
@@ -199,6 +233,10 @@ def test_extract_reads_canonicalises_names(fastq, tmp_path):
     out = tmp_path / "o.fastq.gz"
     total, kept = extract_reads([reads], {"a"}, out)
     assert (total.reads, kept.reads) == (2, 1) and [r.name for r in read_records(out)] == ["a/1"]
+    # Both mates of an interleaved file share their canonical name: kept together when either aligned
+    interleaved = fastq("i.fastq.gz", [("a/1", "ACGT"), ("a/2", "TTTT"), ("b/1", "CCCC"), ("b/2", "GGGG")])
+    extract_reads([interleaved], {"b"}, out)
+    assert [r.name for r in read_records(out)] == ["b/1", "b/2"]
 
 
 def test_subsample_pairs_whole_and_deterministic(fastq, tmp_path):

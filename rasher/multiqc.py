@@ -20,6 +20,7 @@ from rasher.metadata import Metadata, shown_name
 from rasher.newick import parse
 
 OPTIONAL_COLUMNS = ("Off_reference_pct",)
+# Not Circular_contigs (summary.tsv): SPAdes and SKESA flag no contig circular, and a templated assembly is NA
 SAMPLE_HEADERS = {
     "Status": {"title": "Status", "description": "ok, or the step at which the sample failed"},
     "Raw_reads": {"title": "Raw reads", "description": "Input reads", "format": "{:,.0f}", "scale": "Greys",
@@ -36,8 +37,6 @@ SAMPLE_HEADERS = {
                   "format": "{:,.1f}", "scale": "RdYlGn", "min": 0},
     "Contigs": {"title": "Contigs", "description": "Contigs in the assembly", "format": "{:,.0f}",
                 "scale": "Oranges"},
-    "Circular_contigs": {"title": "Circular", "description": "Contigs reported as circular (de novo assemblers)",
-                         "format": "{:,.0f}"},
     "Assembly_length": {"title": "Length", "description": "Assembly length", "suffix": " bp",
                         "format": "{:,.0f}", "scale": "Greys"},
     "Length_vs_reference": {"title": "x ref", "description": "Assembly length / reference length",

@@ -16,7 +16,8 @@ def test_version_matches_pyproject():
     v = rasher.__version__
     assert f"\nversion: {v}\n" in (root / "CITATION.cff").read_text()
     assert f"Illumina short reads (v{v})." in (root / "README.md").read_text()
-    for doc in (root / "README.md", root / "docs" / "wiki" / "Installation.md"):  # Download and pip lines
+    for doc in (root / "README.md", root / "docs" / "wiki" / "Installation.md",
+                root / "docs" / "wiki" / "Example.md"):  # Download and pip lines
         text = doc.read_text()
         assert set(re.findall(r"refs/tags/v([\d.]+)\.tar\.gz", text)) == {v}, doc
         assert set(re.findall(r"RASHER-([\d.]+)/example", text)) == {v}, doc

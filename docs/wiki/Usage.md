@@ -116,7 +116,9 @@ the same marker (`X_1` does not pair with `X_R2`). A file whose mate is missing,
 is not paired: in a folder, each such file is a single-end sample named after its whole stem (`X_R1`). Within one
 sample (a subfolder, or a sample's files in a sheet), pairs and unpaired files do not mix: the files without a
 mate next to the sample's pairs are skipped, with a warning naming them (list them as a sample of their own to
-use them). A sample with several pairs (lanes, runs) keeps each pair as a pair. In a flat folder, each lane of a
+use them). A sample with several pairs (lanes, runs) keeps each pair as a pair. A sample whose files carry mate
+markers but form no pair at all (a duplicate mate file, or mates in different folders) is processed
+single-end, with a warning. In a flat folder, each lane of a
 bcl2fastq run is its own sample (`X_S1_L001`, `X_S1_L002`): put a sample's lanes in a subfolder, or list them in
 a sample sheet, to make one sample of them.
 

@@ -23,7 +23,7 @@ Pairs of genomes with exactly the true SNP distance:
 What the record establishes:
 
 - The templated consensus is error-free where 150 bp pairs map uniquely, and says **N, never a wrong base**,
-  where they do not: over a long inverted repeat at low depth (reads there map with MAPQ 0), across a
+  where they do not (the one exception is a 50/50 mixture, where either allele may be picked): over a long inverted repeat at low depth (reads there map with MAPQ 0), across a
   deletion longer than the insert, at mixed (heteroplasmic) sites from a 5% minor fraction, and at NUMT/NUPT
   sites. The minor allele of a mixture is never reported below a 50/50 tie.
 - NUPT reads are baited with the organelle reads (up to 16% of the filtered bases at 25x nuclear depth), and
@@ -32,10 +32,11 @@ What the record establishes:
   assembly separates the copies into their own contigs and SKA2's distances were exact.
 - SPAdes `--isolate` assembled every clean sample without errors; it collapses the inverted repeat and
   tandem arrays to one copy (the templated assembly keeps them apart).
-- SKESA behaved as its design suggests — error-free contigs, but it breaks at repeats: the plastome IR
-  collapses, ~125 bp are trimmed at junctions, and it beat SPAdes on no scenario. It stays available as
-  `-a skesa` while the real-data benchmark runs; expect it to be dropped unless that overturns the
-  simulations.
+- SKESA behaved as its design suggests — it breaks at repeats: the plastome IR collapses, about 20 bp are
+  lost at each contig end, and 20 NUPT sites go missing in one sample. Its contigs are error-free on clean
+  samples but not under contamination or strong mixtures (up to 257 mismatches at 25x nuclear depth). With
+  its default SKA2 pairing it beat SPAdes on no scenario. It stays available as `-a skesa` while the
+  real-data benchmark runs; expect it to be dropped unless that overturns the simulations.
 
 ## Real-data benchmark
 

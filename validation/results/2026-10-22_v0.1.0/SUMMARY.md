@@ -35,12 +35,12 @@ Wall times of a full run (plastid, 9 samples, `-t 16`): samtools 7.8 s, SPAdes 2
    samples, numt n01: 0 errors/100 kb, full length. The rdna tandem array — which de novo assemblers collapse
    to a third of its length — is perfectly reproduced, since the template keeps the copies apart.
 2. **150 bp pairs cannot see over long repeats or deletions; the consensus says N, never a wrong base.**
-   - The 10x plastid sample (s09) calls N over most of the 10 kb inverted repeat (2,053 N, ~95% in the IR):
-     reads mapping equally to both IR copies get MAPQ 0, and at low depth the consensus has nothing left.
-     At 50x the IR is called correctly.
+   - The 10x plastid sample (s09) calls N over most of the inverted repeat: 11,362 N bases, 97% of them in
+     the two IR copies (reads mapping equally to both copies get MAPQ 0, and at low depth the consensus has
+     nothing left). At the scenario's 40x the IR is called correctly.
    - The 1.5 kb deletion sample (s08) keeps an N run the size of the deletion instead of removing it (no
-     pair spans it; BACoN's long reads did). The scorer counts those N as inserted bases, which is why s08
-     and s09 carry all the "errors" of the templated plastid table.
+     pair spans it; BACoN's long reads did). The scorer counts s08's N run as inserted bases and part of
+     s09's as mismatches, which is why those two carry all the "errors" of the templated plastid table.
    - Knock-on effect: under the core rule (`--ska-min-freq 1`), one low-depth sample's N can drop another
      sample's SNP sites. Every wrong templated plastid pair is an s08 pair 3 too low, through s09's Ns.
 3. **Heteroplasmy: the consensus never reports the minor allele below a 50% tie.** Minor sites go N from a
@@ -52,18 +52,22 @@ Wall times of a full run (plastid, 9 samples, `-t 16`): samtools 7.8 s, SPAdes 2
    while removing the rest of the nuclear reads (119,788 → 192). The NUPT allele never reaches the
    consensus (0 sites across all samples) — the mixed pileup is called N — but those N also hide the
    sample's own SNPs inside copied segments: distances come out 2–4 where the truth is 3–7. De novo
-   assembly separates the NUPT copies into their own contigs instead: **SPAdes + SKA2 scores 21/21 exact**
-   (the off-reference warning flags the extra contigs).
+   assembly separates the NUPT copies into their own contigs instead: **SPAdes + SKA2 scores 21/21 exact**.
+   (The extra NUPT contigs are 0.3–2.1% off-reference — below the 10% note threshold, so they are not
+   flagged; whether the threshold should drop is a question for the real-data benchmark.)
 5. **SPAdes (`--isolate`) assembles without errors on clean samples** and its distances with SKA2 are exact
    on heteroplasmy and numt; with minimap2 they suffer where mixtures fragment the assembly (63–76 contigs
    at 40–50% minor). On the plastid scenario SPAdes + minimap2 is the only 45/45 — the collapsed IR aligned
    to the reference recovers the IR SNPs at both positions.
 6. **SKESA confirms the expectation that motivated testing it** (conservative, breaks at repeats): it
-   collapses the plastome IR and trims ~125 bp at every junction/molecule end (59,954 of 70,000 bp;
-   9 contigs at 10x), collapses the rdna array, and loses 20 NUPT-containing regions in n06. Its contigs
-   are error-free, but on no scenario does it beat SPAdes, and its distances are worse on rdna (minimap2),
-   plastid and numt. **Recommendation: drop SKESA before release unless the real-data benchmark overturns
-   this** (the user decides; `-a skesa` costs little to keep while the benchmark runs).
+   collapses the plastome IR (59,954 of 70,000 bp; 9 contigs at 10x) and the rdna array, loses about 20 bp
+   at contig ends (126 bp over the three linear molecules), and 20 NUPT sites go missing in n06. Its
+   contigs are error-free on the clean samples but not under contamination or strong mixtures (numt n04 at
+   25x nuclear: 257 mismatches, 3,221 duplicated bp; heteroplasmy h050: 6 mismatches). With its default
+   SKA2 pairing it beats SPAdes on no scenario (with minimap2 its errors are smaller than SPAdes' on the
+   mixture scenarios, but both are behind the SKA2 pairing there). **Recommendation: drop SKESA before
+   release unless the real-data benchmark overturns this** (the user decides; `-a skesa` costs little to
+   keep while the benchmark runs).
 7. **Defaults look right so far**: templated + minimap2 as the overall default (fastest, exact or
    conservative everywhere except numt-heavy genomes), SPAdes + SKA2 as the de novo pairing (and the better
    choice where NUPTs/NUMTs are expected). To be confirmed on real data (Arabidopsis accessions HiSeq,

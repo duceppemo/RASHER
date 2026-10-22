@@ -36,9 +36,13 @@ the copy's ends carry nuclear sequence. What they do depends on their depth rela
 - De novo assemblers may assemble the copies, or their junctions with nuclear DNA, as extra contigs:
   `Off_reference_pct` flags assemblies with much sequence that aligns nowhere on the reference.
 
-How much this matters for short reads is to be established by the short-read validation. Use enriched DNA when
-possible; with whole-genome reads, compare `Est_depth` with the depth of the nuclear genome, and look at the
-`N` bases of templated assemblies and the off-reference notes of de novo ones.
+The simulated [validation](Validation) measured it: baiting keeps nearly all NUPT reads (up to 16% of the
+filtered bases at 25x nuclear depth), the templated consensus never calls the NUPT allele — it calls `N` —
+but those `N` can hide the sample's own SNPs inside the copied segments, biasing its distances low. **Where
+NUMTs/NUPTs are expected, use `-a spades`**: the copies assemble into their own contigs and SKA2's distances
+were exact. Use enriched DNA when possible; with whole-genome reads, compare `Est_depth` with the depth of
+the nuclear genome, and look at the `N` bases of templated assemblies and the off-reference notes of de novo
+ones.
 
 ## 2. Filtering
 
@@ -74,9 +78,9 @@ fastp needs fastq: reads given as fasta skip it. RASHER drops the fasta reads (o
 | Needs | a reference close to the samples (same species) | depth | depth |
 
 **Which one?** For comparing samples of one species against a good reference, which is the usual aim of
-RASHER, use the templated assembly (the default): it is the fastest, and it keeps the reference's coordinates;
-how its SNP distances compare with those of SPAdes and SKESA on short reads is to be established by the
-short-read [validation](Validation). Use a de novo assembler to
+RASHER, use the templated assembly (the default): it is the fastest, it keeps the reference's coordinates, and on
+the simulated [validation](Validation) its SNP distances were exact or conservative everywhere except
+NUPT-rich genomes (above). Use a de novo assembler to
 look at the structure of the genomes, when the reference is distant, or to check the templated results
 independently. SKESA is conservative: it ends a contig at a repeat rather than guess through it, so an
 organelle's inverted repeats split its assembly into several contigs. It is offered as a candidate under
@@ -87,8 +91,9 @@ evaluation ([Validation](Validation)), and is not installed with RASHER's enviro
 `samtools consensus -a -X hiseq --show-ins yes --show-del no -d 3 -C 20` writes the consensus: every position of
 each reference sequence that has reads, with the Illumina error profile (`-X hiseq`), the sample's insertions
 shown and its deletions removed (so the consensus follows the sample, not the reference), `N` where fewer than
-three reads cover the position (`-d 3`) or where no base reaches a call quality of 20 (`-C 20`; BACoN 0.4.1
-raised it from samtools' default of 10, so that a base called from a few mixed reads is `N` rather than a SNP).
+three reads cover the position (`-d 3`) or where no base reaches a call quality of 20 (`-C 20`; raised
+from samtools' default of 10 in BACoN just before the fork, so that a base called from a few mixed reads is
+`N` rather than a SNP).
 Ambiguity codes become `N`. Its limits:
 
 - It shows the sample only where its reads align to the reference; a region absent from the reference
@@ -97,9 +102,10 @@ Ambiguity codes become `N`. Its limits:
 - Where fewer than three reads align, or the reads disagree, the consensus has `N` (`N_bases`, and a note in
   `summary.tsv`). This is `--template-gaps n`, the default; with `--template-gaps reference`, uncovered positions
   at the ends of each sequence get the reference's bases instead (inner gaps stay `N`).
-- In an inverted repeat both copies receive the same reads (minimap2 places a read that fits both copies on one
-  of them); a difference between the two copies of one sample cannot be seen (the two copies are usually
-  identical in chloroplasts).
+- In an inverted repeat a 150 bp pair fits both copies, and minimap2 places it on one of them with mapping
+  quality 0: at good depth each copy is called from its share of the mixed reads (a difference between the
+  two copies of one sample cannot be seen; they are usually identical in chloroplasts), and at low depth the
+  consensus goes `N` across the repeat.
 
 **De novo assemblies.** SPAdes runs with `--isolate` (no read error correction, for high-coverage isolate data;
 fasta reads assemble as well), on the pairs (`-1`/`-2`) or the single reads (`-s`), with its share of `-m`. Its
@@ -125,10 +131,12 @@ Limits of the de novo assemblies:
 ### Heteroplasmy
 
 A sample with two organelle haplotypes gives one consensus. The templated assembly calls the major allele where
-it dominates, and `N` where the mixture leaves no base with a call quality of 20; it never reports the minor
-allele. A de novo assembler may give both alleles, in a bubble of the graph or in separate contigs, which can add
-false SNPs. The minor fractions at which this happens with short reads are to be established by the short-read
-validation. RASHER does not detect heteroplasmy: `N` bases in a templated assembly with good depth are a hint of
+it dominates, and `N` where the mixture leaves no base with a call quality of 20; below a 50/50 tie it
+never reports the minor allele. A de novo assembler may give both alleles, in a bubble of the graph or in
+separate contigs, which can add false SNPs. The simulated [validation](Validation) measured it: minor sites
+start going `N` from a 5% minor fraction, most are `N` by 20%, the SNP distances stay exact up to a 40%
+minor fraction, and at a 50/50 tie either allele may be picked; SPAdes assemblies fragment at 40-50% but
+SKA2's distances on them stayed exact throughout. RASHER does not detect heteroplasmy: `N` bases in a templated assembly with good depth are a hint of
 a mixture.
 
 ## 4. Comparison
@@ -159,8 +167,8 @@ a mixture.
   A SNP in an inverted repeat is counted at both of its positions (twice), as a read-mapping pipeline counts it;
   SKA2 counts it once. Every difference an assembly carries counts, including the errors of a de novo assembly
   that SKA2's k-mers skip: hence minimap2 for templated assemblies and SKA2 for de novo ones by default
-  (`--snp-method auto`, as in BACoN 0.4). How the methods compare on short-read assemblies is to be established by
-  the short-read [validation](Validation).
+  (`--snp-method auto`, as in BACoN 0.4). The simulated short-read [validation](Validation) held these
+  defaults up.
 - **Parsnp** (`--snp-method parsnp`) aligns the core genome of the assemblies to the reference. RASHER runs it
   with `-c`, which turns off Parsnp's divergence (MUMi) filter: by default Parsnp drops genomes it finds too
   divergent, such as a low-depth sample. A genome much shorter than the reference can still make Parsnp fail, or

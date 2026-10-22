@@ -104,13 +104,13 @@ ANNOTATION_COPIES = ("annotation.gb", "annotation.gff3")  # The copy made by the
 TABLE_COLUMNS = [
     ("Sample", "Sample"), ("Status", "Status"), ("Raw_reads", "Raw reads"), ("Baited_reads", "Baited reads"),
     ("Baited_pct", "Baited %"), ("Filtered_reads", "Filtered reads"),
-    ("Filtered_N50", "Read N50"), ("Est_depth", "Depth"), ("Contigs", "Contigs"), ("Circular_contigs", "Circular"),
-    ("Assembly_length", "Length"), ("Length_vs_reference", "× ref"), ("Off_reference_pct", "Off ref %"),
-    ("N_bases", "N bases"), ("Note", "Note"),
+    # Not Circular_contigs (summary.tsv): SPAdes and SKESA flag no contig circular, and a templated assembly is NA
+    ("Filtered_N50", "Read N50"), ("Est_depth", "Depth"), ("Contigs", "Contigs"), ("Assembly_length", "Length"),
+    ("Length_vs_reference", "× ref"), ("Off_reference_pct", "Off ref %"), ("N_bases", "N bases"), ("Note", "Note"),
 ]
 OPTIONAL_COLUMNS = {"Off_reference_pct"}  # Shown only when a sample has a value
 NUMERIC = {"Raw_reads", "Baited_reads", "Baited_pct", "Filtered_reads", "Filtered_N50", "Est_depth", "Contigs",
-           "Circular_contigs", "Assembly_length", "Length_vs_reference", "Off_reference_pct", "N_bases"}
+           "Assembly_length", "Length_vs_reference", "Off_reference_pct", "N_bases"}
 
 esc = html.escape
 log = logging.getLogger(__name__)
@@ -1219,6 +1219,12 @@ def _fasta_samples(info: dict) -> tuple[int, int]:
     return fasta, len(samples)
 
 
+def _paired_samples(info: dict) -> bool:
+    """Whether the run had a paired sample (run_info.json records each sample's pairing)."""
+    return any(isinstance(sample, dict) and sample.get("paired") is True
+               for sample in (info.get("samples") or {}).values())
+
+
 def _num(value: object, default: float) -> float:
     return value if isinstance(value, (int, float)) and not isinstance(value, bool) else default
 
@@ -1249,19 +1255,22 @@ def methods_text(info: dict, rows: list[dict[str, str]] | None = None,
     ref_desc = html.escape(Path(ref.get('file') or s.get('reference') or 'the reference').name)
     if ref.get("length"):
         ref_desc += f", {ref['length']:,} bp"
+    paired = _paired_samples(info)
+    pairs = "; read pairs were kept whole when either mate matched" if paired else ""
     if s.get("baiting") == "bbduk":
         hdist = s.get("hdist", 2)  # 2 before 0.3.3
         mismatches = {0: "no mismatch", 1: "up to one mismatch"}.get(hdist, f"up to {hdist} mismatches")
         parts.append(f"Reads sharing a {s.get('kmer', 31)}-mer ({mismatches}) with the reference "
-                     f"({ref_desc}) were extracted with BBDuk{_tool(info, 'bbduk.sh')}.")
+                     f"({ref_desc}) were extracted with BBDuk{_tool(info, 'bbduk.sh')}{pairs}.")
     else:
         parts.append(f"Reads aligning to the reference ({ref_desc}) were extracted with "
-                     f"minimap2{_tool(info, 'minimap2')} (-x sr).")
+                     f"minimap2{_tool(info, 'minimap2')} (-x sr){pairs}.")
     size = "the given genome size" if s.get("genome_size") else "the reference length"
     min_length, depth = _num(s.get("min_read_length"), 50), _num(s.get("target_depth"), 100)
     fastq_text = (f"reads shorter than {min_length:g} bp or failing fastp's quality filters were removed and "
-                  f"adapters trimmed with fastp{_tool(info, 'fastp')}; the reads (pairs kept whole) were then "
-                  f"subsampled evenly to at most {depth:g}x of {size}")
+                  f"adapters trimmed with fastp{_tool(info, 'fastp')}; the reads"
+                  f"{' (pairs kept whole)' if paired else ''} were then subsampled evenly to at most {depth:g}x "
+                  f"of {size}")
     fasta_text = (f"reads in fasta files were filtered by length (at least {min_length:g} bp) and subsampled "
                   f"evenly to at most {depth:g}x of {size} (fasta reads carry no qualities)")
     fasta, total = _fasta_samples(info)

@@ -477,3 +477,171 @@ def test_templated_assembly_aligns_pairs_as_pairs_with_the_illumina_profile(tmp_
                             threads=1, reference_length=4, fill_gaps=False)
     assert calls[0][0][:3] == ["minimap2", "-ax", "sr"] and calls[0][0][-3:] == [str(reference), str(r1), str(r2)]
     assert calls[2][calls[2].index("-X") + 1] == "hiseq"
+
+
+def test_minimap2_bait_of_fastq_dump_readids_pairs(tmp_path, monkeypatch):
+    """fastq-dump --readids names the mates SRR1.<spot>.1 and SRR1.<spot>.2; minimap2 reports them as they are."""
+    import rasher.steps as steps
+    from rasher.samples import Sample
+    from rasher.seqio import read_records
+    r1 = _write_reads(tmp_path / "x_1.fq", [(f"SRR1.{i}.1", "ACGT" * 10) for i in range(3)], "fastq")
+    r2 = _write_reads(tmp_path / "x_2.fq", [(f"SRR1.{i}.2", "TTGCA" * 10) for i in range(3)], "fastq")
+    monkeypatch.setattr(steps, "run", _fake_minimap2({"SRR1.0.1", "SRR1.2.2"}, []))
+    res = steps.bait_minimap2(Sample("s", [r1, r2], "fastq", [(r1, r2)]), tmp_path / "ref.fa", tmp_path / "out",
+                              tmp_path, 1, keep_bam=False)
+    assert [r.name for r in read_records(res.output)] == ["SRR1.0.1", "SRR1.2.1"]
+    assert [r.name for r in read_records(res.output2)] == ["SRR1.0.2", "SRR1.2.2"]
+
+
+def test_minimap2_bait_failing_at_the_bam_leaves_neither_reads_nor_bam(tmp_path, monkeypatch):
+    from pathlib import Path
+
+    import rasher.steps as steps
+    from rasher.samples import Sample
+    from rasher.tools import ToolError
+    reads = _write_reads(tmp_path / "r.fq", [("x", "ACGT" * 10)], "fastq")
+    mapping = _fake_minimap2({"x"}, [])
+
+    def run(cmds, log_file, **kwargs):
+        if cmds[0] == "samtools":  # The index fails once the BAM and part of its index are written
+            Path(cmds[-1] + ".bai").write_text("partial")
+            raise ToolError("samtools failed")
+        if isinstance(cmds[0], list):
+            Path(cmds[1][cmds[1].index("-o") + 1]).write_text("bam")
+            return
+        mapping(cmds, log_file, **kwargs)
+
+    monkeypatch.setattr(steps, "run", run)
+    out = tmp_path / "out"
+    with pytest.raises(ToolError):
+        steps.bait_minimap2(Sample("s", [reads], "fastq"), tmp_path / "ref.fa", out, tmp_path, 1, keep_bam=True)
+    assert list(out.iterdir()) == []  # Reads, BAM, index and PAF
+
+
+def test_bait_switching_between_single_and_paired_leaves_no_reads_of_the_other_shape(tmp_path, monkeypatch):
+    import rasher.steps as steps
+    from rasher.samples import Sample
+    single = _write_reads(tmp_path / "r.fq", [("a/1", "ACGT" * 10)], "fastq")
+    r1 = _write_reads(tmp_path / "r_R1.fq", [("a/1", "ACGT" * 10)], "fastq")
+    r2 = _write_reads(tmp_path / "r_R2.fq", [("a/2", "ACGT" * 10)], "fastq")
+    monkeypatch.setattr(steps, "run", _fake_minimap2({"a/1"}, []))
+    out = tmp_path / "out"
+    out.mkdir()
+    (out / "s.fasta.gz").write_text(">a\nACGT\n")  # An earlier run on fasta reads
+    (out / "t_R1.fastq.gz").write_text("@a\nACGT\n+\nIIII\n")  # A sample named t_R1: not t's
+
+    def bait(name, *files):
+        sample = Sample(name, list(files), "fastq", [files] if len(files) == 2 else [])
+        steps.bait_minimap2(sample, tmp_path / "ref.fa", out, tmp_path, 1, keep_bam=False)
+        return sorted(p.name for p in out.iterdir())
+
+    assert bait("s", single) == ["s.fastq.gz", "t_R1.fastq.gz"]
+    assert bait("s", r1, r2) == ["s_R1.fastq.gz", "s_R2.fastq.gz", "t_R1.fastq.gz"]
+    assert bait("s", single) == ["s.fastq.gz", "t_R1.fastq.gz"]
+    assert bait("t", single) == ["s.fastq.gz", "t.fastq.gz", "t_R1.fastq.gz"]  # A lone X_R1 file stays
+
+
+def _fake_bbduk(calls):
+    """A `run` for which BBDuk keeps every read (pairs by position, as BBDuk does)."""
+    import shutil
+
+    def run(cmd, log_file, *, cwd=None, **kwargs):
+        calls.append(cmd)
+        args = dict(arg.split("=", 1) for arg in cmd[1:] if "=" in arg)
+        for given, written in (("in", "outm"), ("in2", "outm2")):
+            if given in args:
+                shutil.copyfile(cwd / args[given], cwd / args[written])
+        with open(log_file, "a") as fh:
+            fh.write("Input:                  \t4 reads \t160 bases\n")
+    return run
+
+
+def test_bbduk_pairs_out_of_step_fail_the_sample_and_leave_no_reads(tmp_path, monkeypatch):
+    import rasher.steps as steps
+    from rasher.samples import Sample
+    monkeypatch.setattr(steps, "run", _fake_bbduk([]))
+    r1 = _write_reads(tmp_path / "x_R1.fq", [("a/1", "ACGT" * 10), ("b/1", "ACGT" * 10)], "fastq")
+    r2 = _write_reads(tmp_path / "x_R2.fq", [("a/2", "ACGT" * 10), ("b/2", "ACGT" * 10)], "fastq")
+    shuffled = _write_reads(tmp_path / "y_R2.fq", [("b/2", "ACGT" * 10), ("a/2", "ACGT" * 10)], "fastq")
+    out = tmp_path / "out"
+    res = steps.bait_bbduk(Sample("s", [r1, r2], "fastq", [(r1, r2)]), tmp_path / "ref.fa", out, tmp_path,
+                           threads=1, kmer=31, hdist=0, memory_gb=1)
+    assert res.stats["Baited_reads"] == 4 and res.stats["Raw_reads"] == 4
+    with pytest.raises(steps.SampleFailed, match=r"the reads BBDuk kept are not pairs of mates \(.* desynchronise "
+                                                 r"at read 1: 'a/1' vs 'b/2'.*\): the R1 and R2 input files") as exc:
+        steps.bait_bbduk(Sample("s", [r1, shuffled], "fastq", [(r1, shuffled)]), tmp_path / "ref.fa", out,
+                         tmp_path, threads=1, kmer=31, hdist=0, memory_gb=1)
+    assert exc.value.stats["Raw_reads"] == 4
+    assert list(out.iterdir()) == []  # Neither the reads kept nor a link
+
+
+def test_bbduk_switching_from_single_to_paired_leaves_no_single_reads(tmp_path, monkeypatch):
+    import rasher.steps as steps
+    from rasher.samples import Sample
+    monkeypatch.setattr(steps, "run", _fake_bbduk([]))
+    r1 = _write_reads(tmp_path / "x_R1.fq", [("a/1", "ACGT" * 10)], "fastq")
+    r2 = _write_reads(tmp_path / "x_R2.fq", [("a/2", "ACGT" * 10)], "fastq")
+    out = tmp_path / "out"
+    steps.bait_bbduk(Sample("s", [r1], "fastq"), tmp_path / "ref.fa", out, tmp_path, threads=1, kmer=31, hdist=0,
+                     memory_gb=1)
+    assert sorted(p.name for p in out.iterdir()) == ["s.fastq.gz"]
+    steps.bait_bbduk(Sample("s", [r1, r2], "fastq", [(r1, r2)]), tmp_path / "ref.fa", out, tmp_path, threads=1,
+                     kmer=31, hdist=0, memory_gb=1)
+    assert sorted(p.name for p in out.iterdir()) == ["s_R1.fastq.gz", "s_R2.fastq.gz"]
+
+
+@pytest.mark.skipif(not shutil.which("bbduk.sh"), reason="BBDuk is not installed")
+def test_real_bbduk_with_shuffled_mates_fails_the_sample(tmp_path):
+    import random
+
+    from rasher.samples import Sample
+    from rasher.steps import SampleFailed, bait_bbduk
+    rng = random.Random(3)
+    genome = "".join(rng.choice("ACGT") for _ in range(3000))
+    ref = tmp_path / "ref.fasta"
+    ref.write_text(f">r\n{genome}\n")
+    reads = [(f"r{j}", genome[j * 100:j * 100 + 150]) for j in range(5)]
+    r1 = _write_reads(tmp_path / "x_R1.fq", [(f"{n}/1", s) for n, s in reads], "fastq")
+    r2 = _write_reads(tmp_path / "x_R2.fq", [(f"{n}/2", s) for n, s in reversed(reads)], "fastq")
+    with pytest.raises(SampleFailed, match="not pairs of mates"):
+        bait_bbduk(Sample("s", [r1, r2], "fastq", [(r1, r2)]), ref, tmp_path / "out", tmp_path, threads=1, kmer=31,
+                   hdist=0, memory_gb=1)
+    assert list((tmp_path / "out").iterdir()) == []
+
+
+def test_filtering_deletes_an_earlier_fastp_report_and_reads_of_another_shape(tmp_path):
+    from rasher.steps import filter_fastp
+    logs, out = tmp_path / "logs", tmp_path / "out"
+    logs.mkdir()
+    out.mkdir()
+    for old in ("s.fastp.json", "s.fastp.html", "t.fastp.json"):  # fastp's reports of an earlier fastq run
+        (logs / old).write_text("{}")
+    for old in ("s_R1.fastq.gz", "s_R2.fastq.gz"):  # Its paired reads
+        (out / old).write_text("@a\nACGT\n+\nIIII\n")
+    reads = _write_reads(tmp_path / "in.fasta", [("a", "A" * 100)])
+    filter_fastp("s", reads, None, "fasta", out, logs, min_length=50, target_bases=10_000, threads=1)
+    assert sorted(p.name for p in logs.iterdir()) == ["t.fastp.json"]  # fastp did not run: no report
+    assert sorted(p.name for p in out.iterdir()) == ["s.fasta.gz"]
+
+
+def test_fastp_failing_leaves_neither_reads_nor_temporary_files(tmp_path, monkeypatch):
+    from pathlib import Path
+
+    import rasher.steps as steps
+    from rasher.tools import ToolError
+
+    def run(cmd, log_file, **kwargs):  # fastp fails half-way through writing its outputs
+        for written in ("--out1", "--out2"):
+            Path(cmd[cmd.index(written) + 1]).write_text("@p/1\nAC")
+        raise ToolError("fastp failed with exit code 255")
+
+    monkeypatch.setattr(steps, "run", run)
+    out = tmp_path / "out"
+    out.mkdir()
+    for old in ("s_R1.fastq.gz", "s_R2.fastq.gz"):  # From an earlier run
+        (out / old).write_text("@a\nACGT\n+\nIIII\n")
+    r1 = _write_reads(tmp_path / "in_R1.fq", [("p/1", "A" * 100)], "fastq")
+    r2 = _write_reads(tmp_path / "in_R2.fq", [("p/2", "C" * 100)], "fastq")
+    with pytest.raises(ToolError, match="fastp failed"):
+        steps.filter_fastp("s", r1, r2, "fastq", out, tmp_path, min_length=50, target_bases=1_000, threads=1)
+    assert list(out.iterdir()) == []

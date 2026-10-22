@@ -75,7 +75,8 @@ from `run_info.json` first.
 
 1. Update `version` in `pyproject.toml`, `__version__` in `rasher/__init__.py`, `CITATION.cff` (version and
    date), `CHANGELOG.md`, the citation and the example's download line in `README.md`, and the download and
-   `pip install` lines of `docs/wiki/Installation.md` (`tests/test_cli.py` checks that they agree). If
+   `pip install` lines of `docs/wiki/Installation.md` and `docs/wiki/Example.md` (`tests/test_cli.py` checks
+   that they agree). If
    `docs/reports/` holds published reports, rebuild them with the bumped version (run the example, and the
    tutorial's command, again: a resume reruns nothing, and the report is rebuilt), with the local paths removed
    from `run_info.json` first (`tests/test_cli.py` checks that the published reports name the current version),

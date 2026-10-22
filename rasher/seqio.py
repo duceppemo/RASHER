@@ -227,10 +227,40 @@ def canonical_name(name: str) -> str:
     return name[:-2] if name.endswith(("/1", "/2")) else name
 
 
+def mates_match(name1: str, name2: str) -> bool:
+    """Whether two read names are those of mates: the same canonical name, or canonical names that differ only by
+    a last character 1 in one and 2 in the other (`fastq-dump --readids`: SRR1.5.1 and SRR1.5.2)."""
+    n1, n2 = canonical_name(name1), canonical_name(name2)
+    return n1 == n2 or (n1[:-1] == n2[:-1] and {n1[-1:], n2[-1:]} == {"1", "2"})
+
+
+def read_pairs(path1: Path, path2: Path) -> Iterator[tuple[Record, Record]]:
+    """The mates of two files, read in lockstep. A RasherError when the files do not hold the same number of
+    reads, or when two reads read together are not mates (`mates_match`)."""
+    for i, (rec1, rec2) in enumerate(zip_longest(read_records(path1), read_records(path2)), 1):
+        if rec1 is None or rec2 is None:
+            raise RasherError(f"{path1} and {path2} do not hold the same number of reads: not mates of each other")
+        if not mates_match(rec1.name, rec2.name):
+            raise RasherError(f"{path1} and {path2} desynchronise at read {i}: {rec1.name!r} vs {rec2.name!r} "
+                              "(R1 and R2 must list the mates in the same order)")
+        yield rec1, rec2
+
+
+def verify_pairs(path1: Path, path2: Path) -> ReadStats:
+    """Statistics of the reads of both mates (`read_pairs`: a RasherError unless the files are mates)."""
+    stats = ReadStats()
+    for rec1, rec2 in read_pairs(path1, path2):
+        stats.add(len(rec1.seq))
+        stats.add(len(rec2.seq))
+    return stats
+
+
 def extract_reads(inputs: Iterable[Path], names: set[str], output: Path) -> tuple[ReadStats, ReadStats]:
     """Copy the reads whose canonical name is in `names` (canonical names themselves) from `inputs` to `output`.
 
-    Returns statistics for all input reads (without lengths) and for the extracted reads.
+    Mates in one file (interleaved, or a/1 and a/2 given as single reads) share their canonical name: both are
+    copied when either is in `names`. Returns statistics for all input reads (without lengths) and for the
+    extracted reads.
     """
     total, kept = ReadStats(), ReadStats()
     with open_write(output) as out:
@@ -249,22 +279,15 @@ def extract_pairs(pairs: Iterable[tuple[Path, Path]], names: set[str], out1: Pat
     `out1`/`out2`: a pair stays whole even when only one mate matched the reference.
 
     Each (R1, R2) file pair is read in lockstep: mates must come in the same order, as sequencers and the SRA
-    write them (checked; identical mate names and `/1 /2` names both pass). Statistics count both mates.
+    write them (checked by `read_pairs`). Statistics count both mates.
     """
     total, kept = ReadStats(), ReadStats()
     with open_write(out1) as o1, open_write(out2) as o2:
         for r1_path, r2_path in pairs:
-            for i, (rec1, rec2) in enumerate(zip_longest(read_records(r1_path), read_records(r2_path)), 1):
-                if rec1 is None or rec2 is None:
-                    raise RasherError(f"{r1_path} and {r2_path} do not hold the same number of reads: "
-                                      "not mates of each other")
-                name1, name2 = canonical_name(rec1.name), canonical_name(rec2.name)
-                if name1 != name2:
-                    raise RasherError(f"{r1_path} and {r2_path} desynchronise at read {i}: {rec1.name!r} vs "
-                                      f"{rec2.name!r} (R1 and R2 must list the mates in the same order)")
+            for rec1, rec2 in read_pairs(r1_path, r2_path):
                 total.add(len(rec1.seq), keep_length=False)
                 total.add(len(rec2.seq), keep_length=False)
-                if name1 in names:
+                if canonical_name(rec1.name) in names or canonical_name(rec2.name) in names:
                     kept.add(len(rec1.seq))
                     kept.add(len(rec2.seq))
                     o1.write(rec1.format())

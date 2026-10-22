@@ -9,8 +9,9 @@ changelog" is the parent tool's history, kept for provenance.
 ### Changed
 - Renamed throughout: the package, command, log (`rasher.log`) and lock file (`.rasher.lock`) are `rasher`.
 - **The pipeline reads Illumina short reads**, paired or single-end. `sample_R1`/`sample_R2`, `sample_1`/`_2`
-  and `sample.R1`/`.R2` files (bcl2fastq `_001` tails included) pair into one sample, in flat folders,
-  subfolders and sample sheets; a file without a mate is a single-end sample. A pair is baited whole when
+  `sample.R1`/`.R2` and `sample.1`/`.2` files (bcl2fastq `_001` tails included) pair into one sample, in
+  flat folders, subfolders and sample sheets; a file without a mate is a single-end sample, and unmated
+  files next to a sample's pairs are skipped with a warning. A pair is baited whole when
   either mate matches the reference, mates travel together through every step (`1_extracted/<sample>_R1/_R2`,
   `2_filtered/...`), and a desynchronised pair is an error, whether the mates carry identical names or `/1 /2`
   suffixes.
@@ -21,12 +22,28 @@ changelog" is the parent tool's history, kept for provenance.
   reads (pairs kept whole) to `--target-depth`. Filtlong, `--keep-percent` and `--filter-by-reference` are
   gone; `--min-read-length` defaults to 50. Fasta reads skip fastp and are filtered by length.
 - Templated assembly aligns pairs with minimap2 `-ax sr` and calls `samtools consensus -X hiseq` (call
-  quality at least 20, as BACoN 0.4.1).
+  quality at least 20, as BACoN's unreleased change at the time of the fork).
 - De novo assembly: **SPAdes** (`-a spades`, `--isolate`) or **SKESA** (`-a skesa`; conservative, breaks at
   repeats such as the plastome inverted repeat — see the validation before choosing it). Flye and myloasm
   are gone, with `--read-type` and `--min-size`.
 - `--snp-method auto` is minimap2 for templated assemblies and SKA2 for SPAdes and SKESA assemblies.
-- Output folders of BACoN do not resume under RASHER (every step runs again); BACoN VCFs are rewritten.
+- `-m/--memory` also sizes SPAdes and SKESA (it was BBDuk-only). A paired sample `X` next to a sample named
+  `X_R1` or `X_R2` is an error (their outputs would collide). No assembler flags circular contigs any more,
+  so SKA2's circular-contig end extension no longer applies. Single-end extraction matches read names with
+  a trailing `/1` or `/2` stripped, as aligners report them. `-a skesa` needs
+  `conda install -c conda-forge -c bioconda skesa` (not in `environment.yml` while SKESA is a candidate
+  under validation).
+- Output folders of BACoN do not resume under RASHER (the checkpoint fingerprints are seeded with the tool's
+  name; every step runs again); BACoN VCFs are rewritten.
+- Checkpoints record each step's own output signature, and a result is only reused when its output is still
+  the file it wrote: a sample returning to a sheet can no longer pick up reads another sample wrote over.
+  Switching a sample between single-end and paired (or fasta and fastq) removes the other shape's files.
+- BBDuk's paired outputs are checked mate against mate, like minimap2's (a desynchronised pair fails the
+  sample); mates named `.1`/`.2` (`fastq-dump --readids`) pair; the unpaired-reads file of
+  `fasterq-dump --split-3` next to its pair is skipped with a warning; a file cannot pair with a link to
+  itself, and files that look like mates but do not pair are warned about. Stale fastp reports are removed
+  on rerun and for samples that fail at baiting. The report and MultiQC drop the circular-contigs column
+  (no short-read assembler flags circles) and say that read pairs were kept whole when either mate matched.
 
 ---
 

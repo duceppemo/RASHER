@@ -207,7 +207,8 @@ def test_methods_text_default():
     assert "samtools consensus 1" not in text  # No version recorded: no number invented
     assert "samtools consensus" in text and "core SNPs" in text and "FastTree" in text
     assert "failing fastp's quality filters" in text and "subsampled evenly to at most 100x" in text
-    assert "pairs kept whole" in text
+    assert "pairs kept whole" not in text and "either mate" not in text  # Single-end reads: no word of pairs
+    assert "(-x sr)." in text
     assert "circular contigs" not in text and "fasta" not in text.lower().replace("ref.fasta", "")
     assert "SNP alignment" in text and "Pairwise SNP distances count" in text and "VCF" not in text
     assert "ska map" in _methods(comparison={**BASE["comparison"], "vcf": "snps.vcf"})
@@ -227,6 +228,28 @@ def test_methods_text_settings_combinations():
     assert "replaced by the reference" in _methods(settings={"template_gaps": "reference"})
     text = _methods(settings={"snp_method": "parsnp", "add_genomes": ["x.fa", "y.fa"]})
     assert "Parsnp" in text and "core-genome alignment" in text and "2 finished genomes were added" in text
+
+
+def test_methods_text_paired_reads():
+    paired = {"p": {"files": ["p_R1.fastq.gz", "p_R2.fastq.gz"], "paired": True},
+              "s": {"files": ["s.fastq.gz"], "paired": False}}
+    text = _methods(samples=paired)
+    assert "minimap2 (-x sr); read pairs were kept whole when either mate matched." in text
+    assert "the reads (pairs kept whole) were then subsampled" in text
+    text = _methods(samples=paired, settings={"baiting": "bbduk"})
+    assert "with BBDuk; read pairs were kept whole when either mate matched." in text
+    # Single-end samples, however many files (lanes), and a run_info.json without the pairing: no word of pairs
+    for samples in ({"s": {"files": ["s_L1.fastq.gz", "s_L2.fastq.gz"], "paired": False}},
+                    {"s": {"files": ["s_R1.fastq.gz", "s_R2.fastq.gz"]}}):
+        for baiting in ("minimap2", "bbduk"):
+            text = _methods(samples=samples, settings={"baiting": baiting})
+            assert "either mate" not in text and "pairs kept whole" not in text
+
+
+def test_report_table_has_no_circular_column(tmp_path):
+    summary = "Sample\tStatus\tContigs\tCircular_contigs\na\tok\t1\t0\nb\tok\t2\t0\n"
+    page = build_report(_folder(tmp_path, None, summary=summary))
+    assert ">Contigs<" in page and ">Circular<" not in page
 
 
 def test_methods_text_failed_or_skipped_comparison():
@@ -293,6 +316,10 @@ def test_multiqc_table_and_bargraph():
     assert table["id"] == "rasher_samples_run1" and table["section_name"] == "RASHER run1: samples"
     assert table["data"]["s1"]["Contigs"] == 1 and "Raw_reads" not in table["data"]["s1"]
     assert table["data"]["s2"] == {"Status": "failed (bait)", "Note": "no reads matched the reference"}
+    # No circular contigs to count: SPAdes and SKESA flag none, a templated assembly is NA (summary.tsv keeps it)
+    rows = [{**ROWS[0], "Circular_contigs": "0"}]
+    assert "Circular_contigs" not in sample_table(rows)["headers"]
+    assert "Circular_contigs" not in sample_table(rows)["data"]["s1"]
     bars = reads_bargraph(ROWS, "run1")
     assert bars["data"] == {"s1": {"Kept": 500, "Baited, filtered out": 100, "Off-target": 400}}
     assert bars["id"] == "rasher_reads_run1"

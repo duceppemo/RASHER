@@ -46,8 +46,8 @@ SKA2 needs the same 15 bases on either side of a SNP in every genome: it loses t
 or another variant, and those near the ends of contigs and runs of `N`. `--snp-method minimap2` reads each assembly
 position by position along the reference and needs no such context, but it counts every difference an assembly
 carries, including the errors of a de novo assembly, which SKA2 skips: hence SKA2 for de novo assemblies. These
-defaults come from BACoN; how the methods compare on short-read assemblies is to be established by the
-short-read [validation](Validation). See [Methods](Methods#4-comparison).
+defaults come from BACoN and held up on the simulated short-read [validation](Validation). See
+[Methods](Methods#4-comparison).
 
 **What does `--ska-min-freq` below 1 do?**
 SKA2 then keeps the SNP sites that some genomes lack (they get a gap in the alignment), as long as at least that

@@ -189,9 +189,9 @@ def test_changelog_has_this_version_and_the_citation_the_concept_doi():
     root = Path(__file__).parents[1]
     assert re.search(rf"^## {re.escape(rasher.__version__)} \((\d{{4}}-\d{{2}}-\d{{2}}|unreleased)\)$",
                      (root / "CHANGELOG.md").read_text(), re.M)
-    # At the first release, add RASHER's Zenodo concept DOI to CITATION.cff and assert it here (as BACoN does);
-    # until then, the citation must at least point at the parent tool.
     citation = (root / "CITATION.cff").read_text()
+    assert "\ndoi: 10.5281/zenodo.23628161\n" in citation and "Concept DOI" in citation
+    # The citation must also point at the parent tool.
     assert "10.5281/zenodo.22970412" in citation and "fork of BACoN" in citation
 
 

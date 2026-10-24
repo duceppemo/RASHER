@@ -8,6 +8,7 @@
   <img src="https://img.shields.io/badge/python-3.10%2B-blue" alt="Python 3.10+">
   <a href="LICENSE"><img src="https://img.shields.io/github/license/duceppemo/RASHER" alt="License: MIT"></a>
   <a href="https://github.com/duceppemo/RASHER/wiki"><img src="https://img.shields.io/badge/docs-wiki-informational" alt="Documentation"></a>
+  <a href="https://doi.org/10.5281/zenodo.23628161"><img src="https://zenodo.org/badge/DOI/10.5281/zenodo.23628161.svg" alt="DOI"></a>
 </p>
 
 RASHER extracts the Illumina reads that match a reference sequence (typically an organelle genome) from many
@@ -73,7 +74,8 @@ Everything else is in the [wiki](https://github.com/duceppemo/RASHER/wiki), whos
 
 If RASHER is useful in your work, please cite it (see [`CITATION.cff`](CITATION.cff)):
 
-> Duceppe, M.-O. (2026). RASHER: Bait, Assemble and Compare Illumina short reads (v0.1.0).
+> Duceppe, M.-O. (2026). RASHER: Bait, Assemble and Compare Illumina short reads (v0.1.0). Zenodo.
+> https://doi.org/10.5281/zenodo.23628161
 
 and the programs it runs: minimap2, fastp, samtools or SKESA or SPAdes, SKA2 or Parsnp, and FastTree or
 IQ-TREE

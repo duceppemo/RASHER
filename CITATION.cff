@@ -7,6 +7,14 @@ authors:
     given-names: Marc-Olivier
 version: 0.1.0
 date-released: 2026-10-24
+doi: 10.5281/zenodo.23628161
+identifiers:
+  - type: doi
+    value: 10.5281/zenodo.23628161
+    description: "Concept DOI: resolves to the latest version"
+  - type: doi
+    value: 10.5281/zenodo.23628162
+    description: "Version DOI for 0.1.0"
 license: MIT
 repository-code: "https://github.com/duceppemo/RASHER"
 url: "https://github.com/duceppemo/RASHER"

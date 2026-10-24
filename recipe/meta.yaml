@@ -10,7 +10,7 @@ package:
 
 source:
   url: https://github.com/duceppemo/RASHER/archive/refs/tags/v{{ version }}.tar.gz
-  sha256: 0000000000000000000000000000000000000000000000000000000000000000  # set at the first release
+  sha256: 8766580c93343b43672047725c3c607850ebfa7d29b0207a9b8b5ec05741e92b
 
 build:
   number: 0

@@ -1,0 +1,144 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>RASHER report</title><style>
+:root{color-scheme:light;--bg:#f9f9f7;--surface:#fcfcfb;--ink:#0b0b0b;--ink2:#52514e;--muted:#6f6e68;
+--grid:#e1e0d9;--axis:#c3c2b7;--border:rgba(11,11,11,.10);
+--s1:#2a78d6;--s2:#eb6834;--s3:#1baf7a;--s4:#eda100;--s5:#e87ba4;--s6:#008300;--s7:#4a3aa7;--s8:#e34948;
+--good:#0ca30c;--warning:#fab219;--crit:#d03b3b;
+--q0:#e1e0d9;--q1:#86b6ef;--q2:#3987e5;--q3:#1c5cab;--q4:#0d366b;
+--qt0:#52514e;--qt1:#0b0b0b;--qt2:#0b0b0b;--qt3:#fff;--qt4:#fff;
+--bad-bg:#fbe3e3;--bad-fg:#8f1d1d;--warn-bg:#fdf1cf;--warn-fg:#6b4a00;--info-bg:#e1ecfa;--info-fg:#1c4f8f;
+--pseudo-op:.3;--c1:#DDAA33;--c2:#0077BB;--c3:#CC3311;--c4:#004488;--c5:#117733;--c6:#882255;--c7:#AA4499;--c8:#56B4E9;--c9:#009988;--c10:#EE7733;--c11:#CC79A7;--c12:#EE3377;--edge:rgba(11,11,11,.6)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){color-scheme:dark;--bg:#0d0d0d;--surface:#1a1a19;--ink:#fff;--ink2:#c3c2b7;--muted:#898781;
+--grid:#2c2c2a;--axis:#383835;--border:rgba(255,255,255,.10);
+--s1:#3987e5;--s2:#d95926;--s3:#199e70;--s4:#c98500;--s5:#d55181;--s6:#008300;--s7:#9085e9;--s8:#e66767;
+--good:#0ca30c;--warning:#fab219;--crit:#d03b3b;
+--q0:#2c2c2a;--q1:#184f95;--q2:#2470cc;--q3:#6da7ec;--q4:#b7d3f6;
+--qt0:#c3c2b7;--qt1:#fff;--qt2:#fff;--qt3:#0b0b0b;--qt4:#0b0b0b;
+--bad-bg:#4a1f1f;--bad-fg:#ffb4ab;--warn-bg:#45371a;--warn-fg:#f5cf82;--info-bg:#1c3050;--info-fg:#a9c8f5;
+--pseudo-op:.3;--c1:#F0E442;--c2:#0077BB;--c3:#CC3311;--c4:#99DDFF;--c5:#117733;--c6:#FFAABB;--c7:#AA4499;--c8:#CCBB44;--c9:#009988;--c10:#EE7733;--c11:#CC79A7;--c12:#EE3377;--edge:rgba(0,0,0,.5)}}
+:root[data-theme="dark"]{color-scheme:dark;--bg:#0d0d0d;--surface:#1a1a19;--ink:#fff;--ink2:#c3c2b7;--muted:#898781;
+--grid:#2c2c2a;--axis:#383835;--border:rgba(255,255,255,.10);
+--s1:#3987e5;--s2:#d95926;--s3:#199e70;--s4:#c98500;--s5:#d55181;--s6:#008300;--s7:#9085e9;--s8:#e66767;
+--good:#0ca30c;--warning:#fab219;--crit:#d03b3b;
+--q0:#2c2c2a;--q1:#184f95;--q2:#2470cc;--q3:#6da7ec;--q4:#b7d3f6;
+--qt0:#c3c2b7;--qt1:#fff;--qt2:#fff;--qt3:#0b0b0b;--qt4:#0b0b0b;
+--bad-bg:#4a1f1f;--bad-fg:#ffb4ab;--warn-bg:#45371a;--warn-fg:#f5cf82;--info-bg:#1c3050;--info-fg:#a9c8f5;
+--pseudo-op:.3;--c1:#F0E442;--c2:#0077BB;--c3:#CC3311;--c4:#99DDFF;--c5:#117733;--c6:#FFAABB;--c7:#AA4499;--c8:#CCBB44;--c9:#009988;--c10:#EE7733;--c11:#CC79A7;--c12:#EE3377;--edge:rgba(0,0,0,.5)}
+*{box-sizing:border-box}
+:root{print-color-adjust:exact;-webkit-print-color-adjust:exact}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.55 system-ui,-apple-system,"Segoe UI",sans-serif}
+main{max-width:1440px;margin:0 auto;padding:24px 16px 80px}
+h1{font-size:26px;line-height:1.2;margin:0 0 6px}
+h1 b{color:var(--c2)}
+h2{font-size:21px;margin:44px 0 10px;padding-top:12px;border-top:1px solid var(--grid)}
+h3{font-size:17px;margin:26px 0 8px}
+p,li{max-width:900px}
+a{color:var(--c2)}
+code{font-size:13px;background:var(--surface);border:1px solid var(--border);border-radius:3px;padding:0 3px}
+.meta{color:var(--ink2);font-size:14px;margin:0 0 16px}
+.tiles{display:flex;flex-wrap:wrap;gap:10px;margin:12px 0}
+.tile{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 14px;
+min-width:150px;flex:1 1 150px}
+.tile-v{font-size:26px;font-weight:600;line-height:1.1}
+.tile-l{font-size:13px;color:var(--ink2);margin-top:4px}
+.tile-s{font-size:12px;color:var(--muted);margin-top:2px}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:14px 16px;margin:14px 0}
+.fig{display:block;height:auto;background:var(--surface);border:1px solid var(--border);border-radius:8px;
+margin:8px 0;break-inside:avoid}
+.figcap{font-size:13px;color:var(--ink2);max-width:900px;margin:4px 0 16px}
+.figcap b{color:var(--ink)}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start}
+@media(max-width:900px){.two{grid-template-columns:1fr}}
+.t-small{font-size:11px;fill:var(--ink2)}.t-tiny{font-size:9.5px;fill:var(--ink2)}
+.t-ink{fill:var(--ink)}.t-ink2{fill:var(--ink2)}.t-muted{fill:var(--muted)}
+.fig text{font-family:system-ui,-apple-system,"Segoe UI",sans-serif}
+.grid{stroke:var(--grid);stroke-width:1}.axis{stroke:var(--axis);stroke-width:1}
+.thresh{stroke:var(--ink2);stroke-width:1}
+.branch{stroke:var(--ink2);stroke-width:1.5;fill:none;stroke-linecap:square}
+.bar{fill:var(--c2)}.bar0{fill:var(--axis)}.nbar{fill:var(--muted)}
+.snp-all{stroke:var(--c2);stroke-width:1.5}.snp-miss{stroke:var(--c3);stroke-width:1.5}
+.gene-cds{fill:var(--c5)}.gene-rna{fill:var(--c7)}.gene-pseudo{fill:var(--c5);fill-opacity:var(--pseudo-op);stroke:var(--c5);stroke-width:1}
+.gene-other{fill:var(--muted)}.gene-dense{fill:var(--ink2);opacity:.55}
+.band-ir{fill:var(--q1);opacity:.55}.band-sc{fill:var(--q0)}.t-gene{font-style:italic}
+g.q0 rect{fill:var(--q0)}g.q1 rect{fill:var(--q1)}g.q2 rect{fill:var(--q2)}g.q3 rect{fill:var(--q3)}
+g.q4 rect{fill:var(--q4)}
+g.q0 text{fill:var(--qt0)}g.q1 text{fill:var(--qt1)}g.q2 text{fill:var(--qt2)}g.q3 text{fill:var(--qt3)}
+g.q4 text{fill:var(--qt4)}
+.fig text{font-variant-numeric:tabular-nums}
+.tablewrap{overflow-x:auto;margin:8px 0 16px;border:1px solid var(--border);border-radius:8px;
+background:var(--surface)}
+table{border-collapse:collapse;font-size:13px;width:100%}
+th,td{padding:5px 8px;text-align:left;vertical-align:top;border-bottom:1px solid var(--grid);white-space:nowrap}
+th{position:sticky;top:0;background:var(--surface);color:var(--ink2);font-weight:600}
+td{font-variant-numeric:tabular-nums}
+tbody tr:hover{background:var(--bg)}
+table.samples{font-size:12px}table.samples th,table.samples td{padding:4px 6px}
+table.sortable th{cursor:pointer;user-select:none}
+table.sortable th:after{content:" \2195";color:var(--muted);font-size:11px}
+table.sortable th:hover{color:var(--ink)}
+table.sortable th.num,table.sortable td.num{text-align:right}
+table.samples td.note{white-space:normal;min-width:200px}
+table.samples td.long{white-space:normal;min-width:200px;max-width:320px}
+table.cross{width:auto}table.cross th.num,table.cross td.num{text-align:right}
+table.cross td.zero{color:var(--muted)}
+table.snps td.gene{font-style:italic}table.snps td.ctx{white-space:normal;min-width:160px}
+.tablewrap.tall{max-height:480px;overflow-y:auto}
+.bad{background:var(--bad-bg);color:var(--bad-fg)}
+.warn{background:var(--warn-bg);color:var(--warn-fg)}
+.info{background:var(--info-bg);color:var(--info-fg)}
+.key span{display:inline-block;padding:1px 8px;border-radius:4px;margin-right:8px;font-size:13px}
+.swatch{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:6px;vertical-align:middle}
+.mk{stroke:var(--edge);stroke-width:.8px}.mk0{fill:none;stroke:var(--muted);stroke-width:1.3px}
+.mkb{box-shadow:inset 0 0 0 .8px var(--edge)}
+.mki{vertical-align:middle;margin:-2px 5px 0 0;overflow:visible}.mkt{white-space:nowrap}
+.mkkey{font-size:13px;color:var(--ink2);margin:0 0 16px}.mkkey b{color:var(--ink);margin-right:8px}
+.mkkey>span{display:inline-block;margin-right:14px}
+.tree{background:#fff;border-radius:8px;padding:8px;overflow-x:auto;border:1px solid var(--border)}
+.tree svg{max-width:100%;height:auto}
+ul.groups li{margin-bottom:4px}
+.methods{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:12px 16px}
+dl{display:grid;grid-template-columns:max-content 1fr;gap:4px 16px;font-size:13px}
+dt{color:var(--muted)}
+dd{margin:0;word-break:break-all}
+@media print{
+  @page{size:landscape;margin:12mm} body{background:#fff} main{max-width:none;padding:0}
+  th{position:static} .tablewrap{overflow:visible} .tablewrap.tall{max-height:none;overflow:visible}
+  table{font-size:10px} th,td{white-space:normal;padding:3px 4px} table.sortable th:after{content:none}
+  table.samples td.note,table.samples td.long,table.snps td.ctx{min-width:0}
+  thead{display:table-header-group} tr{break-inside:avoid}
+  h2{break-after:avoid} .figcap{break-before:avoid}
+  svg.fig{max-height:155mm;width:auto}
+}
+</style></head><body><main>
+<h1><b>RASHER</b> report</h1>
+<p class="meta">rasher · 2026-10-24T18:16:41 · RASHER 0.1.0 · last run took 3.8 s, not counting reused steps</p>
+<div class="tiles"><div class="tile"><div class="tile-v">4/4</div><div class="tile-l">samples assembled</div></div><div class="tile"><div class="tile-v">0</div><div class="tile-l">assembled with a note</div></div><div class="tile"><div class="tile-v">30,000 bp</div><div class="tile-l">reference</div><div class="tile-s">reference.fasta, 1 sequence(s)</div></div><div class="tile"><div class="tile-v">20</div><div class="tile-l">SNP sites</div></div></div>
+<p class="meta">Metadata from <b>metadata.tsv</b>: 4 columns (group, year, origin, note); 4 of 4 samples have a value. The figures are coloured by <b>group</b> (a colour and a shape for each value, the same in every figure and table).</p>
+<h2>Samples</h2>
+<p class="key"><span class="bad">failed</span><span class="warn">depth below 20x or length outside 0.8–1.2x the reference</span><span class="info">N bases</span>Click a column to sort.</p>
+<div class="tablewrap"><table class="samples sortable"><thead><tr><th class="">Sample</th><th class="md">group</th><th class="num md">year</th><th class="md">origin</th><th class="md long">note (metadata)</th><th class="">Status</th><th class="num">Raw reads</th><th class="num">Baited reads</th><th class="num">Baited %</th><th class="num">Filtered reads</th><th class="num">Read N50</th><th class="num">Depth</th><th class="num">Contigs</th><th class="num">Length</th><th class="num">× ref</th><th class="num">N bases</th><th class="">Note</th></tr></thead><tbody><tr><td class="" data-v="alpha">alpha</td><td class="md" data-v="A"><span class="mkt"><svg class="mki" width="13" height="13" viewBox="0 0 13 13" aria-hidden="true"><circle cx="6.5" cy="6.5" r="5.5" fill="var(--c1)" class="mk"/></svg>A</span></td><td class="num md" data-v="2021">2021</td><td class="md" data-v="site 1">site 1</td><td class="md long" data-v="Identical to the reference by design (no planted SNP)">Identical to the reference by design (no planted SNP)</td><td class="" data-v="ok">ok</td><td class="num" data-v="12482">12,482</td><td class="num" data-v="10000">10,000</td><td class="num" data-v="80.115">80.115</td><td class="num" data-v="10000">10,000</td><td class="num" data-v="150">150</td><td class="num" data-v="50.0">50.0</td><td class="num" data-v="1">1</td><td class="num" data-v="30000">30,000</td><td class="num" data-v="1.000">1.000</td><td class="num" data-v="0">0</td><td class="note" data-v=""></td></tr><tr><td class="" data-v="beta">beta</td><td class="md" data-v="A"><span class="mkt"><svg class="mki" width="13" height="13" viewBox="0 0 13 13" aria-hidden="true"><circle cx="6.5" cy="6.5" r="5.5" fill="var(--c1)" class="mk"/></svg>A</span></td><td class="num md" data-v="2021">2021</td><td class="md" data-v="site 1">site 1</td><td class="md long" data-v="Carries six planted SNPs, in coding sequences, an intron and a spacer">Carries six planted SNPs, in coding sequences, an intron and a spacer</td><td class="" data-v="ok">ok</td><td class="num" data-v="12338">12,338</td><td class="num" data-v="10000">10,000</td><td class="num" data-v="81.050">81.050</td><td class="num" data-v="10000">10,000</td><td class="num" data-v="150">150</td><td class="num" data-v="50.0">50.0</td><td class="num" data-v="1">1</td><td class="num" data-v="30000">30,000</td><td class="num" data-v="1.000">1.000</td><td class="num" data-v="0">0</td><td class="note" data-v=""></td></tr><tr><td class="" data-v="delta">delta</td><td class="md" data-v=""><span class="mkt"><svg class="mki" width="13" height="13" viewBox="0 0 13 13" aria-hidden="true"><circle cx="6.5" cy="6.5" r="4.4" class="mk0"/></svg></span></td><td class="num md" data-v="2023">2023</td><td class="md" data-v="site 2">site 2</td><td class="md long" data-v="Ten SNPs of its own, including a nonsense change and one in the pseudogene">Ten SNPs of its own, including a nonsense change and one in the pseudogene</td><td class="" data-v="ok">ok</td><td class="num" data-v="12524">12,524</td><td class="num" data-v="10000">10,000</td><td class="num" data-v="79.847">79.847</td><td class="num" data-v="10000">10,000</td><td class="num" data-v="150">150</td><td class="num" data-v="50.0">50.0</td><td class="num" data-v="1">1</td><td class="num" data-v="30000">30,000</td><td class="num" data-v="1.000">1.000</td><td class="num" data-v="0">0</td><td class="note" data-v=""></td></tr><tr><td class="" data-v="gamma">gamma</td><td class="md" data-v="B"><span class="mkt"><svg class="mki" width="13" height="13" viewBox="0 0 13 13" aria-hidden="true"><path d="M6.5,0.81L12.44,11.15L0.56,11.15Z" fill="var(--c2)" class="mk"/></svg>B</span></td><td class="num md" data-v="2022">2022</td><td class="md" data-v="site 2">site 2</td><td class="md long" data-v="Shares beta&#x27;s six SNPs, plus four of its own (one in a tRNA)">Shares beta&#x27;s six SNPs, plus four of its own (one in a tRNA)</td><td class="" data-v="ok">ok</td><td class="num" data-v="12382">12,382</td><td class="num" data-v="10000">10,000</td><td class="num" data-v="80.762">80.762</td><td class="num" data-v="10000">10,000</td><td class="num" data-v="150">150</td><td class="num" data-v="50.0">50.0</td><td class="num" data-v="1">1</td><td class="num" data-v="30000">30,000</td><td class="num" data-v="1.000">1.000</td><td class="num" data-v="0">0</td><td class="note" data-v=""></td></tr></tbody></table></div>
+<div class="two"><div><svg class="fig" viewBox="0 0 560 124" width="100%" style="max-width:min(100%,560px)" role="img"><title>Depth after filtering, per sample</title><line x1="60.9" y1="22" x2="60.9" y2="90" class="grid"/><text x="60.9" y="18" text-anchor="middle" class="t-tiny t-muted">0x</text><line x1="220.6" y1="22" x2="220.6" y2="90" class="grid"/><text x="220.6" y="18" text-anchor="middle" class="t-tiny t-muted">20x</text><line x1="380.2" y1="22" x2="380.2" y2="90" class="grid"/><text x="380.2" y="18" text-anchor="middle" class="t-tiny t-muted">40x</text><line x1="220.6" y1="22" x2="220.6" y2="90" class="thresh"/><text x="224.6" y="104" class="t-tiny t-ink2">20x flag</text><text x="41.9" y="38" text-anchor="end" class="t-small t-ink2">alpha</text><circle cx="50.4" cy="34" r="4.5" fill="var(--c1)" class="mk"><title>alpha: group A</title></circle><rect x="60.9" y="29" width="399.1" height="10" rx="2" fill="var(--c1)" class="mk"><title>alpha: 50x depth after filtering; 10,000 reads, N50 150</title></rect><text x="41.9" y="54" text-anchor="end" class="t-small t-ink2">beta</text><circle cx="50.4" cy="50" r="4.5" fill="var(--c1)" class="mk"><title>beta: group A</title></circle><rect x="60.9" y="45" width="399.1" height="10" rx="2" fill="var(--c1)" class="mk"><title>beta: 50x depth after filtering; 10,000 reads, N50 150</title></rect><text x="41.9" y="70" text-anchor="end" class="t-small t-ink2">delta</text><circle cx="50.4" cy="66" r="3.6" class="mk0"><title>delta: no group</title></circle><rect x="60.9" y="61" width="399.1" height="10" rx="2" fill="var(--muted)"><title>delta: 50x depth after filtering; 10,000 reads, N50 150</title></rect><text x="41.9" y="86" text-anchor="end" class="t-small t-ink2">gamma</text><path d="M50.4,77.35L55.26,85.81L45.54,85.81Z" fill="var(--c2)" class="mk"><title>gamma: group B</title></path><rect x="60.9" y="77" width="399.1" height="10" rx="2" fill="var(--c2)" class="mk"><title>gamma: 50x depth after filtering; 10,000 reads, N50 150</title></rect></svg><p class="figcap"><b>Figure 1.</b> Estimated depth of the filtered reads over the reference, per sample. The line is the 20x threshold of the table's depth flag; samples below it are labelled. Failed samples are listed without a bar. Hover a bar for the read counts and the note. Each bar has the colour of the sample's <b>group</b>, whose marker is before the name, as in every figure and table (legend under these charts; a hollow circle and a grey bar: no value).</p></div><div><svg class="fig" viewBox="0 0 560 106" width="100%" style="max-width:min(100%,560px)" role="img"><title>N bases per assembly</title><line x1="60.9" y1="22" x2="60.9" y2="90" class="grid"/><text x="60.9" y="18" text-anchor="middle" class="t-tiny t-muted">0</text><text x="41.9" y="38" text-anchor="end" class="t-small t-ink2">alpha</text><circle cx="50.4" cy="34" r="4.5" fill="var(--c1)" class="mk"><title>alpha: group A</title></circle><rect x="60.9" y="29" width="1.0" height="10" rx="2" class="bar0"><title>alpha: 0 N bases of 30,000 bp (0.00%)</title></rect><text x="41.9" y="54" text-anchor="end" class="t-small t-ink2">beta</text><circle cx="50.4" cy="50" r="4.5" fill="var(--c1)" class="mk"><title>beta: group A</title></circle><rect x="60.9" y="45" width="1.0" height="10" rx="2" class="bar0"><title>beta: 0 N bases of 30,000 bp (0.00%)</title></rect><text x="41.9" y="70" text-anchor="end" class="t-small t-ink2">delta</text><circle cx="50.4" cy="66" r="3.6" class="mk0"><title>delta: no group</title></circle><rect x="60.9" y="61" width="1.0" height="10" rx="2" class="bar0"><title>delta: 0 N bases of 30,000 bp (0.00%)</title></rect><text x="41.9" y="86" text-anchor="end" class="t-small t-ink2">gamma</text><path d="M50.4,77.35L55.26,85.81L45.54,85.81Z" fill="var(--c2)" class="mk"><title>gamma: group B</title></path><rect x="60.9" y="77" width="1.0" height="10" rx="2" class="bar0"><title>gamma: 0 N bases of 30,000 bp (0.00%)</title></rect></svg><p class="figcap"><b>Figure 2.</b> N bases in each assembly, largest first (the table flags every assembly with N bases; the 5 largest counts are labelled). Hover a bar for the fraction of the assembly. Colours and markers as in Figure 1.</p></div></div>
+<p class="mkkey"><b>group:</b> <span><span class="mkt"><svg class="mki" width="13" height="13" viewBox="0 0 13 13" aria-hidden="true"><circle cx="6.5" cy="6.5" r="5.5" fill="var(--c1)" class="mk"/></svg>A</span> (2)</span><span><span class="mkt"><svg class="mki" width="13" height="13" viewBox="0 0 13 13" aria-hidden="true"><path d="M6.5,0.81L12.44,11.15L0.56,11.15Z" fill="var(--c2)" class="mk"/></svg>B</span> (1)</span><span><span class="mkt"><svg class="mki" width="13" height="13" viewBox="0 0 13 13" aria-hidden="true"><circle cx="6.5" cy="6.5" r="4.4" class="mk0"/></svg>no</span> value (1)</span></p>
+<p class="warn">example_output/rasher/4_compared/minimap2/snp_distances.tsv was not found.</p>
+<h2>Methods</h2><p class="methods">Reads aligning to the reference (reference.fasta, 30,000 bp) were extracted with minimap2 2.31-r1302 (-x sr); read pairs were kept whole when either mate matched. Reads shorter than 50 bp or failing fastp's quality filters were removed and adapters trimmed with fastp 1.1.0; the reads (pairs kept whole) were then subsampled evenly to at most 100x of the reference length. Each sample was assembled by reference-guided consensus: reads were aligned to the reference with minimap2 and the consensus called with samtools consensus 1.24 (-X hiseq, minimum depth 3, minimum call quality 20; positions with less support, or where the reads disagree, are N). Each genome was aligned to the reference with minimap2 2.31-r1302 (-x asm20) and read position by position in the reference's coordinates (insertions left out; a base was taken as N where two alignments gave different bases, or with at least 3 N within 50 positions); SNPs were the positions covered by all genomes at which the genomes differ. Pairwise SNP distances count the positions where both genomes have a nucleotide and they differ. The SNPs of each genome relative to the reference were written to a VCF file from every position where the genomes differ. A tree was built on the SNP alignment with FastTree 2.2.0 (GTR, SH-like supports from 100 resamples) and rooted at its midpoint. The analysis was run with RASHER 0.1.0 (https://github.com/duceppemo/RASHER).</p>
+<h2>Run</h2><dl>
+<dt>Command</dt><dd><code>rasher -r example_output/data/reference.fasta -i example_output/data/reads -o example_output/rasher -t 4 -p 2 --annotation example_output/data/reference.gb --metadata example_output/data/metadata.tsv</code></dd><dt>Reference</dt><dd><code>example_output/data/reference.fasta (1 sequence(s), MD5 a7a21202b0e29a17aff7d34ff0d3fb82)</code></dd><dt>Annotation</dt><dd><code>example_output/data/reference.gb (23 genes on 1 sequence(s); copy annotation.gb, MD5 6efed82a0d786263ad8ddeade2f812ab)</code></dd><dt>Output</dt><dd><code>example_output/rasher</code></dd><dt>Python</dt><dd><code>3.12.15 on Linux-6.8.0-139-generic-x86_64-with-glibc2.39</code></dd><dt>Metadata</dt><dd><code>example_output/data/metadata.tsv (copy metadata.tsv; colours by group)</code></dd><dt>minimap2</dt><dd><code>2.31-r1302 — $CONDA_PREFIX/bin/minimap2</code></dd><dt>fastp</dt><dd><code>fastp 1.1.0 — $CONDA_PREFIX/bin/fastp</code></dd><dt>samtools</dt><dd><code>samtools 1.24 — $CONDA_PREFIX/bin/samtools</code></dd><dt>FastTree</dt><dd><code>FastTree 2.2.0 — $CONDA_PREFIX/bin/FastTree</code></dd>
+</dl></main>
+<script>
+document.querySelectorAll('table.sortable th').forEach(function (th) {
+  th.addEventListener('click', function () {
+    var table = th.closest('table'), body = table.tBodies[0], rows = Array.from(body.rows), i = th.cellIndex;
+    var ascending = th.dataset.asc !== '1', numeric = th.classList.contains('num');
+    table.querySelectorAll('th').forEach(function (h) { h.dataset.asc = ''; });
+    th.dataset.asc = ascending ? '1' : '0';
+    rows.sort(function (x, y) {
+      var a = x.cells[i].dataset.v, b = y.cells[i].dataset.v;
+      var r = numeric ? parseFloat(a) - parseFloat(b) : a.localeCompare(b, undefined, {numeric: true});
+      return ascending ? r : -r;
+    });
+    rows.forEach(function (r) { body.appendChild(r); });
+  });
+});
+</script></body></html>

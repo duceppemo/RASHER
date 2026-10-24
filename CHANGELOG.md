@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.1.0 (unreleased)
+## 0.1.0 (2026-10-24)
 
 RASHER begins as a fork of [BACoN](https://github.com/duceppemo/BACoN) 0.4.0 (commit 4fdec16, which includes
 the `samtools consensus -C 20` change below), adapted to Illumina short reads. Everything under "BACoN

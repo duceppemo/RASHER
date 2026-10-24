@@ -39,7 +39,8 @@ bash example/run_example.sh
   (among the 12 coding changes: 5 synonymous, 6 missense and 1 nonsense).
 - The report must show the metadata columns and colour the genomes by group.
 
-Open `example_output/rasher/report.html` to see the result: the samples table (read counts, depth,
+Open `example_output/rasher/report.html` to see the result (the report of this run is also
+[online](https://duceppemo.github.io/RASHER/reports/example_report.html)): the samples table (read counts, depth,
 assembly), the tree, the SNP distance heatmap, the genome map with the annotated genes and every SNP, and
 the methods paragraph. The same numbers are in `summary.tsv` and `4_compared/minimap2/` — see
 [Outputs](Outputs).

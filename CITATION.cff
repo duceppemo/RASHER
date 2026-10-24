@@ -6,6 +6,7 @@ authors:
   - family-names: Duceppe
     given-names: Marc-Olivier
 version: 0.1.0
+date-released: 2026-10-24
 license: MIT
 repository-code: "https://github.com/duceppemo/RASHER"
 url: "https://github.com/duceppemo/RASHER"

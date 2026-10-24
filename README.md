@@ -61,7 +61,9 @@ Everything else is in the [wiki](https://github.com/duceppemo/RASHER/wiki), whos
 - [Installation](https://github.com/duceppemo/RASHER/wiki/Installation) — conda, pip, troubleshooting
 - [Usage](https://github.com/duceppemo/RASHER/wiki/Usage) — inputs, read pairing, options, resuming, performance
 - [Methods](https://github.com/duceppemo/RASHER/wiki/Methods) — what each step does, and which assembler or SNP method to choose
-- [Example](https://github.com/duceppemo/RASHER/wiki/Example) — the bundled simulated dataset
+- [Example](https://github.com/duceppemo/RASHER/wiki/Example) — the bundled simulated dataset and its
+  [report](https://duceppemo.github.io/RASHER/reports/example_report.html)
+- [Tutorial](https://github.com/duceppemo/RASHER/wiki/Tutorial) — 24 Arabidopsis accessions from a public project
 - [Outputs](https://github.com/duceppemo/RASHER/wiki/Outputs) — files and columns
 - [Validation](https://github.com/duceppemo/RASHER/wiki/Validation) — how the methods were chosen and tested
 - [FAQ](https://github.com/duceppemo/RASHER/wiki/FAQ) — troubleshooting

@@ -15,8 +15,8 @@ themselves. Helper scripts: [`aln2dist.py`](aln2dist.py) (snippy-core alignment 
 
 ## Datasets (public, no simulation)
 
-- **Arabidopsis accessions** (`acc_cp_*`): 24 PRJEB62038 accessions, HiSeq 2x100 PE WGS (0.46–1.1 Gbases
-  baited of 11–16 Gbases raw per sample), reference plastome NC_000932.1 (154,478 bp). Matched ONT runs of
+- **Arabidopsis accessions** (`acc_cp_*`): 24 PRJEB62038 accessions, HiSeq 2x100 PE WGS (9–16 Gbases per
+  sample, of which 9–21% bait as plastid), reference plastome NC_000932.1 (154,478 bp). Matched ONT runs of
   the same accessions exist as BACoN 0.4.0 results (templated and Flye, SKA2 distances) for concordance.
 - **Human mitochondria** (`mt_*`): 32 1KGP chrM Illumina BAM slices converted to paired fastq
   (`samtools collate | samtools fastq`), reference rCRS NC_012920.1 (16,569 bp).
@@ -81,7 +81,7 @@ Median pairwise distances: BACoN-ONT 37–38, RASHER SPAdes/SKESA 53, RASHER tem
    **Decision deferred**: stage 4 adds the missing human-mt SPAdes leg, the repeat-rich Arabidopsis
    mitogenome (NC_037304.1, ~367 kb), and a 30x/15x depth sweep before the recommendation is fixed.
 3. **The templated leg is the only full-length assembly** (154.5 kb with both IR copies, single contig,
-   34 N bases typical) and the cheapest, consistent with the simulations.
+   11–146 N bases, median 19) and the cheapest, consistent with the simulations.
 
 ## Stage 4: the SKESA-vs-SPAdes question on harder ground
 

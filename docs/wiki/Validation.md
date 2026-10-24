@@ -38,11 +38,32 @@ What the record establishes:
   its default SKA2 pairing it beat SPAdes on no scenario. It stays available as `-a skesa` while the
   real-data benchmark runs; expect it to be dropped unless that overturns the simulations.
 
-## Real-data benchmark
+## Real-data benchmark (0.1.0)
 
-In progress: public Illumina data (whole-genome *Arabidopsis thaliana* accessions, human 1000 Genomes
-mitochondria) against GetOrganelle, NOVOPlasty and Snippy, and against BACoN on matched Nanopore runs of the
-same samples. It will decide the final defaults and add timings; its record will be summarised here.
+Record:
+[`validation/results/2026-10-23_benchmark_short/`](https://github.com/duceppemo/RASHER/blob/main/validation/results/2026-10-23_benchmark_short/SUMMARY.md).
+Public Illumina data — 24 whole-genome *Arabidopsis thaliana* accessions (plastome and the repeat-rich
+367 kb mitogenome) and 32 human 1000 Genomes mitochondria — against GetOrganelle, NOVOPlasty and Snippy on
+the same reads, and against BACoN on matched Nanopore runs of the same accessions. 336/336 RASHER sample
+runs succeeded. What the record establishes:
+
+- **The default (templated + minimap2) reproduces Snippy**, an independent caller on the same reads:
+  r = 0.998 on human mt (mean distance difference 1.9 SNPs), r = 0.976 on the plastome. The templated
+  consensus was also the only full-length assembly on all three genomes (both plastome IR copies, the
+  whole mitogenome, single contig each).
+- **Illumina sees SNPs that a Nanopore consensus masks.** Against the matched BACoN-ONT runs, RASHER's
+  distances are consistently higher (never lower, 274/276 pairs), and Snippy sides with RASHER — the ONT
+  runs average 40 SNPs low per pair (r = 0.84 to Snippy).
+- **SKESA, not SPAdes, is the cleaner de novo assembler on real data** — the simulations' verdict is
+  overturned. Same SNP distances (r ≥ 0.999) and the same reference coverage, but a median of 2 contigs vs
+  SPAdes' 22 on the plastome, and 32 contigs at reference length vs SPAdes' 205 contigs at 24% over on the
+  mitogenome. The one place SPAdes wins is very low coverage: below ~20–30x SKESA's assemblies and
+  distances degrade first.
+- **Against the competition**: GetOrganelle is the stronger pure assembler for one complete circular
+  organelle (55/56 complete, ~7 min per WGS sample; it extends beyond the bait). NOVOPlasty handled the
+  small human mt (32/32 circular) but failed or stopped short on 9/24 plastome samples at ~62 min each.
+  Snippy matches RASHER's SNPs but assembles nothing. RASHER (~11 min per WGS sample) is the only tool of
+  the four that goes from raw reads to assemblies, SNP distances, a tree and a report in one run.
 
 The parent tool's long-read validation is documented in
 [BACoN's wiki](https://github.com/duceppemo/BACoN/wiki/Validation); its records remain under

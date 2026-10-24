@@ -115,9 +115,6 @@ def _make_sample(name: str, files: list[Path], origin: object) -> Sample | None:
     if not files:
         log.warning("Skipping sample %s: no reads", name)
         return None
-    kinds = {formats[f] for f in files}
-    if len(kinds) > 1:
-        raise RasherError(f"Sample {name} mixes fasta and fastq files: {', '.join(map(str, files))}")
     pairs, unpaired = pair_files(files)
     if pairs and unpaired:
         # Pairs and leftovers do not mix: every step would need both a paired and an unpaired stream
@@ -132,6 +129,9 @@ def _make_sample(name: str, files: list[Path], origin: object) -> Sample | None:
             log.warning("Sample %s: %s look like read mates but were not paired (a duplicate mate file, or mates "
                         "in different folders): processed as single-end reads", name,
                         ", ".join(f.name for f in marked))
+    kinds = {formats[f] for f in files}  # Of the files used: a skipped leftover may be of the other format
+    if len(kinds) > 1:
+        raise RasherError(f"Sample {name} mixes fasta and fastq files: {', '.join(map(str, files))}")
     return Sample(name, files, kinds.pop(), pairs)
 
 
@@ -222,23 +222,30 @@ def read_sample_sheet(path: Path) -> list[Sample]:
 
 
 def _finalize(candidates: list[tuple[str, list[Path], object]], source: Path) -> list[Sample]:
-    seen: dict[str, object] = {}
+    # Names compared lower-cased: on a case-insensitive file system (macOS, Windows) S1 and s1 would write the
+    # same files
+    seen: dict[str, tuple[str, object]] = {}
     for name, _, origin in candidates:
-        if name in seen:
-            raise RasherError(f"Two inputs give the same sample name {name!r}: {seen[name]} and {origin}")
-        seen[name] = origin
+        if name.lower() in seen:
+            other, other_origin = seen[name.lower()]
+            if other == name:
+                raise RasherError(f"Two inputs give the same sample name {name!r}: {other_origin} and {origin}")
+            raise RasherError(f"Sample names {other!r} (from {other_origin}) and {name!r} (from {origin}) differ "
+                              "only by case: on a case-insensitive file system (macOS) they would write the same "
+                              "files; rename one")
+        seen[name.lower()] = name, origin
     samples = [s for name, files, origin in candidates if (s := _make_sample(name, files, origin))]
     if not samples:
         raise RasherError(f"No fasta/fastq files with reads found in {source}")
-    names = {s.name for s in samples}
+    names = {s.name.lower(): s.name for s in samples}
     for s in samples:  # A paired sample X writes X_R1/X_R2 files, which a sample of that name would share
         if s.pairs:
             for mate in ("_R1", "_R2"):
-                if s.name + mate in names:
-                    raise RasherError(f"Sample names {s.name!r} (paired) and {s.name + mate!r} collide: the "
-                                      f"paired sample writes {s.name + mate} files; rename one")
-        elif s.name + "_R1" in names and s.name + "_R2" in names:
+                if (other := names.get((s.name + mate).lower())) is not None:
+                    raise RasherError(f"Sample names {s.name!r} (paired) and {other!r} collide: the paired sample "
+                                      f"writes {s.name + mate} files; rename one")
+        elif (r1 := names.get((s.name + "_R1").lower())) and (r2 := names.get((s.name + "_R2").lower())):
             # A single-end sample deletes the X_R1 + X_R2 files of an earlier paired run of it (rasher.steps)
-            raise RasherError(f"Sample names {s.name!r}, {s.name + '_R1'!r} and {s.name + '_R2'!r} collide: the "
-                              f"reads files of the last two are those {s.name} writes when paired; rename one")
+            raise RasherError(f"Sample names {s.name!r}, {r1!r} and {r2!r} collide: the reads files of the last "
+                              f"two are those {s.name} writes when paired; rename one")
     return samples

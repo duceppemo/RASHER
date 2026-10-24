@@ -95,7 +95,7 @@ def test_files_in_hidden_subfolders_are_ignored(tmp_path, fastq):
     assert [f.name for f in sample.files] == ["a.fastq"]
 
 
-def test_sheets_are_read_as_0_3_5_read_them(tmp_path):
+def test_tsv_sheets_quotes_and_comments(tmp_path):
     from rasher.metadata import sheet_metadata
     for name in ("a.fastq", "a b.fastq"):
         (tmp_path / name).write_text("@r\nACGT\n+\nIIII\n")
@@ -114,15 +114,15 @@ def test_sheets_are_read_as_0_3_5_read_them(tmp_path):
         read_sample_sheet(sheet)
 
 
-def test_csv_sheets_are_read_as_0_3_5_read_them(tmp_path):
+def test_csv_sheets_quotes_and_unclosed_quotes(tmp_path):
     for name in ("s1", "s2", "a b"):
         (tmp_path / f"{name}.fastq").write_text("@r\nACGT\n+\nIIII\n")
     sheet = tmp_path / "s.csv"
-    # 0.3.5 (csv module, not strict): a space after a closing quote is kept, then stripped
+    # A space after a closing quote is kept, then stripped
     sheet.write_text('sample,file\n"s1" ,s1.fastq\ns2,"a b.fastq" \n')
     assert [(s.name, [f.name for f in s.files]) for s in read_sample_sheet(sheet)] == [
         ("s1", ["s1.fastq"]), ("s2", ["a b.fastq"])]
-    sheet.write_text('sample,file\ns1,"s1.fastq\ns2,s2.fastq\n')  # 0.3.5 swallowed s2 into s1's file name
+    sheet.write_text('sample,file\ns1,"s1.fastq\ns2,s2.fastq\n')  # Not s2 swallowed into s1's file name
     with pytest.raises(RasherError, match="line 2: an unclosed quote"):
         read_sample_sheet(sheet)
 
@@ -362,4 +362,39 @@ def test_paired_sample_name_collides_with_mate_named_sample(tmp_path, fastq):
     fastq("in/x_R1.fastq.gz", [("r", "ACGT")])
     fastq("in/x_R2.fastq.gz", [("r", "TTTT")])
     with pytest.raises(RasherError, match="collide"):
+        discover(tmp_path / "in")
+
+
+def test_sample_names_that_differ_only_by_case_are_rejected(tmp_path, fastq):
+    """On a case-insensitive file system (macOS), S1 and s1 would write the same files."""
+    for name in ("a", "b", "x_R1", "x_R2"):
+        fastq(f"{name}.fastq.gz", [("r", "ACGT")])
+    sheet = tmp_path / "sheet.tsv"
+    sheet.write_text("sample\tfile\nS1\ta.fastq.gz\ns1\tb.fastq.gz\n")
+    with pytest.raises(RasherError, match="Sample names 'S1' .* and 's1' .* differ only by case"):
+        read_sample_sheet(sheet)
+    (tmp_path / "in").mkdir()
+    fastq("in/S1.fastq.gz", [("r", "ACGT")])
+    fastq("in/s1.fastq.gz", [("r", "ACGT")])
+    with pytest.raises(RasherError, match="differ only by case"):
+        discover(tmp_path / "in")
+    # A paired sample x writes x_R1 files: those of a sample X_r1 on such a file system
+    sheet.write_text("sample\tfile\nx\tx_R1.fastq.gz;x_R2.fastq.gz\nX_r1\ta.fastq.gz\n")
+    with pytest.raises(RasherError, match="Sample names 'x' \\(paired\\) and 'X_r1' collide"):
+        read_sample_sheet(sheet)
+
+
+def test_a_leftover_of_the_other_format_next_to_pairs_is_skipped(tmp_path, fastq, fasta, caplog):
+    """A stray fasta (contigs of an earlier assembly) next to fastq pairs is a leftover, not a mixed sample."""
+    (tmp_path / "in" / "s").mkdir(parents=True)
+    fastq("in/s/x_R1.fastq.gz", [("r", "ACGT")])
+    fastq("in/s/x_R2.fastq.gz", [("r", "TTTT")])
+    fasta("in/s/contigs.fasta", [("c1", "ACGT")])
+    (sample,) = discover(tmp_path / "in")
+    assert sample.fmt == "fastq" and [f.name for f in sample.files] == ["x_R1.fastq.gz", "x_R2.fastq.gz"]
+    assert "Sample s: contigs.fasta has no mate next to the 1 pair(s): skipped" in caplog.text
+    # Pairs of both formats are one sample's reads: still an error
+    fasta("in/s/y_R1.fasta", [("r", "ACGT")])
+    fasta("in/s/y_R2.fasta", [("r", "TTTT")])
+    with pytest.raises(RasherError, match="Sample s mixes fasta and fastq"):
         discover(tmp_path / "in")

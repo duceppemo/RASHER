@@ -53,7 +53,7 @@ def test_description_and_input_help_are_for_short_reads(capsys):
         build_parser().parse_args(["--help"])
     text = " ".join(capsys.readouterr().out.split())
     assert "Compare Illumina short reads matching a reference" in text
-    assert "sample_R1/_R2, sample_1/_2 or sample.R1/.R2" in text
+    assert "sample_R1/_R2, sample_1/_2, sample.R1/.R2 or sample.1/.2" in text
     assert "Nanopore" not in text and "Flye" not in text and "Filtlong" not in text
 
 

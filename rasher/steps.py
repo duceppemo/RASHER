@@ -6,6 +6,7 @@ import logging
 import re
 import shutil
 import tempfile
+from collections.abc import Collection
 from contextlib import nullcontext
 from dataclasses import dataclass, field
 from itertools import zip_longest
@@ -55,22 +56,30 @@ def reads_suffix(fmt: str) -> str:
     return ".fastq.gz" if fmt == "fastq" else ".fasta.gz"
 
 
-def _read_outputs(out_dir: Path, name: str, fmt: str, paired: bool) -> list[Path]:
+def read_outputs(out_dir: Path, name: str, fmt: str, paired: bool) -> list[Path]:
     """<sample>_R1 and <sample>_R2 reads files when paired, else <sample>."""
     return [out_dir / f"{name}{tag}{reads_suffix(fmt)}" for tag in (("_R1", "_R2") if paired else ("",))]
 
 
-def _clear_other_outputs(out_dir: Path, name: str, fmt: str, paired: bool) -> None:
-    """Delete the sample's reads files of an earlier run in another shape (single-end or paired) or format, which
-    would sit next to this run's. X_R1 and X_R2 files go only together: a lone X_R1 file is not X's (its pairs
-    are written and deleted together) but may be the reads of a sample named X_R1 (a single-end sample X next to
-    samples X_R1 and X_R2 is refused: rasher.samples)."""
-    current = _read_outputs(out_dir, name, fmt, paired)
-    for other_fmt in ("fastq", "fasta"):
-        for other in (_read_outputs(out_dir, name, other_fmt, shape) for shape in (False, True)):
-            if other != current and all(path.exists() for path in other):
-                for path in other:
+def remove_reads(out_dir: Path, name: str, taken: Collection[Path] = ()) -> None:
+    """Delete the sample's reads files in `out_dir`, of either shape (single-end or paired) and format, but those
+    in `taken` (the reads files of the run's other samples). X_R1 and X_R2 files go only together, and not when
+    either is taken: a lone X_R1 file is not X's (its pairs are written and deleted together) but may be the
+    reads of a sample named X_R1 (a single-end sample X next to samples X_R1 and X_R2 is refused:
+    rasher.samples)."""
+    kept = {str(path).lower() for path in taken}  # On a case-insensitive file system, x_R1 is X_r1's file
+    for fmt in ("fastq", "fasta"):
+        for files in (read_outputs(out_dir, name, fmt, shape) for shape in (False, True)):
+            if all(path.exists() for path in files) and not any(str(path).lower() in kept for path in files):
+                for path in files:
                     path.unlink()
+
+
+def _clear_other_outputs(out_dir: Path, name: str, fmt: str, paired: bool,
+                         taken: Collection[Path] = ()) -> None:
+    """Delete the sample's reads files of an earlier run in another shape or format, which would sit next to this
+    run's (`remove_reads`)."""
+    remove_reads(out_dir, name, {*taken, *read_outputs(out_dir, name, fmt, paired)})
 
 
 # ---------------------------------------------------------------------------------------------------------------
@@ -84,19 +93,20 @@ def _names_from_paf(paf: Path) -> set[str]:
 
 
 def bait_minimap2(sample: Sample, reference: Path, out_dir: Path, log_dir: Path, threads: int,
-                  keep_bam: bool) -> StepResult:
+                  keep_bam: bool, taken: Collection[Path] = ()) -> StepResult:
     """Keep the reads with at least one alignment to the reference; of paired reads, the pairs with a mate that
     has one.
 
     Each file is aligned on its own, as single reads: minimap2's short-read mode takes at most two query files,
     and pairs them (which does not change whether a read aligns). With `keep_bam`, the baited reads (not all the
-    reads) are aligned again, as pairs when paired, into <sample>.bam.
+    reads) are aligned again, as pairs when paired, into <sample>.bam. `taken`: the reads files of the run's other
+    samples, never deleted.
     """
     out_dir.mkdir(parents=True, exist_ok=True)
     log_file = log_dir / f"{sample.name}.log"
     options = ["sr", "--secondary=no", "-t", str(threads), str(reference)]
-    outputs = _read_outputs(out_dir, sample.name, sample.fmt, bool(sample.pairs))
-    _clear_other_outputs(out_dir, sample.name, sample.fmt, bool(sample.pairs))
+    outputs = read_outputs(out_dir, sample.name, sample.fmt, bool(sample.pairs))
+    _clear_other_outputs(out_dir, sample.name, sample.fmt, bool(sample.pairs), taken)
     bam, paf = out_dir / f"{sample.name}.bam", out_dir / f".{sample.name}.paf"
     try:
         names: set[str] = set()
@@ -141,19 +151,19 @@ _BBDUK_COUNTS = re.compile(r"^(Input|Contaminants):\s+(\d+) reads\s.*?(\d+) base
 
 
 def bait_bbduk(sample: Sample, reference: Path, out_dir: Path, log_dir: Path, threads: int, kmer: int,
-               hdist: int, memory_gb: int) -> StepResult:
+               hdist: int, memory_gb: int, taken: Collection[Path] = ()) -> StepResult:
     """Keep the reads sharing at least one k-mer (up to `hdist` mismatches) with the reference; of paired reads,
     the pairs with a mate that does (BBDuk's default for pairs).
 
     BBDuk pairs the reads of R1 and R2 by position, without looking at their names: the pairs it keeps are
-    checked to be mates (`verify_pairs`)."""
+    checked to be mates (`verify_pairs`). `taken`: the reads files of the run's other samples, never deleted."""
     out_dir.mkdir(parents=True, exist_ok=True)
     log_file = log_dir / f"{sample.name}.log"
     paired = bool(sample.pairs)
     tags = ("_R1", "_R2") if paired else ("",)
     mates = [[pair[i] for pair in sample.pairs] for i in (0, 1)] if paired else [sample.files]
-    outputs = _read_outputs(out_dir, sample.name, sample.fmt, paired)
-    _clear_other_outputs(out_dir, sample.name, sample.fmt, paired)
+    outputs = read_outputs(out_dir, sample.name, sample.fmt, paired)
+    _clear_other_outputs(out_dir, sample.name, sample.fmt, paired, taken)
     # BBDuk takes one input file (of each mate): several are merged first
     merged = [out_dir / f".{sample.name}.merged{tag}{reads_suffix(sample.fmt)}" if len(files) > 1 else None
               for tag, files in zip(tags, mates)]
@@ -228,13 +238,14 @@ def _bait_result(outputs: list[Path], total: ReadStats | None, kept: ReadStats) 
 # ---------------------------------------------------------------------------------------------------------------
 
 def filter_fastp(name: str, reads: Path, reads2: Path | None, fmt: str, out_dir: Path, log_dir: Path, *,
-                 min_length: int, target_bases: int, threads: int) -> StepResult:
+                 min_length: int, target_bases: int, threads: int, taken: Collection[Path] = ()) -> StepResult:
     """Trim and filter the reads with fastp (its defaults: adapters, base qualities; a pair goes when either
     mate does), then keep an evenly spread subset of about `target_bases` (`subsample_reads`).
 
     fastp cannot read fasta: fasta reads (or pairs) shorter than `min_length` are dropped here instead, without
     trimming. fastp's report (<sample>.fastp.json, for MultiQC, and .html) goes to `log_dir`; that of an earlier
-    run is deleted first (fasta reads, or a failed fastp, would leave it stale).
+    run is deleted first (fasta reads, or a failed fastp, would leave it stale). `taken`: the reads files of the
+    run's other samples, never deleted.
     """
     out_dir.mkdir(parents=True, exist_ok=True)
     log_file = log_dir / f"{name}.log"
@@ -242,9 +253,9 @@ def filter_fastp(name: str, reads: Path, reads2: Path | None, fmt: str, out_dir:
     for old in report:
         old.unlink(missing_ok=True)
     paired = reads2 is not None
-    outputs = _read_outputs(out_dir, name, fmt, paired)
-    _clear_other_outputs(out_dir, name, fmt, paired)
-    trimmed = _read_outputs(out_dir, f".{name}.trimmed", fmt, paired)
+    outputs = read_outputs(out_dir, name, fmt, paired)
+    _clear_other_outputs(out_dir, name, fmt, paired, taken)
+    trimmed = read_outputs(out_dir, f".{name}.trimmed", fmt, paired)
     out2, trimmed2 = (outputs[1], trimmed[1]) if paired else (None, None)
     try:
         if fmt == "fasta":
@@ -315,6 +326,12 @@ class AssemblyDirs:
         """The graph of an earlier assembly of the sample, deleted (this assembler may draw none)."""
         for old in (self.graphs / f"{name}.gfa", self.graphs / f"{name}.png"):
             old.unlink(missing_ok=True)
+
+    def clear(self, name: str) -> None:
+        """Every file of an earlier assembly of the sample deleted: its assembly, graph and working folder."""
+        self.clear_work(name)
+        self.clear_graph(name)
+        (self.assemblies / f"{name}.fasta").unlink(missing_ok=True)
 
 
 def _publish_assembly(name: str, contigs: Path, dirs: AssemblyDirs, *, rename: bool,
@@ -390,8 +407,8 @@ def assemble_spades(name: str, reads: Path, reads2: Path | None, dirs: AssemblyD
                     threads: int, memory_gb: int, reference_length: int) -> StepResult:
     """De novo assembly with SPAdes --isolate (which skips read correction: fasta reads assemble as well). SPAdes
     flags no contig circular, and the _cov_ of its contig names is k-mer coverage: no Assembly_depth."""
-    work = dirs.clear_work(name)  # SPAdes wants a new (or empty) output folder
-    dirs.clear_graph(name)
+    dirs.clear(name)  # SPAdes wants a new (or empty) work folder; a failed reassembly must leave no older assembly
+    work = dirs.work(name)
     dirs.root.mkdir(parents=True, exist_ok=True)
     log_file = log_dir / f"{name}.log"
     mates = [("-1", reads), ("-2", reads2)] if reads2 is not None else [("-s", reads)]
@@ -431,8 +448,8 @@ def assemble_skesa(name: str, reads: Path, reads2: Path | None, dirs: AssemblyDi
     """De novo assembly with SKESA. Conservative, SKESA ends contigs at repeats rather than guess through them:
     an organelle's inverted repeats split its assembly into several contigs. No graph; no Assembly_depth (its
     contig names give k-mer coverage)."""
-    work = dirs.clear_work(name)
-    dirs.clear_graph(name)
+    dirs.clear(name)  # A failed reassembly must leave no older assembly
+    work = dirs.work(name)
     work.mkdir(parents=True)
     log_file = log_dir / f"{name}.log"
     # A comma in --reads separates the mates: SKESA reads links in its folder, and runs from there
@@ -485,8 +502,8 @@ def assemble_samtools(name: str, reads: Path, reads2: Path | None, reference: Pa
                       cutoff: int = 20) -> StepResult:
     """Templated assembly: samtools consensus of the reads aligned to the reference with minimap2 (as pairs when
     `reads2` is given: two query files are mates to minimap2)."""
-    work = dirs.clear_work(name)
-    dirs.clear_graph(name)  # From an earlier de novo assembly
+    dirs.clear(name)  # Also an earlier (possibly de novo) run's graph and assembly: none may outlive a failure
+    work = dirs.work(name)
     work.mkdir(parents=True)
     log_file = log_dir / f"{name}.log"
     bam = work / "aligned.bam"

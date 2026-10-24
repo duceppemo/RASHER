@@ -70,9 +70,8 @@ class Settings:
     target_depth: int = 100
     assembler: str = "samtools"
     template_gaps: str = "n"
-    # Templated assembly: samtools consensus -C, the quality a call needs (lower: N). Not an option: 20 since 0.4.1
-    # (10, samtools' default, before), so that a base called from a few mixed reads becomes N rather than a SNP
-    # (validation/results/2026-10-16_v0.4.0)
+    # Templated assembly: samtools consensus -C, the quality a call needs (lower: N). Not an option: 20 rather than
+    # samtools' default of 10, so that a base called from a few mixed reads becomes N rather than a SNP
     consensus_cutoff: int = 20
     genome_size: int | None = None
     snp_method: str = "auto"  # auto: minimap2 for templated assemblies, ska for de novo ones (resolve_snp_method)
@@ -130,7 +129,7 @@ class Checkpoints:
             return None
         if data.get("fingerprint") != fingerprint:
             return None
-        root = data.get("root") or _guess_root(data.get("results"))  # No root before 0.3.4
+        root = data.get("root")
         if root and root != self.root:  # A moved or copied output folder: its own files
             data = {**_moved(data, root, self.root), "relocated": True}
         return data
@@ -138,11 +137,24 @@ class Checkpoints:
     def save(self, step: str, fingerprint: str, results: dict) -> None:
         """Save a step's checkpoint; a failure (a full disk) is a RasherError, which stops the run (the programs
         still running are killed): the progress could not be recorded."""
+        self._write(step, {"fingerprint": fingerprint, "root": self.root, "results": results})
+
+    def forget(self, step: str, names: set[str]) -> None:
+        """Drop these samples' results from a step's checkpoint, whatever parameters it was made with (its folder
+        kept: the paths of a moved folder's checkpoint are those of its old place)."""
+        try:
+            data = json.loads(self.path(step).read_text())
+        except (OSError, ValueError):
+            return
+        results = data.get("results") if isinstance(data, dict) else None
+        if isinstance(results, dict) and names & results.keys():
+            self._write(step, {**data, "results": {k: v for k, v in results.items() if k not in names}})
+
+    def _write(self, step: str, data: dict) -> None:
         tmp = self.path(step).with_suffix(".tmp")
         try:
             self.folder.mkdir(parents=True, exist_ok=True)
-            tmp.write_text(json.dumps({"fingerprint": fingerprint, "root": self.root, "results": results},
-                                      indent=1, default=str))
+            tmp.write_text(json.dumps(data, indent=1, default=str))
             tmp.replace(self.path(step))
         except OSError as exc:
             tmp.unlink(missing_ok=True)
@@ -152,19 +164,6 @@ class Checkpoints:
 
     def clear(self, step: str) -> None:
         self.path(step).unlink(missing_ok=True)
-
-
-def _guess_root(results: dict | None) -> str | None:
-    """The output folder of a checkpoint's results, from the path of an output (not of an input, which can be in
-    another RASHER folder) and the names of RASHER's folders."""
-    results = results or {}
-    outputs = [results.get("distances")] + [r.get("output") for r in results.values() if isinstance(r, dict)]
-    for path in (p for p in outputs if isinstance(p, str)):  # "distances" can also be a sample's name
-        # The last folder name in the path: a parent folder may have the name of one of RASHER's folders
-        at = max(path.rfind(f"{os.sep}{name}{os.sep}") for name in FOLDERS.values())
-        if at > 0:
-            return path[:at]
-    return None
 
 
 def _moved(data: object, old: str, new: str) -> object:
@@ -178,19 +177,14 @@ def _moved(data: object, old: str, new: str) -> object:
     return data
 
 
-def _same_input(res: dict, upstream: object, reads: Path | None, relocated: bool = False) -> bool:
+def _same_input(res: dict, upstream: object, relocated: bool = False) -> bool:
     """Whether a sample's saved result was made from its current input (`upstream`: the signature of the
     previous step's output; in a moved or copied folder, `relocated`, the sizes alone: a copy may not keep the
-    files' times). A result of RASHER < 0.3.5 may have no signature: it must then be newer than its input (an
-    input made again after it, by a run interrupted before this step, is newer)."""
-    if "upstream" in res:
-        return res["upstream"] == upstream or (relocated and _size_only(res["upstream"]) == _size_only(upstream))
-    if reads is None or not res.get("output"):
-        return True
-    try:
-        return Path(res["output"]).stat().st_mtime_ns >= reads.stat().st_mtime_ns
-    except OSError:
+    files' times)."""
+    if "upstream" not in res:
         return False
+    saved = res["upstream"]
+    return saved == upstream or (relocated and _size_only(saved) == _size_only(upstream))
 
 
 def _output_signature(path: Path | None) -> list[object] | None:
@@ -221,9 +215,9 @@ def _own_outputs(res: dict, relocated: bool = False) -> bool:
     """Whether a saved result's outputs are still the files it made: the signatures recorded with it
     ("output_signature") match them (in a moved or copied folder, `relocated`, by their sizes alone). Another
     sample can overwrite them: a sample left out of a run (a line of the sample sheet commented out) named x_R1
-    shares its files with the R1 reads of a paired sample x. Without signatures, its outputs must exist."""
+    shares its files with the R1 reads of a paired sample x."""
     if "output_signature" not in res:
-        return _outputs_exist({"": res})
+        return False
     saved, current = res["output_signature"], _result_signature(res)
     return saved == current or (relocated and _size_only(saved) == _size_only(current))
 
@@ -368,10 +362,6 @@ def _apply(states: list[SampleState], results: dict[str, dict], step: str) -> No
                 st.reads2 = Path(res["output2"]) if res.get("output2") else None
 
 
-def _outputs_exist(results: dict[str, dict]) -> bool:
-    return all(Path(r[key]).exists() for r in results.values() for key in ("output", "output2") if r.get(key))
-
-
 def _reference_records(reference: Path) -> list[Record]:
     """The sequences of the reference: a fasta file, or the ORIGIN of a GenBank file (named after the record's
     VERSION, as NCBI's fasta of the same record)."""
@@ -469,6 +459,17 @@ def _check_inputs_kept(s: Settings) -> None:
                              "rewritten by each run: give the original file")
 
 
+def _check_reads_outside(s: Settings, samples: list[Sample]) -> None:
+    """Refuse, before anything is written, a reads file in the output folder (listed in a sample sheet, or the
+    target of a link): a step's output can be that file, which the step overwrites (and deletes when the sample
+    fails)."""
+    for x in samples:
+        for f in x.files:
+            if any(p.is_relative_to(s.output) for p in (_resolved_folder(f), f.resolve())):
+                raise RasherError(f"Sample {x.name}: the reads file {f} cannot be inside the output folder "
+                                  f"{s.output}")
+
+
 def _open_bytes(path: Path):
     """The file's bytes, decompressed when it is gzipped (detected from its content)."""
     with open(path, "rb") as fh:
@@ -494,8 +495,9 @@ def _record_copy(s: Settings, key: str, name: str | None) -> None:
 
 def _recorded_copy(s: Settings, key: str) -> str | None:
     """The name of the copy (of the annotation or of the metadata) that the previous run of this folder recorded
-    as its own, in .checkpoints/copies.json or, for a folder of an earlier version, in run_info.json; None when
-    there is none: a file RASHER did not write (hand-made, or from another tool) is kept."""
+    as its own, in .checkpoints/copies.json or, for a folder of BACoN made before it kept copies.json, in
+    run_info.json; None when there is none: a file RASHER did not write (hand-made, or from another tool) is
+    kept."""
     for file in (s.output / ".checkpoints" / "copies.json", s.output / "run_info.json"):
         try:
             info = json.loads(file.read_text())
@@ -719,9 +721,14 @@ def run(s: Settings) -> int:
     if s.input and s.input.is_dir() and (s.output == s.input or s.output.is_relative_to(s.input)):
         # Its files would be taken for a sample's reads on the next run
         raise RasherError(f"The output folder {s.output} cannot be the input folder or inside it")
+    if s.input and s.input != s.output and s.input.is_relative_to(s.output):
+        # RASHER writes and deletes reads files there: a step's output can be the input itself
+        raise RasherError(f"The input {s.input} cannot be inside the output folder {s.output}")
     if s.output.exists() and not s.output.is_dir():
         raise RasherError(f"The output folder {s.output} is a file")
     _check_inputs_kept(s)
+    if s.sample_sheet and s.sample_sheet.is_relative_to(s.output):
+        raise RasherError(f"The sample sheet {s.sample_sheet} cannot be inside the output folder {s.output}")
     try:
         s.output.mkdir(parents=True, exist_ok=True)
         lock = open(s.output / ".rasher.lock", "w")  # noqa: SIM115 - held until the end of the run
@@ -775,6 +782,7 @@ def _run(s: Settings, started: float) -> int:
                   "skesa": "de novo assemblies (SKESA)"}[s.assembler])
     tools = require(needed_tools(s))
     samples = _load_samples(s)
+    _check_reads_outside(s, samples)
     if s.add_genomes and s.snp_method == "none":
         log.warning("--add-genomes is ignored: there is no comparison with --snp-method none")
     elif s.add_genomes:
@@ -797,6 +805,7 @@ def _run(s: Settings, started: float) -> int:
     # Each sample's input files (path, size, time), checked per sample: adding or changing one sample's reads
     # reruns that sample only.
     inputs = {x.name: [_file_signature(f) for f in x.files] for x in samples}
+    paired = {x.name: bool(x.pairs) for x in samples}
     # The parameters that change a step's outputs: not --keep-bam, which only adds a BAM (a sample whose BAM is
     # missing is baited again), nor the templated assembly's options with a de novo assembler.
     params = {
@@ -815,19 +824,40 @@ def _run(s: Settings, started: float) -> int:
         """The memory of a sample (BBDuk, SPAdes, SKESA): shared between the samples run at the same time."""
         return max(1, s.memory_gb // max(1, min(s.parallel, running["samples"])))
 
+    dirs = steps.AssemblyDirs(folder["assemble"])
+    # The reads files each sample writes in a step's folder: the clean-up of one sample never deletes another's
+    reads_files = {step: {x.name: steps.read_outputs(folder[step], x.name, x.fmt, bool(x.pairs)) for x in samples}
+                   for step in ("bait", "filter")}
+
+    def taken(step: str, name: str) -> set[Path]:
+        return {path for other, paths in reads_files[step].items() if other != name for path in paths}
+
+    def clear_later(name: str, step: str) -> None:
+        """Delete the sample's outputs of the steps after `step`, at which it failed: those of an earlier run would
+        pass for this run's (the report reads every assembly of all_assemblies; MultiQC, fastp's reports)."""
+        later = STEPS[STEPS.index(step) + 1:-1]
+        if "filter" in later:
+            steps.remove_reads(folder["filter"], name, taken("filter", name))
+            for suffix in (".fastp.json", ".fastp.html"):
+                (logs / LOG_FOLDERS["filter"] / f"{name}{suffix}").unlink(missing_ok=True)
+        if "assemble" in later:
+            dirs.clear(name)
+        for other in later:
+            checkpoints.forget(other, {name})
+
     def bait(st: SampleState, threads: int) -> steps.StepResult:
         if s.baiting == "minimap2":
-            return steps.bait_minimap2(st.sample, reference, folder["bait"], logs / "1_bait", threads, s.keep_bam)
+            return steps.bait_minimap2(st.sample, reference, folder["bait"], logs / "1_bait", threads, s.keep_bam,
+                                       taken=taken("bait", st.sample.name))
         return steps.bait_bbduk(st.sample, reference, folder["bait"], logs / "1_bait", threads, s.kmer, s.hdist,
-                                memory())
+                                memory(), taken=taken("bait", st.sample.name))
 
     def filt(st: SampleState, threads: int) -> steps.StepResult:
         assert st.reads is not None
         return steps.filter_fastp(st.sample.name, st.reads, st.reads2, st.sample.fmt, folder["filter"],
                                   logs / "2_filter", min_length=s.min_read_length,
-                                  target_bases=genome_size * s.target_depth, threads=threads)
-
-    dirs = steps.AssemblyDirs(folder["assemble"])
+                                  target_bases=genome_size * s.target_depth, threads=threads,
+                                  taken=taken("filter", st.sample.name))
 
     def assemble(st: SampleState, threads: int) -> steps.StepResult:
         assert st.reads is not None
@@ -861,7 +891,6 @@ def _run(s: Settings, started: float) -> int:
         # What each sample's step reads: its input files (bait), or the output of the previous step.
         upstream = {st.sample.name: inputs[st.sample.name] if step == "bait" else _reads_signature(st)
                     for st in states}
-        reads = {st.sample.name: st.reads for st in states}
         # The samples left out of this run (a line of the sample sheet commented out) keep their results: when
         # they come back, those are checked against their input as any other.
         absent = {name: res for name, res in (saved or {}).get("results", {}).items() if name not in inputs}
@@ -870,16 +899,18 @@ def _run(s: Settings, started: float) -> int:
         results = {name: res for name, res in (saved or {}).get("results", {}).items()
                    if name in inputs and not res.get("failed") and name not in refreshed
                    and (_same_files(res.get("input"), inputs[name]) if step == "bait"
-                        else _same_input(res, upstream.get(name), reads.get(name), relocated))
+                        else _same_input(res, upstream.get(name), relocated))
+                   # The same files paired now, or no longer (mates moved next to each other, or apart)
+                   and (step != "bait" or bool(res.get("output2")) == paired[name])
                    and _own_outputs(res, relocated)
                    and (not bam or res.get("bam") and (folder["bait"] / f"{name}.bam").is_file())}
-        for name, res in results.items():  # The signatures, as they are here: a copy's files, earlier versions
+        for name, res in results.items():  # The signatures, as they are here: a copy's files
             res["input" if step == "bait" else "upstream"] = upstream[name]
             res["output_signature"] = _result_signature(res)
         todo = [st for st in states if not st.failed and st.sample.name not in results]
         if not todo:
             log.info("%s: already done, skipping", labels[step])
-            checkpoints.save(step, fingerprint, {**absent, **results})  # With the signatures of this version
+            checkpoints.save(step, fingerprint, {**absent, **results})  # With the signatures as they are here
         else:
             if results:
                 log.info("%s: resuming, %d sample(s) already done", labels[step], len(results))
@@ -909,11 +940,9 @@ def _run(s: Settings, started: float) -> int:
             new = _run_parallel(todo, functions[step], s, step, logs / LOG_FOLDERS[step], on_done=done)
             refreshed |= {name for name, res in new.items() if not res.get("failed")}
         _apply(states, results, step)
-        if step == "bait":  # Not filtered in this run: fastp's reports of an earlier run would look like its own
-            for st in states:
-                if st.failed:
-                    for suffix in (".fastp.json", ".fastp.html"):
-                        (logs / LOG_FOLDERS["filter"] / f"{st.sample.name}{suffix}").unlink(missing_ok=True)
+        for st in states:
+            if st.failed == f"failed ({step})":
+                clear_later(st.sample.name, step)
         if all(st.failed for st in states):
             _finish(s, states, tools, None, started, annotation, metadata, regions)
             raise RasherError(f"All samples failed at the {step} step; see the logs in {logs}")
@@ -954,16 +983,16 @@ def _compare(s: Settings, states: list[SampleState], reference: Path, root: Path
     fingerprint = _fingerprint(previous, params)
     signatures = {k: _output_signature(v) for k, v in sorted(assemblies.items())}
     saved = None if force else checkpoints.load("compare", fingerprint)
-    if saved is not None and not _same_assemblies(saved["results"].pop("inputs", None), signatures, assemblies,
-                                                  saved["results"].get("distances"), bool(saved.get("relocated"))):
+    if saved is not None and not _same_assemblies(saved["results"].pop("inputs", None), signatures,
+                                                  bool(saved.get("relocated"))):
         saved = None  # An assembly changed since (made again, then interrupted before the comparison)
     if saved is not None and _comparison_files_exist(saved["results"]):
         log.info("Comparison with %s: already done, skipping", s.snp_method)
         result = saved["results"]
-        checkpoints.save("compare", fingerprint, {**result, "inputs": signatures})  # Signatures of this version
+        checkpoints.save("compare", fingerprint, {**result, "inputs": signatures})  # Signatures as they are here
         if not result.get("vcf") or not Path(result["vcf"]).is_file() or _vcf_outdated(Path(result["vcf"])):
-            # A comparison from RASHER < 0.3.2, whose VCF failed, or whose VCF predates the fixes of 0.3.3: the VCF
-            # is made from the comparison's files.
+            # A VCF that failed, was deleted, or was written by a version that VCF_REWRITE_BEFORE marks as wrong:
+            # made from the comparison's files.
             out = Path(result["distances"]).parent
             paths = {k: v for k, v in assemblies.items() if v is not None}
             result["vcf"] = _write_vcf(s, reference, out, log_dir, paths, set(added))
@@ -1016,19 +1045,13 @@ def _comparison_files_exist(result: dict) -> bool:
         Path(result[key]).is_file() for key in ("alignment", "tree") if result.get(key))
 
 
-def _same_assemblies(saved: dict | None, signatures: dict, assemblies: dict[str, Path | None],
-                     distances: str | None, relocated: bool = False) -> bool:
+def _same_assemblies(saved: dict | None, signatures: dict, relocated: bool = False) -> bool:
     """Whether a saved comparison was made from the current assemblies (in a moved or copied folder,
-    `relocated`, by their sizes alone). A comparison of RASHER < 0.3.4 has no signatures: it must then be newer
-    than every assembly."""
-    if saved is not None:
-        return saved == signatures or (relocated and {k: _size_only(v) for k, v in saved.items()}
-                                       == {k: _size_only(v) for k, v in signatures.items()})
-    try:
-        made = Path(distances or "").stat().st_mtime_ns
-        return all(p is None or p.stat().st_mtime_ns <= made for p in assemblies.values())
-    except OSError:
+    `relocated`, by their sizes alone)."""
+    if not isinstance(saved, dict):
         return False
+    return saved == signatures or (relocated and {k: _size_only(v) for k, v in saved.items()}
+                                   == {k: _size_only(v) for k, v in signatures.items()})
 
 
 # VCFs written by earlier versions are rewritten on resume (bump when a release fixes the VCF): every RASHER

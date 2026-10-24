@@ -57,9 +57,9 @@ def build_parser() -> argparse.ArgumentParser:
                          "whose sequence is used and whose features annotate the report (gzipped or not).")
     io.add_argument("-i", "--input", metavar="PATH", type=Path,
                     help="A fastq/fasta file, or a folder of them, gzipped or not. Paired files (sample_R1/_R2, "
-                         "sample_1/_2 or sample.R1/.R2) make one sample, named after them; a file without a mate "
-                         "is a single-end sample named after the file; a subfolder is a sample named after the "
-                         "subfolder with all the files it contains (pairs found the same way).")
+                         "sample_1/_2, sample.R1/.R2 or sample.1/.2) make one sample, named after them; a file "
+                         "without a mate is a single-end sample named after the file; a subfolder is a sample "
+                         "named after the subfolder with all the files it contains (pairs found the same way).")
     io.add_argument("--sample-sheet", metavar="FILE.tsv", type=Path,
                     help="Instead of -i: a TSV/CSV with the columns 'sample' and 'file' (several files per sample "
                          "separated by ';' or on several rows). Relative paths start from the sheet's folder.")

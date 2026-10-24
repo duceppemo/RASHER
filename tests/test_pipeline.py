@@ -338,8 +338,8 @@ def test_needed_tools_follow_the_default_comparison(tmp_path):
 
 
 def test_folder_of_the_old_default_resumes_with_minimap2(stubs, dataset, tmp_path):
-    """A templated run compared with SKA2 (the default before 0.4.0) rerun with the defaults: only the comparison is
-    made again, with minimap2; the SKA2 comparison is kept."""
+    """A templated run compared with SKA2 rerun with the defaults (minimap2 for templated assemblies): only the
+    comparison is made again, with minimap2; the SKA2 comparison is kept."""
     ref, reads = dataset
     out = tmp_path / "out"
     assert run(settings(ref, reads, out, assembler="samtools", snp_method="ska")) == 0
@@ -665,20 +665,17 @@ def test_vcf_failure_is_a_warning_and_a_rerun_makes_the_vcf(stubs, dataset, tmp_
     assert json.loads((out / "run_info.json").read_text())["comparison"]["vcf"].endswith("snps.vcf")
 
 
-def test_comparison_from_before_the_vcf_gets_one(stubs, dataset, tmp_path):
+def test_a_deleted_vcf_is_made_again(stubs, dataset, tmp_path):
     ref, reads = dataset
     out = tmp_path / "out"
     run(settings(ref, reads, out))
     ska_dir = out / "4_compared" / "ska"
     (ska_dir / "snps.vcf").unlink()
-    checkpoint = out / ".checkpoints" / "compare.json"
-    data = json.loads(checkpoint.read_text())
-    del data["results"]["vcf"]  # As written by RASHER 0.3.1, which kept no ska_reference.fasta either
-    checkpoint.write_text(json.dumps(data))
-    (ska_dir / "ska_reference.fasta").unlink()
+    (ska_dir / "ska_reference.fasta").unlink()  # The reference the VCF is made with, too
+    stubs.unlink()
     run(settings(ref, reads, out))
     assert (ska_dir / "snps.vcf").exists() and (ska_dir / "ska_reference.fasta").exists()
-    assert "vcf" in json.loads(checkpoint.read_text())["results"]
+    assert "FastTree" not in calls(stubs)  # The comparison itself is kept
 
 
 def test_vcf_from_an_older_tool_is_rewritten_on_resume(stubs, dataset, tmp_path):
@@ -1048,23 +1045,6 @@ def test_a_run_after_an_interrupted_one_can_start_programs(stubs, dataset, tmp_p
     assert "ska" in calls(stubs)
 
 
-def test_a_moved_folder_of_0_3_3_resumes_with_its_own_files(stubs, dataset, tmp_path):
-    import shutil
-    ref, reads = dataset
-    out, moved = tmp_path / "out", tmp_path / "moved"
-    run(settings(ref, reads, out))
-    for checkpoint in step_checkpoints(out):  # As written by RASHER 0.3.3: no root
-        data = json.loads(checkpoint.read_text())
-        del data["root"]
-        checkpoint.write_text(json.dumps(data))
-    shutil.move(out, moved)
-    stubs.unlink()
-    assert run(settings(ref, reads, moved)) == 0
-    assert calls(stubs) == ["minimap2"]
-    info = json.loads((moved / "run_info.json").read_text())
-    assert info["comparison"]["distances"] == str(moved / "4_compared" / "ska" / "snp_distances.tsv")
-
-
 def _rasher_cli(ref, reads, out, **popen):
     """Start `rasher` (SPAdes assembly, one sample at a time) in a separate process."""
     import subprocess
@@ -1124,75 +1104,6 @@ def test_errors_and_interruptions_are_in_rasher_log(stubs, dataset, tmp_path, mo
     assert (out / "rasher.log").read_text().rstrip().endswith("[ERROR] Interrupted")
 
 
-def test_guess_root_takes_the_last_rasher_folder_in_the_path():
-    from rasher.pipeline import _guess_root
-    assert _guess_root({"s1": {"output": "/data/1_extracted/out/3_assembled/all_assemblies/s1.fasta"}}) == \
-        "/data/1_extracted/out"
-    assert _guess_root({"distances": "/x/4_compared/out/4_compared/ska/snp_distances.tsv"}) == "/x/4_compared/out"
-    assert _guess_root({"s1": {"failed": "no reads"}}) is None
-
-
-def _as_0_3_3(out: Path) -> None:
-    """Rewrite the checkpoints of a run as RASHER 0.3.3 wrote them: no folder, no input signatures."""
-    for checkpoint in step_checkpoints(out):
-        data = json.loads(checkpoint.read_text())
-        data.pop("root", None)
-        data["results"].pop("inputs", None)
-        for res in data["results"].values():
-            if isinstance(res, dict):
-                res.pop("upstream", None)
-        checkpoint.write_text(json.dumps(data))
-
-
-def test_new_reads_interrupted_after_baiting_with_checkpoints_of_0_3_3(stubs, dataset, tmp_path, monkeypatch):
-    import time
-
-    import rasher.steps
-    ref, reads = dataset
-    out = tmp_path / "out"
-    run(settings(ref, reads, out, snp_method="none", parallel=1))
-    _as_0_3_3(out)
-    time.sleep(0.01)  # The new outputs must be newer than the old ones, whatever the file system's clock
-    for name in ("s1", "s2"):
-        _reads(reads / f"{name}.fastq.gz", [("on1", 950)])
-    restore = _interrupt(monkeypatch, rasher.steps, "bait_minimap2", "s2")  # After s1 was baited
-    with pytest.raises(KeyboardInterrupt):
-        run(settings(ref, reads, out, snp_method="none", parallel=1))
-    restore()
-    run(settings(ref, reads, out, snp_method="none", parallel=1))
-    assert summary(out)["s1"]["Filtered_reads"] == "1"
-    assert sum(1 for _ in read_records(out / "2_filtered" / "s1.fastq.gz")) == 1
-
-
-def test_resumed_checkpoints_of_0_3_3_get_signatures(stubs, dataset, tmp_path):
-    ref, reads = dataset
-    out = tmp_path / "out"
-    run(settings(ref, reads, out))
-    _as_0_3_3(out)
-    stubs.unlink()
-    run(settings(ref, reads, out))
-    assert calls(stubs) == ["minimap2"]  # Only the failed sample: the results of 0.3.3 are reused ...
-    filt = json.loads((out / ".checkpoints" / "filter.json").read_text())
-    comp = json.loads((out / ".checkpoints" / "compare.json").read_text())
-    assert filt["root"] == str(out) and all("upstream" in r for r in filt["results"].values())  # ... and updated
-    assert "inputs" in comp["results"]
-
-
-def test_comparison_of_0_3_3_older_than_an_assembly_is_redone(stubs, dataset, tmp_path):
-    import os
-    import time
-    ref, reads = dataset
-    out = tmp_path / "out"
-    run(settings(ref, reads, out))
-    _as_0_3_3(out)
-    assembly = out / "3_assembled" / "all_assemblies" / "s1.fasta"
-    later = time.time() + 5
-    os.utime(assembly, (later, later))  # Assembled again after the comparison (interrupted before comparing)
-    stubs.unlink()
-    run(settings(ref, reads, out))
-    assert "ska" in calls(stubs)
-
-
 def test_a_sample_with_no_read_baited_keeps_its_raw_counts(stubs, dataset, tmp_path):
     ref, reads = dataset
     out = tmp_path / "out"
@@ -1207,11 +1118,6 @@ def test_output_folder_cannot_be_in_the_input_folder(stubs, dataset, tmp_path):
         with pytest.raises(RasherError, match="cannot be the input folder or inside it"):
             run(settings(ref, reads, out))
     assert not (reads / "rasher").exists()
-
-
-def test_guess_root_with_a_sample_named_distances():
-    from rasher.pipeline import _guess_root
-    assert _guess_root({"distances": {"output": "/out/1_extracted/distances.fastq.gz"}}) == "/out"
 
 
 def _cgroups(tmp_path: Path, proc: str, files: dict[str, str]) -> tuple[str, str]:
@@ -2284,3 +2190,115 @@ def test_a_sample_failing_before_filtering_keeps_no_fastp_report(stubs, dataset,
     assert summary(out)["s1"]["Status"] == "failed (bait)"
     assert not (reports / "s1.fastp.json").exists() and not (reports / "s1.fastp.html").exists()
     assert (reports / "s2.fastp.json").exists()
+
+
+def test_inputs_inside_the_output_folder_are_refused(stubs, dataset, tmp_path):
+    """A step's output can be the input itself (-i OUT/1_extracted: the baiting would write the reads it reads,
+    then delete them as the output of a failed sample)."""
+    ref, reads = dataset
+    out = tmp_path / "out"
+    run(settings(ref, reads, out, snp_method="none"))
+    baited = out / "1_extracted" / "s1.fastq.gz"
+    before = baited.read_bytes()
+    for given in (out / "1_extracted", baited):
+        with pytest.raises(RasherError, match="cannot be inside the output folder"):
+            run(settings(ref, given, out, snp_method="none"))
+    sheet = tmp_path / "sheet.tsv"
+    sheet.write_text(f"sample\tfile\ns1\t{baited}\n")
+    with pytest.raises(RasherError, match=r"Sample s1: the reads file .*s1\.fastq\.gz cannot be inside the output"):
+        run(settings(ref, None, out, input=None, sample_sheet=sheet, snp_method="none"))
+    links = tmp_path / "links"
+    links.mkdir()
+    (links / "s1.fastq.gz").symlink_to(baited)
+    with pytest.raises(RasherError, match="cannot be inside the output folder"):
+        run(settings(ref, links, out, snp_method="none"))
+    assert baited.read_bytes() == before
+    inner = out / "sheet.tsv"
+    inner.write_text(f"sample\tfile\ns1\t{reads / 's1.fastq.gz'}\n")
+    with pytest.raises(RasherError, match="The sample sheet .* cannot be inside the output folder"):
+        run(settings(ref, None, out, input=None, sample_sheet=inner, snp_method="none"))
+
+
+def test_a_sample_paired_or_no_longer_since_its_baiting_is_baited_again(stubs, tmp_path):
+    """Mates in different folders are single-end reads; moved next to each other (same names, sizes and times),
+    they are a pair: the single-end baiting is not reused. Nor the paired one when they are apart again."""
+    ref = tmp_path / "ref.fasta"
+    ref.write_text(">ref\n" + "ACGT" * 250 + "\n")
+    d, apart = tmp_path / "reads", tmp_path / "apart"
+    d.mkdir()
+    apart.mkdir()
+    _pair(d, "m", [("on1", 900), ("on2", 800), ("off1", 700)])
+    sheet, out = tmp_path / "sheet.tsv", tmp_path / "out"
+
+    def rerun(r2: Path) -> dict:
+        sheet.write_text(f"sample\tfile\nx\t{d / 'm_R1.fastq.gz'};{r2}\n")
+        run(settings(ref, None, out, input=None, sample_sheet=sheet, snp_method="none"))
+        assert json.loads((out / "run_info.json").read_text())["samples"]["x"]["paired"] == (r2.parent == d)
+        return json.loads((out / ".checkpoints" / "bait.json").read_text())["results"]["x"]
+
+    (d / "m_R2.fastq.gz").rename(apart / "m_R2.fastq.gz")  # A rename keeps the file's time
+    assert "output2" not in rerun(apart / "m_R2.fastq.gz")
+    (apart / "m_R2.fastq.gz").rename(d / "m_R2.fastq.gz")
+    assert rerun(d / "m_R2.fastq.gz")["output2"].endswith("x_R2.fastq.gz")
+    assert [r.name for r in read_records(out / "2_filtered" / "x_R2.fastq.gz")] == ["on1", "on2"]
+    assert not (out / "1_extracted" / "x.fastq.gz").exists()
+    (d / "m_R2.fastq.gz").rename(apart / "m_R2.fastq.gz")
+    assert "output2" not in rerun(apart / "m_R2.fastq.gz")
+    assert (out / "1_extracted" / "x.fastq.gz").exists() and not (out / "1_extracted" / "x_R1.fastq.gz").exists()
+
+
+@pytest.mark.parametrize("step", ["bait", "filter"])
+def test_a_sample_failing_at_a_step_keeps_no_outputs_of_the_later_steps(stubs, dataset, tmp_path, step):
+    """Its filtered reads and assembly of an earlier run would pass for this run's (the report reads every
+    assembly in all_assemblies)."""
+    ref, reads = dataset
+    out = tmp_path / "out"
+    run(settings(ref, reads, out, snp_method="none"))
+    asm = out / "3_assembled"
+    later = {"filter": [out / "2_filtered" / "s1.fastq.gz"],
+             "assemble": [asm / "all_assemblies" / "s1.fasta", asm / "assembly_graphs" / "s1.gfa", asm / "s1"]}
+    assert all(path.exists() for paths in later.values() for path in paths)
+    _reads(reads / "s1.fastq.gz", [("off1", 900)] if step == "bait" else [("on1", 50)])  # None baited, or too short
+    run(settings(ref, reads, out, snp_method="none"))
+    assert summary(out)["s1"]["Status"] == f"failed ({step})"
+    gone = later["assemble"] + (later["filter"] if step == "bait" else [])
+    assert not any(path.exists() for path in gone)
+    for checkpoint in ("filter", "assemble")[1 if step == "filter" else 0:]:
+        assert "s1" not in json.loads((out / ".checkpoints" / f"{checkpoint}.json").read_text())["results"]
+    assert (out / "2_filtered" / "s2.fastq.gz").exists() and (asm / "all_assemblies" / "s2.fasta").exists()
+
+
+def test_a_sample_failing_at_the_assembly_keeps_no_earlier_assembly(stubs, dataset, tmp_path, monkeypatch):
+    """The assembler clears the sample's published assembly before it starts: a failed reassembly must not leave
+    the previous run's fasta for the report to pick up."""
+    ref, reads = dataset
+    out = tmp_path / "out"
+    assert run(settings(ref, reads, out, assembler="skesa", snp_method="none")) == 0
+    published = out / "3_assembled" / "all_assemblies" / "s1.fasta"
+    assert published.exists()
+    monkeypatch.setenv("STUB_SKESA_FAIL", "1")
+    with pytest.raises(RasherError, match="All samples failed at the assemble step"):
+        run(settings(ref, reads, out, assembler="skesa", snp_method="none", redo="assemble"))
+    assert summary(out)["s1"]["Status"] == "failed (assemble)"
+    assert not published.exists()
+
+
+def test_a_sample_never_deletes_the_reads_of_another_sample_of_the_run(stubs, tmp_path):
+    """Single-end samples x_R1 and x_R2; then x_R2 left out and a single-end x added: the x_R1 + x_R2 files look
+    like an earlier paired run of x, but x_R1's are this run's."""
+    ref = tmp_path / "ref.fasta"
+    ref.write_text(">ref\n" + "ACGT" * 250 + "\n")
+    d = tmp_path / "reads"
+    d.mkdir()
+    for name in ("a", "b", "c"):
+        _reads(d / f"{name}.fastq.gz", [(f"on{name.upper()}", 900), ("off1", 700)])
+    sheet, out = tmp_path / "sheet.tsv", tmp_path / "out"
+    sheet.write_text(f"sample\tfile\nx_R1\t{d / 'a.fastq.gz'}\nx_R2\t{d / 'b.fastq.gz'}\n")
+    run(settings(ref, None, out, input=None, sample_sheet=sheet, snp_method="none"))
+    sheet.write_text(f"sample\tfile\nx_R1\t{d / 'a.fastq.gz'}\n#x_R2\t{d / 'b.fastq.gz'}\nx\t{d / 'c.fastq.gz'}\n")
+    run(settings(ref, None, out, input=None, sample_sheet=sheet, snp_method="none"))
+    rows = summary(out)
+    assert rows["x_R1"]["Status"] == "ok" and rows["x"]["Status"] == "ok"
+    for step in ("1_extracted", "2_filtered"):
+        assert [r.name for r in read_records(out / step / "x_R1.fastq.gz")] == ["onA"]
+        assert [r.name for r in read_records(out / step / "x.fastq.gz")] == ["onC"]

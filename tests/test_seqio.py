@@ -267,3 +267,12 @@ def test_subsample_single_end_fasta(fasta, tmp_path):
     out = tmp_path / "o.fasta"
     kept = subsample_reads(r, None, out, None, target_bases=300)
     assert kept.reads == 3 and len(list(read_records(out))) == 3
+
+
+@pytest.mark.parametrize(("n1", "n2"), [(5, 4), (4, 5)])
+def test_subsample_pairs_of_unequal_counts_is_an_error(fastq, tmp_path, n1, n2):
+    from rasher.seqio import subsample_reads
+    r1 = fastq("r1.fastq.gz", [(f"r{i}", "ACGT") for i in range(n1)])
+    r2 = fastq("r2.fastq.gz", [(f"r{i}", "ACGT") for i in range(n2)])
+    with pytest.raises(RasherError, match="do not hold the same number of reads"):
+        subsample_reads(r1, r2, tmp_path / "o1.fastq.gz", tmp_path / "o2.fastq.gz", target_bases=1_000_000)

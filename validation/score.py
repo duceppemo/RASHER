@@ -10,6 +10,7 @@ For each run (a RASHER output folder, labelled by its folder name):
   SNPs      per comparison method found in 4_compared/: samples present, and for each pair of samples the
             reported SNP distance versus the truth under three conventions (events, sites, no_repeat; see
             simulate.py); a pair is exact when it equals the truth under the convention that fits best overall
+            (named next to the exact pairs when it is no_repeat, which leaves out the SNPs inside repeats)
 heteroplasmy  per sample (a mixture of a major and a minor haplotype): what the assembly has at each site where
             the minor haplotype differs: the major allele, the minor allele, N, another sequence, both alleles in
             different contigs (split), or nothing (missing); and the reported SNP distance to the reference
@@ -309,6 +310,20 @@ def read_distances(path: Path) -> dict[str, dict[str, int]]:
     return {r[first]: {n: int(r[n]) for n in names} for r in rows}
 
 
+COMPLETE = ("events", "sites")  # The conventions counting every SNP; no_repeat leaves out those inside repeats
+
+
+def exact_pairs(s: dict) -> str:
+    """The exact pairs of a method, with, when the best convention leaves SNPs out, its name and the exact pairs
+    under the conventions counting every SNP: `45/45 (no_repeat; events 36/45, sites 31/45)`."""
+    exact = f"{s['exact_pairs']}/{s['pairs']}"
+    if s["best_convention"] in COMPLETE:
+        return exact
+    complete = [f"{c} {s['by_convention'][c]['exact_pairs']}/{s['pairs']}" for c in COMPLETE
+                if c in s["by_convention"]]
+    return f"{exact} ({'; '.join(x for x in (s['best_convention'], ', '.join(complete)) if x)})"
+
+
 def score_snps(dist: dict[str, dict[str, int]], truth: dict) -> dict:
     expected = truth["distances"]
     names = list(expected["events"])
@@ -377,8 +392,11 @@ def markdown(results: list[dict], truth: dict) -> str:
             wrong = "; ".join(s["wrong_pairs"][:6]) + (" …" if len(s["wrong_pairs"]) > 6 else "")
             missing = f" (missing: {', '.join(s['missing'])})" if s["missing"] else ""
             out.append(f"| {r['run']} | {method} | {s['samples_present']}/{s['samples_expected']}{missing} | "
-                       f"{s['best_convention']} | {s['exact_pairs']}/{s['pairs']} | {s['max_abs_error']} | "
-                       f"{wrong} |")
+                       f"{s['best_convention']} | {exact_pairs(s)} | {s['max_abs_error']} | {wrong} |")
+    if any(s["best_convention"] not in COMPLETE for r in results for s in r["snps"].values()):
+        out += ["", "Exact pairs followed by a convention in parentheses: that convention fitted best and leaves "
+                "out SNPs inside repeats, so a method missing them still scores exact pairs; the counts after it "
+                f"are under the conventions counting every SNP ({', '.join(COMPLETE)})."]
     if truth["scenario"] == "heteroplasmy":
         out += markdown_heteroplasmy(results, truth)
     elif truth["scenario"] == "numt":

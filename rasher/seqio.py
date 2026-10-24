@@ -302,7 +302,8 @@ def subsample_reads(in1: Path, in2: Path | None, out1: Path, out2: Path | None,
     Systematic sampling of the units (a pair, or a single read): unit i is kept when floor((i+1)*f) exceeds
     floor(i*f), f being the fraction of the bases to keep. Deterministic (no seed), order-preserving, and
     even across the file, so a tile- or time-ordered run stays represented. With `in2`, reads are paired and
-    read in lockstep (not checked here: the baiting wrote these files pair by pair)."""
+    read in lockstep: the files must hold the mates in the same order, as fastp (or the length filter of fasta
+    reads) writes them. Their numbers are checked (a RasherError when they differ), not their names."""
     bases = sum(len(rec.seq) for rec in read_records(in1))
     if in2 is not None:
         bases += sum(len(rec.seq) for rec in read_records(in2))
@@ -316,6 +317,8 @@ def subsample_reads(in1: Path, in2: Path | None, out1: Path, out2: Path | None,
     with open_write(out1) as o1, (open_write(out2) if out2 is not None else nullcontext()) as o2:
         for i, rec1 in enumerate(read_records(in1)):
             rec2 = next(second, None) if second is not None else None
+            if second is not None and rec2 is None:
+                raise RasherError(f"{in1} and {in2} do not hold the same number of reads")
             if not keep(i):
                 continue
             kept.add(len(rec1.seq))
@@ -323,6 +326,8 @@ def subsample_reads(in1: Path, in2: Path | None, out1: Path, out2: Path | None,
             if rec2 is not None:
                 kept.add(len(rec2.seq))
                 o2.write(rec2.format())
+        if second is not None and next(second, None) is not None:
+            raise RasherError(f"{in1} and {in2} do not hold the same number of reads")
     return kept
 
 

@@ -39,6 +39,12 @@ the files of `plastid`, `linear` and `rdna` byte-identical.
 SNP distances are compared with the truth under three conventions: `events` (each mutation once; a SNP in an
 inverted repeat or in every copy of a tandem unit is one event), `sites` (each changed position) and
 `no_repeat` (SNPs outside repeats only). The convention that fits a method best says how it treats repeats.
+When `no_repeat` fits best, `score.py` names it next to the exact pairs, with the exact pairs under `events`
+and `sites`: a method that misses every SNP inside a repeat would otherwise show full marks.
+
+**Known limitation:** the simulator plants SNPs more than 50 bp apart (the example data at least 40 bp), so no
+scenario has two variants within one k-mer (31 bp) of each other, the known blind spot of SKA2's split
+k-mers. The recorded SKA2 results are optimistic for clustered variants.
 
 ## Running
 

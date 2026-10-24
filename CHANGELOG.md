@@ -23,16 +23,15 @@ changelog" is the parent tool's history, kept for provenance.
   gone; `--min-read-length` defaults to 50. Fasta reads skip fastp and are filtered by length.
 - Templated assembly aligns pairs with minimap2 `-ax sr` and calls `samtools consensus -X hiseq` (call
   quality at least 20, as BACoN's unreleased change at the time of the fork).
-- De novo assembly: **SPAdes** (`-a spades`, `--isolate`) or **SKESA** (`-a skesa`; conservative, breaks at
-  repeats such as the plastome inverted repeat — see the validation before choosing it). Flye and myloasm
-  are gone, with `--read-type` and `--min-size`.
+- De novo assembly: **SKESA** (`-a skesa`; the recommended de novo assembler — on the real-data benchmark
+  its SNP distances matched SPAdes' with far fewer contigs) or **SPAdes** (`-a spades`, `--isolate`; writes
+  the assembly graph, more robust below ~30x depth). Flye and myloasm are gone, with `--read-type` and
+  `--min-size`.
 - `--snp-method auto` is minimap2 for templated assemblies and SKA2 for SPAdes and SKESA assemblies.
 - `-m/--memory` also sizes SPAdes and SKESA (it was BBDuk-only). A paired sample `X` next to a sample named
   `X_R1` or `X_R2` is an error (their outputs would collide). No assembler flags circular contigs any more,
   so SKA2's circular-contig end extension no longer applies. Single-end extraction matches read names with
-  a trailing `/1` or `/2` stripped, as aligners report them. `-a skesa` needs
-  `conda install -c conda-forge -c bioconda skesa` (not in `environment.yml` while SKESA is a candidate
-  under validation).
+  a trailing `/1` or `/2` stripped, as aligners report them.
 - Output folders of BACoN do not resume under RASHER (the checkpoint fingerprints are seeded with the tool's
   name; every step runs again); BACoN VCFs are rewritten.
 - Checkpoints record each step's own output signature, and a result is only reused when its output is still

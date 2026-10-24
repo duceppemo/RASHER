@@ -82,10 +82,12 @@ RASHER, use the templated assembly (the default): it is the fastest, it keeps th
 the simulated [validation](Validation) its SNP distances were exact or conservative everywhere except
 NUPT-rich genomes (above). Use a de novo assembler to
 look at the structure of the genomes, when the reference is distant, or to check the templated results
-independently. SKESA is conservative: it ends a contig at a repeat rather than guess through it, so an
-organelle's inverted repeats split its assembly into several contigs. It is offered as a candidate under
-evaluation ([Validation](Validation)), and is not installed with RASHER's environment
-(`conda install -c bioconda skesa`).
+independently. **SKESA is the recommended de novo assembler**: on the real-data
+[benchmark](Validation#real-data-benchmark-010) its SNP distances matched SPAdes' exactly while its
+assemblies stayed in a few clean contigs where SPAdes left dozens plus off-target fragments. Choose SPAdes
+instead to inspect the assembly graph, below roughly 30x depth (SKESA's conservative extension gives up
+first when coverage thins), or where heavy NUMT/NUPT contamination is expected (on the simulated NUPT
+scenario SPAdes + SKA2 was exact where SKESA missed sites).
 
 **Templated assembly.** The reads are aligned to the reference with `minimap2 -ax sr --secondary=no` and sorted;
 `samtools consensus -a -X hiseq --show-ins yes --show-del no -d 3 -C 20` writes the consensus: every position of

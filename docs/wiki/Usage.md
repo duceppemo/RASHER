@@ -148,7 +148,7 @@ have the same names) are errors. Symbolic links are a quick way to rename sample
 | `--keep-bam` | off | Keep the sorted BAM of the baited reads aligned to the reference (`1_extracted/<sample>.bam`; for paired samples, the baited pairs aligned as pairs). minimap2 baiting only: an error with `-b bbduk` |
 | `--min-read-length` | 50 | Reads shorter than this after fastp's trimming are discarded; of a pair, both mates go when either is shorter |
 | `--target-depth` | 100 | After fastp, the reads (pairs kept whole) are subsampled evenly to at most this depth (depth = bases / genome size, `-s` or the reference length); see [Methods](Methods#2-filtering) |
-| `-a`, `--assembly-method` | `samtools` | `samtools` (templated), `spades` (de novo, SPAdes `--isolate`) or `skesa` (de novo, SKESA; not in the conda environment: `conda install -c bioconda skesa`); see [Methods](Methods#3-assembly) |
+| `-a`, `--assembly-method` | `samtools` | `samtools` (templated), `skesa` (de novo, recommended) or `spades` (de novo, SPAdes `--isolate`; writes the assembly graph); see [Methods](Methods#3-assembly) |
 | `--template-gaps` | `n` | Templated assembly: what to put where fewer than three reads cover the reference. `n`: an `N` (no base is guessed); `reference`: the reference's bases, at the ends of each sequence only (gaps inside stay `N`) |
 | `-s`, `--size` | reference length | Expected genome size, for the estimated depth and `--target-depth` |
 | `--snp-method`, `-snp` | `auto` | `auto`: `minimap2` for templated assemblies, `ska` for SPAdes and SKESA. `minimap2` (each assembly aligned to the reference, read position by position), `ska` (SKA2 split k-mers), `parsnp` (core-genome alignment), `none` (stop after the assembly); see [Methods](Methods#4-comparison) |

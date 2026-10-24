@@ -24,7 +24,7 @@
   <text x="601" y="72" text-anchor="middle" font-size="15" font-weight="700" fill="#ffffff">3</text>
   <text x="622" y="73" font-size="19" font-weight="700" fill="var(--text)">Assemble</text>
   <text x="592" y="100" font-size="14" fill="var(--muted)">templated: samtools consensus</text>
-  <text x="592" y="121" font-size="14" fill="var(--muted)">de novo: SPAdes or SKESA</text>
+  <text x="592" y="121" font-size="14" fill="var(--muted)">de novo: SKESA or SPAdes</text>
   <line x1="828" y1="95" x2="851" y2="95" stroke="var(--arrow)" stroke-width="2"/><path d="M860,95 l-10,-5 v10 z" fill="var(--arrow)"/>
   <rect x="860" y="40" width="252" height="112" rx="12" fill="var(--box)" stroke="var(--edge)"/>
   <circle cx="885" cy="67" r="13" fill="#d94f3d"/>

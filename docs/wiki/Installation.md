@@ -23,6 +23,7 @@ minimum versions:
 | samtools | templated assembly (`samtools consensus -X hiseq`); `--keep-bam` | 1.21 |
 | fastp | read filtering and adapter trimming | 1.0 |
 | SPAdes | de novo assembly (`-a spades`) | 4.0 |
+| SKESA | de novo assembly (`-a skesa`, the recommended de novo assembler) | 2.5 |
 | SKA2 | SNPs (`--snp-method ska`; the default for de novo assemblies) | 0.5 |
 | Parsnp, HarvestTools | SNPs (`--snp-method parsnp`) | 2.1.2 (with 2.1.1, every SNP is one base off) |
 | FastTree | tree (default) | 2.1.11 |
@@ -30,13 +31,6 @@ minimum versions:
 | BBMap (BBDuk) | baiting (`-b bbduk`) | 39 |
 | Bandage | optional: pictures of the SPAdes assembly graphs | |
 | python-isal | optional: faster reading of gzipped reads | |
-
-SKESA (`-a skesa`) is not in the environment: it is an optional assembler, still being evaluated
-([Validation](Validation)). Install it into the environment to use it:
-
-```bash
-conda install -c conda-forge -c bioconda skesa
-```
 
 RASHER checks at start-up that the programs needed by the chosen options are on the `PATH`, and lists the
 missing ones with the command to install them.
@@ -53,8 +47,7 @@ conda activate rasher
 rasher --version
 ```
 
-It will install RASHER with every program above except Bandage and SKESA. Until then, install from the source
-code.
+It will install RASHER with every program above except Bandage. Until then, install from the source code.
 
 ## Checking the installation
 

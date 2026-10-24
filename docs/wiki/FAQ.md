@@ -58,10 +58,10 @@ missing many sites looks closer to the others than it is. `snps.vcf` is the same
 [Methods](Methods#4-comparison).
 
 **Which assembler?**
-The templated assembly (the default) to compare samples of one species against a close reference; SPAdes to see
-the structure, or with a distant reference. SKESA is conservative and breaks at repeats (an organelle's inverted
-repeat splits it); it is offered as a candidate under evaluation, and must be installed first
-(`conda install -c bioconda skesa`). See [Methods](Methods#3-assembly).
+The templated assembly (the default) to compare samples of one species against a close reference. For a de novo
+check or a distant reference, SKESA (the recommended de novo assembler: the same SNP distances as SPAdes on the
+real-data benchmark, in far fewer contigs); SPAdes for the assembly graph, below roughly 30x depth, or where
+heavy NUMT/NUPT contamination is expected. See [Methods](Methods#3-assembly).
 
 **The de novo assembly is much longer than the reference.**
 Reads from other genomes were baited with the target: mitochondrial and nuclear sequences similar to the

@@ -18,7 +18,7 @@ A rasher is a thin slice of bacon: RASHER is the short-read fork of
 [BACoN](https://github.com/duceppemo/BACoN), which does the same for Nanopore reads.
 
 <p align="center">
-  <img src="docs/images/pipeline.svg" alt="reads → 1 bait (minimap2 or BBDuk) → 2 filter (fastp, then even subsampling) → 3 assemble (templated: samtools consensus; de novo: SPAdes or SKESA) → 4 compare (SNPs: minimap2, SKA2 or Parsnp; tree: FastTree or IQ-TREE) → report" width="920">
+  <img src="docs/images/pipeline.svg" alt="reads → 1 bait (minimap2 or BBDuk) → 2 filter (fastp, then even subsampling) → 3 assemble (templated: samtools consensus; de novo: SKESA or SPAdes) → 4 compare (SNPs: minimap2, SKA2 or Parsnp; tree: FastTree or IQ-TREE) → report" width="920">
 </p>
 
 ## Quick start
@@ -73,7 +73,7 @@ If RASHER is useful in your work, please cite it (see [`CITATION.cff`](CITATION.
 
 > Duceppe, M.-O. (2026). RASHER: Bait, Assemble and Compare Illumina short reads (v0.1.0).
 
-and the programs it runs: minimap2, fastp, samtools or SPAdes or SKESA, SKA2 or Parsnp, and FastTree or
+and the programs it runs: minimap2, fastp, samtools or SKESA or SPAdes, SKA2 or Parsnp, and FastTree or
 IQ-TREE
 ([references](https://github.com/duceppemo/RASHER/wiki/Methods#references)). RASHER is a fork of
 [BACoN](https://github.com/duceppemo/BACoN) (Duceppe, 2026, doi:10.5281/zenodo.22970412).

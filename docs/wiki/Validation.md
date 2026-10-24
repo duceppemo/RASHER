@@ -12,7 +12,7 @@ Record:
 [`validation/results/2026-10-22_v0.1.0/`](https://github.com/duceppemo/RASHER/blob/main/validation/results/2026-10-22_v0.1.0/SUMMARY.md).
 Pairs of genomes with exactly the true SNP distance:
 
-| Scenario | samtools + minimap2 (default) | SPAdes + SKA2 (de novo default) | SKESA + SKA2 |
+| Scenario | samtools + minimap2 (default) | SPAdes + SKA2 | SKESA + SKA2 |
 |---|---|---|---|
 | plastid | 36/45 | 36/45 | 36/45 |
 | linear | 10/10 | 10/10 | 10/10 |
@@ -35,8 +35,8 @@ What the record establishes:
 - SKESA behaved as its design suggests — it breaks at repeats: the plastome IR collapses, about 20 bp are
   lost at each contig end, and 20 NUPT sites go missing in one sample. Its contigs are error-free on clean
   samples but not under contamination or strong mixtures (up to 257 mismatches at 25x nuclear depth). With
-  its default SKA2 pairing it beat SPAdes on no scenario. It stays available as `-a skesa` while the
-  real-data benchmark runs; expect it to be dropped unless that overturns the simulations.
+  its default SKA2 pairing it beat SPAdes on no simulated scenario — a verdict the real-data benchmark
+  below overturned.
 
 ## Real-data benchmark (0.1.0)
 

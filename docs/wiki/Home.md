@@ -10,7 +10,7 @@ organelle genome (chloroplast, mitochondrion) or another region of interest, and
 2. **filters** them with fastp (adapters, base qualities, length), and caps the depth by an even, deterministic
    subsampling;
 3. **assembles** them: a templated consensus of the reads aligned to the reference (samtools, the default), or a
-   de novo assembly (SPAdes, or SKESA);
+   de novo assembly (SKESA, or SPAdes);
 
 then **compares** the samples: SNPs (each assembly read along the reference with minimap2, the default for
 templated assemblies; SKA2 split k-mers, the default for de novo ones; or a Parsnp core-genome alignment), a
@@ -18,7 +18,7 @@ matrix of pairwise SNP distances, a VCF of the SNPs relative to the reference, a
 Everything is summarized in an HTML report, and in MultiQC sections (next to fastp's own).
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/duceppemo/RASHER/main/docs/images/pipeline.svg" alt="reads → 1 bait (minimap2 or BBDuk) → 2 filter (fastp, then even subsampling) → 3 assemble (templated: samtools consensus; de novo: SPAdes or SKESA) → 4 compare (SNPs: minimap2, SKA2 or Parsnp; tree: FastTree or IQ-TREE) → report" width="920">
+  <img src="https://raw.githubusercontent.com/duceppemo/RASHER/main/docs/images/pipeline.svg" alt="reads → 1 bait (minimap2 or BBDuk) → 2 filter (fastp, then even subsampling) → 3 assemble (templated: samtools consensus; de novo: SKESA or SPAdes) → 4 compare (SNPs: minimap2, SKA2 or Parsnp; tree: FastTree or IQ-TREE) → report" width="920">
 </p>
 
 RASHER was designed for genome skimming: low-coverage sequencing of total DNA, where the organelle reads are

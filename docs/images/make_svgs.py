@@ -117,7 +117,7 @@ def write(name, text):
 for theme in ("light", "dark", "auto"):
     write("rasher_logo.svg" if theme == "auto" else f"rasher_logo_{theme}.svg", logo(theme))
     write("rasher_pipeline.svg" if theme == "auto" else f"rasher_pipeline_{theme}.svg", pipeline(
-        theme, ["templated: samtools consensus", "de novo: SPAdes or SKESA"],
+        theme, ["templated: samtools consensus", "de novo: SKESA or SPAdes"],
         ["fastp (quality, adapters),", "then even subsampling"], "rasher"))
     write("bacon_pipeline.svg" if theme == "auto" else f"bacon_pipeline_{theme}.svg", pipeline(
         theme, ["templated: samtools consensus", "de novo: Flye or myloasm"],

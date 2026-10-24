@@ -106,9 +106,9 @@ def build_parser() -> argparse.ArgumentParser:
     asm = parser.add_argument_group("assembly")
     asm.add_argument("-a", "--assembly-method", choices=["samtools", "spades", "skesa"], default="samtools",
                      help="samtools: templated assembly, the consensus of the reads aligned to the reference "
-                          "(most accurate for SNPs, fastest); spades: de novo assembly (SPAdes --isolate, "
-                          "independent of the reference); skesa: de novo assembly, conservative, which breaks at "
-                          "repeats (an organelle's inverted repeats fragment it). Default: %(default)s")
+                          "(most accurate for SNPs, fastest); skesa: de novo assembly, independent of the "
+                          "reference (the recommended de novo assembler); spades: de novo assembly (SPAdes "
+                          "--isolate), which writes the assembly graph. Default: %(default)s")
     asm.add_argument("--template-gaps", choices=["n", "reference"], default="n",
                      help="Templated assembly (-a samtools): what to put where fewer than three reads cover the "
                           "reference. n: an N (no base is guessed); reference: the reference's bases, at the ends "

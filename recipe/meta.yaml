@@ -30,6 +30,7 @@ requirements:
     - samtools >=1.21
     - fastp >=1.0
     - spades >=4.0
+    - skesa >=2.5
     - ska2 >=0.5
     - parsnp >=2.1.2
     - harvesttools

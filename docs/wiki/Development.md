@@ -57,8 +57,8 @@ A program is added or replaces another only if it is maintained, installs with t
 and does at least as well in the validation. Add it to `environment.yml`, `recipe/meta.yaml` and
 `rasher/tools.py` (`PACKAGES`), with a stub in `tests/test_pipeline.py`, then run the validation and record the
 results in a new dated folder under `validation/results/` (never rewrite an old record). A candidate still under
-evaluation (SKESA, for now) is known to `rasher/tools.py` and has its stub, but stays out of `environment.yml`
-and the recipe until the validation supports it.
+evaluation is known to `rasher/tools.py` and has its stub, but stays out of `environment.yml` and the recipe
+until the validation supports it (as SKESA was until the 0.1.0 real-data benchmark).
 
 ## Documentation
 

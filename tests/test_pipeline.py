@@ -2217,6 +2217,21 @@ def test_inputs_inside_the_output_folder_are_refused(stubs, dataset, tmp_path):
     inner.write_text(f"sample\tfile\ns1\t{reads / 's1.fastq.gz'}\n")
     with pytest.raises(RasherError, match="The sample sheet .* cannot be inside the output folder"):
         run(settings(ref, None, out, input=None, sample_sheet=inner, snp_method="none"))
+    sheet_link = tmp_path / "sheet_link.tsv"
+    inner_sheet = out / "linked_sheet.tsv"
+    inner_sheet.write_text(f"sample\tfile\ns1\t{reads / 's1.fastq.gz'}\n")
+    sheet_link.symlink_to(inner_sheet)
+    with pytest.raises(RasherError, match="The sample sheet .* cannot be inside the output folder"):
+        run(settings(ref, None, out, input=None, sample_sheet=sheet_link, snp_method="none"))
+    hard = tmp_path / "hard"
+    hard.mkdir()
+    os.link(baited, hard / "s1.fastq.gz")  # Same file as the baited output, under a path outside the output
+    with pytest.raises(RasherError, match=r"is the same file \(a hard link\) as .*1_extracted.*: give a copy"):
+        run(settings(ref, hard, out, snp_method="none"))
+    assert baited.read_bytes() == before
+    with pytest.raises(RasherError, match="--add-genomes .* cannot be inside the output folder"):
+        run(settings(ref, reads, out, snp_method="none",
+                     add_genomes=[out / "3_assembled" / "all_assemblies" / "s1.fasta"]))
 
 
 def test_a_sample_paired_or_no_longer_since_its_baiting_is_baited_again(stubs, tmp_path):

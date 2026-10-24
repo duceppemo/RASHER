@@ -124,7 +124,7 @@ bcl2fastq run is its own sample (`X_S1_L001`, `X_S1_L002`): put a sample's lanes
 a sample sheet, to make one sample of them.
 
 The R1 and R2 files of a pair must list the mates in the same order, as sequencers and the SRA write them: the
-mates may have identical names, end in `/1` and `/2`, or end in `.1` and `.2` (`fasterq-dump --readids`); a pair whose files desynchronise (different names at the
+mates may have identical names, end in `/1` and `/2`, or end in `.1` and `.2` (`fastq-dump --readids`); a pair whose files desynchronise (different names at the
 same rank, or a different number of reads) is an error. Each pair travels whole through the pipeline
 (`<sample>_R1` and `<sample>_R2` files in `1_extracted/` and `2_filtered/`).
 

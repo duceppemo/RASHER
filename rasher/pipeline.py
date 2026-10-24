@@ -460,14 +460,22 @@ def _check_inputs_kept(s: Settings) -> None:
 
 
 def _check_reads_outside(s: Settings, samples: list[Sample]) -> None:
-    """Refuse, before anything is written, a reads file in the output folder (listed in a sample sheet, or the
-    target of a link): a step's output can be that file, which the step overwrites (and deletes when the sample
-    fails)."""
+    """Refuse, before anything is written, a reads file in the output folder (listed in a sample sheet, the
+    target of a link, or a hard link to a baited or filtered file): a step's output can be that file, which the
+    step overwrites (and deletes when the sample fails)."""
+    written = {}  # (st_dev, st_ino) of the files RASHER wrote under 1_extracted and 2_filtered
+    for folder in (s.output / FOLDERS["bait"], s.output / FOLDERS["filter"]):
+        if folder.is_dir():
+            written.update({(st.st_dev, st.st_ino): out for out in folder.iterdir() if (st := out.stat())})
     for x in samples:
         for f in x.files:
             if any(p.is_relative_to(s.output) for p in (_resolved_folder(f), f.resolve())):
                 raise RasherError(f"Sample {x.name}: the reads file {f} cannot be inside the output folder "
                                   f"{s.output}")
+            st = f.stat()
+            if st.st_nlink > 1 and (st.st_dev, st.st_ino) in written:
+                raise RasherError(f"Sample {x.name}: the reads file {f} is the same file (a hard link) as "
+                                  f"{written[(st.st_dev, st.st_ino)]}, which RASHER rewrites: give a copy")
 
 
 def _open_bytes(path: Path):
@@ -727,8 +735,13 @@ def run(s: Settings) -> int:
     if s.output.exists() and not s.output.is_dir():
         raise RasherError(f"The output folder {s.output} is a file")
     _check_inputs_kept(s)
-    if s.sample_sheet and s.sample_sheet.is_relative_to(s.output):
+    if s.sample_sheet and any(p.is_relative_to(s.output)
+                              for p in (s.sample_sheet.absolute(), _resolved_folder(s.sample_sheet))):
         raise RasherError(f"The sample sheet {s.sample_sheet} cannot be inside the output folder {s.output}")
+    for g in s.add_genomes:
+        if any(p.is_relative_to(s.output) for p in (g, g.resolve())):
+            # The assembly step deletes and rewrites all_assemblies/<sample>.fasta before the comparison copies it
+            raise RasherError(f"--add-genomes {g} cannot be inside the output folder {s.output}: give a copy")
     try:
         s.output.mkdir(parents=True, exist_ok=True)
         lock = open(s.output / ".rasher.lock", "w")  # noqa: SIM115 - held until the end of the run

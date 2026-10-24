@@ -1,4 +1,4 @@
-# Bioconda recipe (to be submitted to bioconda-recipes/recipes/rasher at the first release). The sha256 is that
+# Bioconda recipe (submitted to bioconda-recipes/recipes/rasher with the first release). The sha256 is that
 # of the GitHub tarball for tag v{{ version }} (curl -sL <url> | sha256sum). For a new release: bump `version`,
 # recompute the sha256, reset `number` to 0, and update bioconda-recipes (its autobump bot usually does).
 {% set name = "rasher" %}
@@ -29,8 +29,8 @@ requirements:
     - minimap2 >=2.24
     - samtools >=1.21
     - fastp >=1.0
-    - spades >=4.0
     - skesa >=2.5
+    - spades >=4.0
     - ska2 >=0.5
     - parsnp >=2.1.2
     - harvesttools

@@ -89,7 +89,6 @@ from `run_info.json` first.
    first release, Zenodo also mints RASHER's concept DOI, which always points to the latest version: make it the
    top-level `doi` of `CITATION.cff` (GitHub's "Cite this repository" at any tag then gives a DOI that resolves; a
    version DOI is only known after the tag), use it for a README badge, and check it in `tests/test_cli.py`.
-   Until then, `CITATION.cff` points at BACoN's DOI as the parent tool.
 4. Update `recipe/meta.yaml` (version, sha256 of the tag's tarball, build number 0). At the first release,
    submit it to bioconda-recipes as `recipes/rasher`, and update the bioconda section of
    [Installation](Installation) once the package is published. Afterwards, bioconda's autobump bot usually opens

@@ -85,7 +85,7 @@ look at the structure of the genomes, when the reference is distant, or to check
 independently. **SKESA is the recommended de novo assembler**: on the real-data
 [benchmark](Validation#real-data-benchmark-010) its SNP distances matched SPAdes' exactly while its
 assemblies stayed in a few clean contigs where SPAdes left dozens plus off-target fragments. Choose SPAdes
-instead to inspect the assembly graph, below roughly 30x depth (SKESA's conservative extension gives up
+instead to inspect the assembly graph, below roughly 20–30x depth (SKESA's conservative extension gives up
 first when coverage thins), or where heavy NUMT/NUPT contamination is expected (on the simulated NUPT
 scenario SPAdes + SKA2 was exact where SKESA missed sites).
 

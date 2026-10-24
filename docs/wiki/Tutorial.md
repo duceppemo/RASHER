@@ -1,7 +1,7 @@
 # Tutorial: plastomes of 24 Arabidopsis accessions
 
 This tutorial runs RASHER on public data: whole-genome Illumina reads of 24 *Arabidopsis thaliana*
-accessions (ENA project [PRJEB62038](https://www.ebi.ac.uk/ena/browser/view/PRJEB62038); HiSeq 2x100 bp
+accessions (ENA project [PRJEB62038](https://www.ebi.ac.uk/ena/browser/view/PRJEB62038); HiSeq 2x150 bp
 pairs, 9–16 Gbases per run). The reference is the Col-0 plastome
 ([NC_000932.1](https://www.ncbi.nlm.nih.gov/nuccore/NC_000932.1), 154,478 bp) — and Col-0 itself is among
 the 24 accessions, so one sample should come out identical to the reference. Let's check, and see how the
@@ -25,11 +25,18 @@ curl -s "https://www.ebi.ac.uk/ena/portal/api/filereport?accession=PRJEB62038&re
 mkdir -p illumina
 while IFS=$'\t' read -r run alias urls md5s; do
     name=$(echo "$alias" | tr ' /' '__')_${run}
-    url1=${urls%%;*}; url2=${urls##*;}
-    curl -s -C - --retry 5 -o "illumina/${name}_R1.fastq.gz" "https://$url1"
-    curl -s -C - --retry 5 -o "illumina/${name}_R2.fastq.gz" "https://$url2"
-    echo "${md5s%%;*}  illumina/${name}_R1.fastq.gz"
-    echo "${md5s##*;}  illumina/${name}_R2.fastq.gz"
+    i=0
+    for url in ${urls//;/ }; do
+        i=$((i + 1))
+        md5=$(echo "$md5s" | cut -d';' -f$i)
+        case "$url" in
+            *_1.fastq.gz) out="illumina/${name}_R1.fastq.gz" ;;
+            *_2.fastq.gz) out="illumina/${name}_R2.fastq.gz" ;;
+            *) continue ;;   # an ENA run can also list an unpaired file: skip it
+        esac
+        curl -s -C - --retry 5 -o "$out" "https://$url"
+        echo "$md5  $out"
+    done
 done < runs.tsv > md5.txt
 md5sum -c md5.txt
 
@@ -96,7 +103,7 @@ report's genome map places them on the LSC, inverted repeats and SSC.
 ## 5. A de novo check: `-a skesa`
 
 ```bash
-rasher -r NC_000932.1.fasta -i illumina/ -o rasher_plastome -a skesa -t 24 -p 3
+rasher -r NC_000932.1.fasta -i illumina/ -o rasher_plastome -a skesa -t 24 -p 3 --annotation NC_000932.1.gb
 ```
 
 The same output folder reuses the baited and filtered reads (nothing upstream is redone), and SKESA — the

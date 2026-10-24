@@ -45,5 +45,5 @@ assembly), the tree, the SNP distance heatmap, the genome map with the annotated
 the methods paragraph. The same numbers are in `summary.tsv` and `4_compared/minimap2/` — see
 [Outputs](Outputs).
 
-The reads are simulated the same way as the [validation](Validation) scenarios
-(`validation/simulate.py`); the example is just small enough to run anywhere.
+The reads are simulated the same way as the [validation](Validation) scenarios (`validation/simulate.py`),
+with 20% off-target pairs instead of the validation's 15%; the example is just small enough to run anywhere.

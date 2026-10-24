@@ -27,7 +27,7 @@ A rasher is a thin slice of bacon: RASHER is the short-read fork of
 ```bash
 git clone https://github.com/duceppemo/RASHER
 cd RASHER
-mamba env create -f environment.yml && conda activate RASHER
+conda env create -f environment.yml && conda activate RASHER
 pip install .
 
 rasher -r chloroplast.fasta -i reads/ -o results/

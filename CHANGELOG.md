@@ -25,7 +25,7 @@ changelog" is the parent tool's history, kept for provenance.
   quality at least 20, as BACoN's unreleased change at the time of the fork).
 - De novo assembly: **SKESA** (`-a skesa`; the recommended de novo assembler — on the real-data benchmark
   its SNP distances matched SPAdes' with far fewer contigs) or **SPAdes** (`-a spades`, `--isolate`; writes
-  the assembly graph, more robust below ~30x depth). Flye and myloasm are gone, with `--read-type` and
+  the assembly graph, more robust below ~20–30x depth). Flye and myloasm are gone, with `--read-type` and
   `--min-size`.
 - `--snp-method auto` is minimap2 for templated assemblies and SKA2 for SPAdes and SKESA assemblies.
 - `-m/--memory` also sizes SPAdes and SKESA (it was BBDuk-only). A paired sample `X` next to a sample named

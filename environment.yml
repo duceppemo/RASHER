@@ -8,8 +8,8 @@ dependencies:
   - minimap2>=2.24      # baiting, templated assembly
   - samtools>=1.21      # templated assembly (samtools consensus -X hiseq)
   - fastp>=1.0          # read filtering and adapter trimming
-  - spades>=4.0         # de novo assembly (-a spades)
   - skesa>=2.5          # de novo assembly (-a skesa, the recommended de novo assembler)
+  - spades>=4.0         # de novo assembly (-a spades)
   - ska2>=0.5           # SNPs (--snp-method ska)
   - parsnp>=2.1.2       # SNPs (--snp-method parsnp)
   - harvesttools

@@ -4,10 +4,10 @@
 OUTPUT/
 ├── report.html                 the report: samples, tree, distances, methods, provenance
 ├── summary.tsv                 one line per sample: reads, depth, assembly, status, notes
-├── rasher_*_mqc.json            MultiQC sections (samples table, bases, SNP distances)
+├── rasher_*_mqc.json           MultiQC sections (samples table, bases, SNP distances)
 ├── run_info.json               version, command, settings, program versions, samples, comparison
-├── rasher.log                   the log of every run in this folder
-├── .rasher.lock                 held by the run using this folder (see Usage)
+├── rasher.log                  the log of every run in this folder
+├── .rasher.lock                held by the run using this folder (see Usage)
 ├── reference.fasta             the reference used: upper case, ambiguity codes as N
 ├── annotation.gb / .gff3       the annotation of the reference (--annotation, or the GenBank reference), as given
 ├── metadata.tsv                the sample metadata (--metadata, and the sample sheet's extra columns), one row per sample and added genome
@@ -40,8 +40,8 @@ colours of the heatmap and of the highlighted cells are kept when printing):
 
 - **Overview**: samples assembled, samples with a note, reference length, SNP sites and distinct genomes; with
   metadata, a line naming its source, its columns and the column that colours the figures.
-- **Samples**: the main columns of `summary.tsv` (all but the base counts, largest contig, assembly N50 and
-  assembly depth), sortable by clicking a header; failed samples, depth below 20x, length outside 0.8–1.2 times
+- **Samples**: the main columns of `summary.tsv` (all but the base counts, largest contig, assembly N50,
+  assembly depth and circular contigs), sortable by clicking a header; failed samples, depth below 20x, length outside 0.8–1.2 times
   the reference, and `N` bases are highlighted. The metadata columns, when there are any, come right after
   `Sample`: a column whose values are all numbers sorts as numbers, long values wrap, the values of the
   colour column carry their marker (its colour and shape; a hollow circle alone when the sample has no value),
@@ -139,7 +139,7 @@ Three [MultiQC custom-content](https://docs.seqera.io/multiqc/custom_content) fi
 
 | File | MultiQC section |
 |---|---|
-| `rasher_samples_mqc.json` | table: the metadata columns (as text), status, baited reads and share, read N50, depth, contigs, circular contigs, length, length vs reference, `N` bases, note |
+| `rasher_samples_mqc.json` | table: the metadata columns (as text), status, baited reads and share, read N50, depth, contigs, length, length vs reference, `N` bases, note |
 | `rasher_reads_mqc.json` | bar graph: the bases of each sample kept for the assembly, baited but filtered out, and off-target |
 | `rasher_distances_mqc.json` | heatmap of the SNP distances in tree order (recent MultiQC versions also offer a clustered view); absent when the samples were not compared |
 

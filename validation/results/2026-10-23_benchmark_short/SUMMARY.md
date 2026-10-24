@@ -15,7 +15,7 @@ themselves. Helper scripts: [`aln2dist.py`](aln2dist.py) (snippy-core alignment 
 
 ## Datasets (public, no simulation)
 
-- **Arabidopsis accessions** (`acc_cp_*`): 24 PRJEB62038 accessions, HiSeq 2x100 PE WGS (9–16 Gbases per
+- **Arabidopsis accessions** (`acc_cp_*`): 24 PRJEB62038 accessions, HiSeq 2x150 PE WGS (9–16 Gbases per
   sample, of which 9–21% bait as plastid), reference plastome NC_000932.1 (154,478 bp). Matched ONT runs of
   the same accessions exist as BACoN 0.4.0 results (templated and Flye, SKA2 distances) for concordance.
 - **Human mitochondria** (`mt_*`): 32 1KGP chrM Illumina BAM slices converted to paired fastq

@@ -109,6 +109,7 @@ marker just before the extension:
 | `X_R1.fastq.gz`, `X_R2.fastq.gz` (or `_r1`/`_r2`) | `X` |
 | `X_1.fastq.gz`, `X_2.fastq.gz` | `X` |
 | `X.R1.fastq.gz`, `X.R2.fastq.gz` | `X` |
+| `X.1.fastq.gz`, `X.2.fastq.gz` | `X` |
 | `X_S1_L001_R1_001.fastq.gz`, `X_S1_L001_R2_001.fastq.gz` (bcl2fastq) | `X_S1_L001` |
 
 The `R` may be either case, the `_001` tail of bcl2fastq and BCL Convert is allowed, and the two mates must use
@@ -123,7 +124,7 @@ bcl2fastq run is its own sample (`X_S1_L001`, `X_S1_L002`): put a sample's lanes
 a sample sheet, to make one sample of them.
 
 The R1 and R2 files of a pair must list the mates in the same order, as sequencers and the SRA write them: the
-mates may have identical names or end in `/1` and `/2`; a pair whose files desynchronise (different names at the
+mates may have identical names, end in `/1` and `/2`, or end in `.1` and `.2` (`fasterq-dump --readids`); a pair whose files desynchronise (different names at the
 same rank, or a different number of reads) is an error. Each pair travels whole through the pipeline
 (`<sample>_R1` and `<sample>_R2` files in `1_extracted/` and `2_filtered/`).
 
@@ -211,5 +212,7 @@ Baiting reads every input read once (minimap2 aligns each file once); the other 
 only, capped at `--target-depth`. With whole-genome reads, baiting therefore takes most of the time of a
 templated run; a de novo assembly adds SPAdes' or SKESA's time per sample. `-t` threads are shared between the
 `-p` samples run at the same time, and `-m` memory between the samples that BBDuk, SPAdes or SKESA process at the
-same time. Timings and memory on real data will be given with the short-read [validation](Validation) and
-[tutorial](Tutorial).
+same time. On real data, the [tutorial](Tutorial)'s 24 whole-genome runs of 9–16 Gbases each take about
+4.5 hours with `-t 24 -p 3` (nearly all of it baiting) and under 5 GB of memory; the
+[benchmark record](https://github.com/duceppemo/RASHER/blob/main/validation/results/2026-10-23_benchmark_short/SUMMARY.md)
+has the full timings per assembler.

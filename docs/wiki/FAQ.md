@@ -11,7 +11,7 @@ distant reference, try `-b bbduk`.
 
 **My R1 and R2 files became two samples.**
 They are paired only when they sit in the same folder and their names differ only by the mate marker before the
-extension: `X_R1`/`X_R2`, `X_1`/`X_2` or `X.R1`/`X.R2` (an `_001` tail allowed), with the same marker on both
+extension: `X_R1`/`X_R2`, `X_1`/`X_2`, `X.R1`/`X.R2` or `X.1`/`X.2` (an `_001` tail allowed), with the same marker on both
 (`X_1` does not pair with `X_R2`). Names such as `X-R1.fastq.gz` or `X_read1.fastq.gz` are not recognized, in a
 folder or in a sample sheet (which pairs a sample's files by the same rules): rename them, or make symbolic links
 named `X_R1.fastq.gz` and `X_R2.fastq.gz`. See [Usage](Usage#inputs).
@@ -60,7 +60,7 @@ missing many sites looks closer to the others than it is. `snps.vcf` is the same
 **Which assembler?**
 The templated assembly (the default) to compare samples of one species against a close reference. For a de novo
 check or a distant reference, SKESA (the recommended de novo assembler: the same SNP distances as SPAdes on the
-real-data benchmark, in far fewer contigs); SPAdes for the assembly graph, below roughly 30x depth, or where
+real-data benchmark, in far fewer contigs); SPAdes for the assembly graph, below roughly 20–30x depth, or where
 heavy NUMT/NUPT contamination is expected. See [Methods](Methods#3-assembly).
 
 **The de novo assembly is much longer than the reference.**

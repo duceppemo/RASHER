@@ -22,8 +22,8 @@ minimum versions:
 | minimap2 | baiting (`-x sr`); templated assembly; off-reference share of de novo assemblies; SNPs (`--snp-method minimap2`, the default for templated assemblies) | 2.24 |
 | samtools | templated assembly (`samtools consensus -X hiseq`); `--keep-bam` | 1.21 |
 | fastp | read filtering and adapter trimming | 1.0 |
-| SPAdes | de novo assembly (`-a spades`) | 4.0 |
 | SKESA | de novo assembly (`-a skesa`, the recommended de novo assembler) | 2.5 |
+| SPAdes | de novo assembly (`-a spades`) | 4.0 |
 | SKA2 | SNPs (`--snp-method ska`; the default for de novo assemblies) | 0.5 |
 | Parsnp, HarvestTools | SNPs (`--snp-method parsnp`) | 2.1.2 (with 2.1.1, every SNP is one base off) |
 | FastTree | tree (default) | 2.1.11 |
@@ -37,8 +37,9 @@ missing ones with the command to install them.
 
 ## bioconda (planned)
 
-There is no bioconda package yet: it will be submitted with the first release
-([`recipe/meta.yaml`](https://github.com/duceppemo/RASHER/blob/main/recipe/meta.yaml)). Once it is published,
+There is no bioconda package yet: the recipe
+([`recipe/meta.yaml`](https://github.com/duceppemo/RASHER/blob/main/recipe/meta.yaml)) was submitted with the
+first release (bioconda pull request pending). Once it is published,
 this section will give the command, which is expected to be:
 
 ```bash

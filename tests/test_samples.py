@@ -376,8 +376,9 @@ def test_sample_names_that_differ_only_by_case_are_rejected(tmp_path, fastq):
     (tmp_path / "in").mkdir()
     fastq("in/S1.fastq.gz", [("r", "ACGT")])
     fastq("in/s1.fastq.gz", [("r", "ACGT")])
-    with pytest.raises(RasherError, match="differ only by case"):
-        discover(tmp_path / "in")
+    if len(list((tmp_path / "in").iterdir())) == 2:  # On a case-insensitive file system they are one file
+        with pytest.raises(RasherError, match="differ only by case"):
+            discover(tmp_path / "in")
     # A paired sample x writes x_R1 files: those of a sample X_r1 on such a file system
     sheet.write_text("sample\tfile\nx\tx_R1.fastq.gz;x_R2.fastq.gz\nX_r1\ta.fastq.gz\n")
     with pytest.raises(RasherError, match="Sample names 'x' \\(paired\\) and 'X_r1' collide"):

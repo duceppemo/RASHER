@@ -1,15 +1,17 @@
-# Real-data benchmark of RASHER 0.1.0 — INTERIM (stages 1, 2 and 4 of 4 done; stage 3 running)
+# Real-data benchmark of RASHER 0.1.0 (2026-10-23/24, pre-release)
 
-First real-data results for the short-read fork. **Interim record**: of the competitor legs (stage 3),
-GetOrganelle is done and NOVOPlasty/Snippy were still running when this was written. Stage 4 (human-mt
-SPAdes, the Arabidopsis *mitogenome*, a depth sweep) was added before concluding on SKESA vs SPAdes —
-more benchmarks were explicitly requested first. The run scripts are in [`scripts/`](scripts/), the
-matrix scorer is [`score_acc.py`](score_acc.py).
+Real-data benchmark of the short-read fork: RASHER's three assemblers against each other, against the
+matched BACoN-ONT runs, and against GetOrganelle, NOVOPlasty and Snippy on the same reads. Stage 4
+(human-mt SPAdes, the Arabidopsis *mitogenome*, a depth sweep) was added mid-benchmark before concluding
+on SKESA vs SPAdes. The run scripts are in [`scripts/`](scripts/), the matrix scorer is
+[`score_acc.py`](score_acc.py).
 
 Run from RASHER 0.1.0 (commit `decfcce`, unreleased), env `RASHER_dev`, one machine: 2 Intel Xeon
-Gold 6226R (64 threads, runs used `-t 24`), 503 GB RAM, Linux. No run failed: 336/336 sample runs OK.
-Stage 4 ran alongside the (single-threaded) NOVOPlasty leg of stage 3 on the otherwise idle machine, so
-its wall times carry a small contention penalty; stages 1–2 had the machine to themselves.
+Gold 6226R (64 threads, runs used `-t 24`), 503 GB RAM, Linux. No RASHER run failed: 336/336 sample runs
+OK across 13 legs. Stage 4 ran alongside the (single-threaded) NOVOPlasty leg of stage 3 on the otherwise
+idle machine, so its wall times carry a small contention penalty; stages 1–2 had the machine to
+themselves. Helper scripts: [`aln2dist.py`](aln2dist.py) (snippy-core alignment → distance matrix),
+[`comp_score.py`](comp_score.py) (competitor assemblies → reference coverage).
 
 ## Datasets (public, no simulation)
 
@@ -99,15 +101,54 @@ Median pairwise distances: BACoN-ONT 37–38, RASHER SPAdes/SKESA 53, RASHER tem
    (5 vs 6 contigs) and more stable (vs 100x: mean diff 0.7, max 2, 322 SNP sites) than SKESA
    (mean diff 2.2–2.4, max 5, 307 sites, shortest assemblies). The conservative extender gives up
    first when coverage thins.
-7. **Where this leaves the de novo choice** (decision with the user, pending stage 3): SKESA beat SPAdes
+7. **Where this leaves the de novo choice**: SKESA beat SPAdes
    on contiguity and off-target restraint on all three genomes at normal depth, with identical distances
    and identical cost — the simulation-based "drop SKESA" recommendation of the previous record is
    overturned, and SKESA now looks like the better de novo *recommendation*, with a documented caveat to
    prefer SPAdes (or the templated default) below ~20–30x. Both remain available either way; the
    templated consensus remains the overall default and the only full-length assembly everywhere.
 
-Stage 3 so far: **GetOrganelle** finished all 56 samples in ~3 h 20 m total (sequential, `-t 24` each):
-23/24 complete circular plastomes (1 incomplete), 32/32 complete human mt. NOVOPlasty (single-threaded,
-~1.9 h per Arabidopsis sample) and Snippy were still running; their results, the assembly-completeness
-scoring against GetOrganelle/NOVOPlasty, the Snippy arbitration of the RASHER-vs-ONT offset (finding 1),
-and the defaults discussion will extend this record.
+## Stage 3: Snippy arbitration and the assembly competitors
+
+8. **Snippy sides with RASHER's templated + minimap2 default, strongly.** Pairwise distances from
+   `snippy-core`'s core SNP alignment (same reads, independent caller — bwa + freebayes):
+
+   | Snippy vs | Identical | Mean \|diff\| | Max \|diff\| | r |
+   |---|---|---|---|---|
+   | RASHER templated (minimap2), human mt | 74/496 | 1.9 | 5 | **0.998** |
+   | RASHER templated (minimap2), plastome | 23/276 | 3.8 | 13 | **0.976** |
+   | RASHER SPAdes/SKESA (SKA2), both datasets | 1–2 | 26–28 | 48–62 | 0.92–0.93 |
+   | BACoN-ONT templated (SKA2), plastome | 1/276 | 40.2 | 66 | 0.84 |
+
+   Medians line up as RASHER templated ≈ Snippy (82 vs 81 on the plastome, 42 vs 40 on human mt), the
+   SKA2 de novo legs sit lower (split k-mers skip clustered/indel-adjacent sites), and BACoN-ONT lowest
+   (37). **The finding-1 offset is resolved: the SNPs RASHER sees and the ONT runs don't are real** —
+   the ONT consensus masks them; Illumina reads and two independent Illumina callers agree on them.
+9. **GetOrganelle is the assembly reference point, and the only competitor that matches RASHER's
+   reliability.** 23/24 complete circular plastomes (median 1 contig, 154.5 kb, ≥ 99.9% reference
+   coverage; the one failure, Ct-1, stops at 128 kb/83%) and 32/32 single-contig human mt at 99.5–99.9%
+   coverage. Cost: 7.3 min per plastome sample, 42 s per mt sample.
+10. **NOVOPlasty is fast only on small genomes and unreliable on WGS skims.** Human mt: 32/32
+    circularized, ~5 min per sample. Plastome: only 15/24 assemblies reach 99.9% reference coverage —
+    3 total failures (~300 bp output), 2 stop near 17%, and 4 "full-length" 154 kb assemblies align over
+    only 83% of the reference — at 62.5 min per sample (single-threaded, up to 106 min).
+11. **Runtime, per Arabidopsis WGS sample, like for like** (each tool reads the full ~12–16 Gbase run):
+    GetOrganelle 7.3 min (assembly only), Snippy 9.1 min (SNPs only), RASHER templated 11.0 min
+    (assembly + SNPs + tree + report), NOVOPlasty 62.5 min (assembly only, often incomplete). On the
+    small human-mt inputs RASHER is ~26 s per sample, Snippy ~26 s, GetOrganelle ~42 s, NOVOPlasty ~5 min.
+    RASHER's per-sample wall is dominated by baiting; everything downstream runs on ~20% of the data.
+
+## Where this leaves the defaults (decision with the user)
+
+- **Templated (`-a samtools`) + minimap2 stays the overall default**: the only full-length assemblies on
+  all three genomes, distances near-identical to Snippy on both datasets (findings 3, 8), and the
+  cheapest leg.
+- **SKESA looks like the better de novo recommendation** (finding 7), with the ~20–30x caveat; SPAdes
+  stays available (assembly graph, low-depth robustness).
+- **Against the competition**: GetOrganelle remains the stronger pure assembler for a single complete
+  circular organelle (it extends beyond the bait, where RASHER de novo assembles only baited reads);
+  RASHER is the only tool of the four that goes from raw WGS to SNP distances, a tree and a report, and
+  its SNP calls match Snippy without needing a second pipeline. NOVOPlasty is not a concern at WGS-skim
+  depths.
+- Whether broader evidence (other taxa/instruments) is needed before fixing the defaults is an open
+  user decision.

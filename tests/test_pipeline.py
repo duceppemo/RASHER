@@ -2201,7 +2201,7 @@ def test_inputs_inside_the_output_folder_are_refused(stubs, dataset, tmp_path):
     baited = out / "1_extracted" / "s1.fastq.gz"
     before = baited.read_bytes()
     for given in (out / "1_extracted", baited):
-        with pytest.raises(RasherError, match="cannot be inside the output folder"):
+        with pytest.raises(RasherError, match="The input .* cannot be inside the output folder"):
             run(settings(ref, given, out, snp_method="none"))
     sheet = tmp_path / "sheet.tsv"
     sheet.write_text(f"sample\tfile\ns1\t{baited}\n")
@@ -2281,6 +2281,13 @@ def test_a_sample_failing_at_a_step_keeps_no_outputs_of_the_later_steps(stubs, d
     for checkpoint in ("filter", "assemble")[1 if step == "filter" else 0:]:
         assert "s1" not in json.loads((out / ".checkpoints" / f"{checkpoint}.json").read_text())["results"]
     assert (out / "2_filtered" / "s2.fastq.gz").exists() and (asm / "all_assemblies" / "s2.fasta").exists()
+    for other in ("s2", "s3"):  # Every sample failing stops the run before the later steps save their checkpoints
+        _reads(reads / f"{other}.fastq.gz", [("off1", 900)] if step == "bait" else [("on1", 50)])
+    with pytest.raises(RasherError, match=f"All samples failed at the {step} step"):
+        run(settings(ref, reads, out, snp_method="none"))
+    for checkpoint in ("filter", "assemble")[1 if step == "filter" else 0:]:
+        results = json.loads((out / ".checkpoints" / f"{checkpoint}.json").read_text())["results"]
+        assert not {"s2", "s3"} & results.keys()
 
 
 def test_a_sample_failing_at_the_assembly_keeps_no_earlier_assembly(stubs, dataset, tmp_path, monkeypatch):
